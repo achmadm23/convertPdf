@@ -9,6 +9,15 @@ const { renderPage } = require('./figures');
 const DPI = 300;
 const SCALE = DPI / 72; // pixels per PDF point
 const MIN_CONFIDENCE = 50; // lines Tesseract is less sure of are ornaments, stains or decorative lettering
+// Paragraphs whose median word confidence is this many points below the book's
+// typical paragraph (and below MAX_PARAGRAPH_CUTOFF) are dropped. The median, not
+// the mean, because a paragraph of clean print can include a few junk words from
+// an ornament or a large first letter. Printed text reads at 90-96, handwriting
+// fonts mostly at 35-80.
+const PARAGRAPH_MARGIN = 8;
+const MAX_PARAGRAPH_CUTOFF = 88;
+const SHORT_PARAGRAPH_MARGIN = 3; // for a paragraph of 1-2 lines next to one that was dropped
+const MIN_JUDGED_WORDS = 8; // shorter paragraphs are only dropped next to a dropped one
 const SAMPLE_PAGES = 3; // pages read in every language to pick the book's language
 
 // Languages whose data is bundled. Add one by installing @tesseract.js-data/<code>
@@ -50,6 +59,12 @@ function toLines(data, pageHeight) {
   const lines = [];
   for (const block of data.blocks || []) {
     for (const para of block.paragraphs) {
+      const paraWords = para.lines.flatMap(l => l.words);
+      const paraInfo = {
+        confidence: median(paraWords.map(w => w.confidence)) ?? 0,
+        lines: para.lines.length,
+        words: paraWords.length,
+      };
       for (const line of para.lines) {
         const words = line.words.filter(w => w.text.trim());
         if (!words.length || line.confidence < MIN_CONFIDENCE) continue;
@@ -68,6 +83,7 @@ function toLines(data, pageHeight) {
           // headings are short, stand alone, and are printed clearly; anything else in
           // large type (a letter in a handwriting font, say) is body text
           mayBeHeading: para.lines.length <= 2 && text.length <= 60 && line.confidence >= 80,
+          para: paraInfo, // shared by the paragraph's lines
         });
       }
     }
@@ -75,14 +91,57 @@ function toLines(data, pageHeight) {
   return lines.sort((a, b) => b.y - a.y || a.x - b.x);
 }
 
+// Mark whole paragraphs that were read far less confidently than the book's
+// typical paragraph, like a letter in a handwriting font, as `unreadable`.
+// Keeping only the lines that happened to pass would leave nonsense text broken
+// up by strips of picture; left out entirely, the paragraph is cropped as one
+// picture instead. The lines are still returned, because where they sit shows
+// the page's layout (where its text starts, for finding chapters).
+function markUnreadable(pages) {
+  const confidences = [];
+  for (const l of [...pages.values()].flat()) if (l.para.words >= MIN_JUDGED_WORDS) confidences.push(l.para.confidence);
+  if (!confidences.length) return pages;
+  const typical = median(confidences);
+  const threshold = Math.min(MAX_PARAGRAPH_CUTOFF, typical - PARAGRAPH_MARGIN);
+  for (const lines of pages.values()) {
+    const paras = [...new Set(lines.map(l => l.para))]; // in reading order
+    // a few words are too few to judge: a short line of dialogue with quote marks
+    // reads less confidently than it deserves
+    for (const p of paras) p.unreadable = p.words >= MIN_JUDGED_WORDS && p.confidence < threshold;
+    // but a line or two next to an unreadable paragraph that reads a little below
+    // typical is part of the same handwriting, which just happened to read better
+    let changed = true;
+    while (changed) {
+      changed = false;
+      paras.forEach((p, i) => {
+        const nextToUnreadable = paras[i - 1]?.unreadable || paras[i + 1]?.unreadable;
+        if (!p.unreadable && p.lines <= 2 && nextToUnreadable && p.confidence < typical - SHORT_PARAGRAPH_MARGIN) {
+          p.unreadable = changed = true;
+        }
+      });
+    }
+    for (const l of lines) if (l.para.unreadable) l.unreadable = true;
+  }
+  return pages;
+}
+
 // Only lines that look like headings keep a size above the body text size,
-// which is the size used for the most text across all the scanned pages.
+// which is the size used for the most text across all the scanned pages. A line
+// as wide as the text block is body text in a larger font, not a heading.
 function normalizeSizes(pages) {
+  const all = [...pages.values()].flat();
   const chars = new Map();
-  for (const l of [...pages.values()].flat()) chars.set(l.size, (chars.get(l.size) || 0) + l.text.length);
+  for (const l of all) chars.set(l.size, (chars.get(l.size) || 0) + l.text.length);
   const bodySize = [...chars.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const bodyWidth = median(all.filter(l => l.size === bodySize).map(l => l.xEnd - l.x)) ?? Infinity;
+  const isHeading = l => l.mayBeHeading && l.xEnd - l.x < bodyWidth * 0.8;
   for (const [n, lines] of pages) {
-    pages.set(n, lines.map(({ mayBeHeading, ...l }) => (mayBeHeading ? l : { ...l, size: Math.min(l.size, bodySize) })));
+    pages.set(
+      n,
+      lines.map(({ mayBeHeading, para, ...l }) =>
+        isHeading({ ...l, mayBeHeading }) ? l : { ...l, size: Math.min(l.size, bodySize) }
+      )
+    );
   }
   return pages;
 }
@@ -131,7 +190,7 @@ async function detectLanguage(samples) {
 }
 
 // OCR the given pages (1-based numbers) of a pdf.js document.
-// Returns Map(page number → lines). `language` is a code from LANGUAGES, or
+// Returns Map(page number → lines); lines to leave out of the text have `unreadable` set. `language` is a code from LANGUAGES, or
 // empty to detect it. `onProgress({ stage: 'ocr', done, total })` reports pages read.
 async function ocrPages(doc, pageNumbers, { language, onProgress = () => {} } = {}) {
   const result = new Map();
@@ -188,7 +247,7 @@ async function ocrPages(doc, pageNumbers, { language, onProgress = () => {} } = 
   } finally {
     await scheduler.terminate();
   }
-  return normalizeSizes(result);
+  return normalizeSizes(markUnreadable(result));
 }
 
 module.exports = { ocrPages, LANGUAGES };

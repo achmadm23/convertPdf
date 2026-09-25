@@ -179,9 +179,14 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage } = {}) {
   pageLines.forEach((lines, i) => {
     if (letterCount(lines.map(l => l.text).join('')) < 20) scanned.push(i + 1);
   });
+  // every line found on the page, even ones left out of the text, for the page layout
+  const layoutLines = [...pageLines];
   if (scanned.length) {
     const ocrLines = await ocrPages(doc, scanned, { language: ocrLanguage, onProgress });
-    for (const [n, lines] of ocrLines) pageLines[n - 1] = lines;
+    for (const [n, lines] of ocrLines) {
+      layoutLines[n - 1] = lines;
+      pageLines[n - 1] = lines.filter(l => !l.unreadable);
+    }
   }
 
   // the body font size is the one used for the most text
@@ -237,7 +242,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage } = {}) {
     }
   }
 
-  const startsLow = lowStartPages(pageLines, layout);
+  const startsLow = lowStartPages(pageLines, layoutLines, layout);
   const pages = pageLines.map(lines => linesToBlocks(lines, bodySize));
   return { pages, images, cover, startsLow, title: meta.Title, author: meta.Author };
 }
@@ -245,10 +250,11 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage } = {}) {
 // Pages whose text starts far below the usual top of the text block, under a
 // title or picture, as on the first page of a chapter. They find the chapters of
 // books whose chapter titles aren't text, like decorative lettering in a scan.
-function lowStartPages(pageLines, layout) {
+// `layoutLines` also has the lines OCR couldn't read, which still show where the text starts.
+function lowStartPages(pageLines, layoutLines, layout) {
   const blockHeight = layout.blockTop - layout.blockBottom;
-  return pageLines.map(lines => {
-    const long = lines.filter(l => !l.image && layout.isLong(l));
+  return pageLines.map((lines, i) => {
+    const long = layoutLines[i].filter(l => !l.image && layout.isLong(l));
     if (long.length < 3 || !blockHeight) return false;
     const firstTop = Math.max(...long.map(l => l.y));
     // a page that just starts low with nothing above, like a notice box, isn't a chapter
