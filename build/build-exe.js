@@ -21,13 +21,22 @@ const PACKAGES = {
   [`@napi-rs/canvas-${process.platform}-${process.arch}${process.platform === 'win32' ? '-msvc' : ''}`]: {},
   jszip: { deps: true, include: [/^package\.json$/, /^lib\//, /^dist\/jszip\.min\.js$/] },
   epubjs: { include: [/^package\.json$/, /^dist\/epub\.min\.js$/] },
+  // OCR: only the engine builds tesseract.js loads in Node, the separate .js + .wasm
+  // ones without "-lstm" in the name (tesseract.js 7 passes a boolean where
+  // getCore expects an engine mode, so it never picks the "-lstm" builds).
+  // Listed before tesseract.js, whose `deps` would otherwise pull in every build.
+  'tesseract.js-core': { include: [/^package\.json$/, /^tesseract-core(-simd|-relaxedsimd)?\.(js|wasm)$/] },
+  'tesseract.js': { deps: true, include: [/^package\.json$/, /^src\//] },
 };
+for (const code of Object.keys(require('../ocr').LANGUAGES)) {
+  PACKAGES[`@tesseract.js-data/${code}`] = { include: [/^package\.json$/, /^4\.0\.0_best_int\//] };
+}
 const FONT_FILES = [/^package\.json$/, /^(400|700)\.css$/, /^files\/.*-latin(-ext)?-(400|700)-normal\.woff$/];
 for (const pkg of Object.keys(require(path.join(root, 'package.json')).dependencies)) {
   if (pkg.startsWith('@fontsource/')) PACKAGES[pkg] = { include: FONT_FILES };
 }
 
-const APP_FILES = ['index.js', 'figures.js', 'fonts.js', 'server.js', 'package.json', 'public/index.html'];
+const APP_FILES = ['index.js', 'figures.js', 'fonts.js', 'ocr.js', 'server.js', 'package.json', 'public/index.html'];
 
 function walk(dir, base = dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {

@@ -326,14 +326,18 @@
     });
   }
 
-  // Progress bar. Each stage fills its own share of the bar; finding pictures
-  // renders pages and is by far the slowest, so it gets the most room.
+  // Progress bar. Each stage fills its own share of the bar. Reading scanned
+  // pages (OCR) is by far the slowest, then finding pictures, so they get the most room.
   const progress = (() => {
     const box = $('progress'), bar = $('progressBar'), fill = $('progressFill');
     const label = $('progressLabel'), numbers = $('progressNumbers');
     const stages = {
       upload: { from: 0, to: 3, text: () => 'Uploading…' },
       text: { from: 3, to: 8, text: (d, t) => (t > 1 ? `Reading text: page ${d} of ${t}` : 'Reading text…') },
+      ocr: {
+        from: 8, to: 85,
+        text: (d, t) => `Reading scanned pages (OCR): page ${d} of ${t}`,
+      },
       pictures: {
         from: 8, to: 98,
         text: (d, t) => (t ? `Finding pictures: page ${d} of ${t}` : 'Finding pictures…'),
@@ -358,6 +362,7 @@
     return {
       start() {
         percent = 0;
+        stages.pictures.from = 8;
         started = Date.now();
         label.textContent = 'Uploading…';
         box.hidden = false;
@@ -367,9 +372,12 @@
       update({ stage, done = 0, total = 0 }) {
         // the pictures stage ending means only chapter building is left
         if (stage === 'pictures' && total && done >= total) stage = 'finishing';
+        // after OCR, finding pictures only has the rest of the bar
+        if (stage === 'ocr') stages.pictures.from = stages.ocr.to;
         const s = stages[stage];
         if (!s) return;
-        const share = stage === 'pictures' || stage === 'text' || stage === 'upload' ? (total ? done / total : 0) : 0;
+        const counted = ['upload', 'text', 'ocr', 'pictures'];
+        const share = counted.includes(stage) ? (total ? done / total : 0) : 0;
         percent = Math.max(percent, s.from + (s.to - s.from) * share); // never moves backwards
         label.textContent = s.text(done, total);
         render();

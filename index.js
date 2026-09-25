@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const JSZip = require('jszip');
 const { measureLayout, findGaps, detectFigures, renderCover } = require('./figures');
 const { FONTS, findFont, fontFaces, fontFaceCss, fontStack } = require('./fonts');
+const { ocrPages, LANGUAGES } = require('./ocr');
 
 function parseArgs(argv) {
   const opts = { positional: [] };
@@ -14,6 +15,7 @@ function parseArgs(argv) {
     if (argv[i] === '--title') opts.title = argv[++i];
     else if (argv[i] === '--author') opts.author = argv[++i];
     else if (argv[i] === '--font') opts.font = argv[++i];
+    else if (argv[i] === '--ocr-lang') opts.ocrLanguage = argv[++i];
     else opts.positional.push(argv[i]);
   }
   return opts;
@@ -142,8 +144,10 @@ function linesToBlocks(lines, bodySize) {
 }
 
 // `onProgress({ stage, done, total })` is called as pages are processed.
-// Stages: 'text' (reading every page), 'pictures' (rendering pages that may hold pictures).
-async function extractPdf(buffer, onProgress = () => {}) {
+// Stages: 'text' (reading every page), 'ocr' (reading pages that have no text,
+// only when there are some), 'pictures' (rendering pages that may hold pictures).
+// `ocrLanguage` is a language code from ocr.js; empty means detect it.
+async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage } = {}) {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const data = new Uint8Array(buffer);
   // decoders for scanned images (JBIG2, JPEG 2000) and fonts, needed to render pages
@@ -168,6 +172,16 @@ async function extractPdf(buffer, onProgress = () => {}) {
     const content = await page.getTextContent();
     pageLines.push(pageToLines(content.items));
     onProgress({ stage: 'text', done: n, total: doc.numPages });
+  }
+
+  // pages with no text layer are scans: read them with OCR
+  const scanned = [];
+  pageLines.forEach((lines, i) => {
+    if (letterCount(lines.map(l => l.text).join('')) < 20) scanned.push(i + 1);
+  });
+  if (scanned.length) {
+    const ocrLines = await ocrPages(doc, scanned, { language: ocrLanguage, onProgress });
+    for (const [n, lines] of ocrLines) pageLines[n - 1] = lines;
   }
 
   // the body font size is the one used for the most text
@@ -223,8 +237,24 @@ async function extractPdf(buffer, onProgress = () => {}) {
     }
   }
 
+  const startsLow = lowStartPages(pageLines, layout);
   const pages = pageLines.map(lines => linesToBlocks(lines, bodySize));
-  return { pages, images, cover, title: meta.Title, author: meta.Author };
+  return { pages, images, cover, startsLow, title: meta.Title, author: meta.Author };
+}
+
+// Pages whose text starts far below the usual top of the text block, under a
+// title or picture, as on the first page of a chapter. They find the chapters of
+// books whose chapter titles aren't text, like decorative lettering in a scan.
+function lowStartPages(pageLines, layout) {
+  const blockHeight = layout.blockTop - layout.blockBottom;
+  return pageLines.map(lines => {
+    const long = lines.filter(l => !l.image && layout.isLong(l));
+    if (long.length < 3 || !blockHeight) return false;
+    const firstTop = Math.max(...long.map(l => l.y));
+    // a page that just starts low with nothing above, like a notice box, isn't a chapter
+    const titled = lines.some(l => l.y > firstTop + 1 && (l.image || letterCount(l.text) >= 1));
+    return titled && layout.blockTop - firstTop > blockHeight * 0.3;
+  });
 }
 
 // Remove page numbers and running headers/footers, then rejoin paragraphs
@@ -268,8 +298,9 @@ function cleanPages(pages) {
 
 // Start a new chapter on every page whose biggest heading is chapter-sized.
 // Chapter size is the smallest heading size that appears on few enough pages
-// to be chapters rather than sections.
-function buildChapters(pages) {
+// to be chapters rather than sections. Without such headings, chapters start on
+// the pages flagged in `startsLow`, or failing that, every 10 pages.
+function buildChapters(pages, startsLow = []) {
   const pageMax = pages.map(page =>
     Math.max(0, ...page.filter(b => b.heading && letterCount(b.text) >= 3).map(b => b.size))
   );
@@ -277,7 +308,10 @@ function buildChapters(pages) {
   const sizes = [...new Set(pageMax.filter(Boolean))].sort((a, b) => a - b);
   const chapterSize = sizes.find(s => pageMax.filter(m => m >= s).length <= maxChapters);
 
-  if (!chapterSize) return buildChaptersByPage(pages);
+  if (!chapterSize) {
+    const starts = startsLow.filter(Boolean).length;
+    return starts >= 2 && starts <= maxChapters ? buildChaptersAtPages(pages, startsLow) : buildChaptersByPage(pages);
+  }
 
   const chapters = [];
   let current = null;
@@ -312,6 +346,23 @@ function buildChapters(pages) {
   if (chapters.filter(ch => /^\d+ /.test(ch.title)).length >= 2) {
     for (const ch of chapters) ch.title = ch.title.replace(/^[ilI|] (?=\p{Lu})/u, '1 ');
   }
+  return chapters.filter(ch => ch.blocks.length || ch.title !== 'Opening');
+}
+
+// Chapters starting on the flagged pages, numbered since they have no title text.
+function buildChaptersAtPages(pages, starts) {
+  const chapters = [];
+  let current = null;
+  pages.forEach((page, i) => {
+    if (starts[i]) {
+      current = { title: `Chapter ${chapters.filter(ch => ch.title !== 'Opening').length + 1}`, blocks: [] };
+      chapters.push(current);
+    } else if (!current) {
+      current = { title: 'Opening', blocks: [] };
+      chapters.push(current);
+    }
+    current.blocks.push(...page);
+  });
   return chapters.filter(ch => ch.blocks.length || ch.title !== 'Opening');
 }
 
@@ -459,17 +510,17 @@ ${spine.join('\n')}
 
 // Read a PDF into a book: chapters, images and cover, ready for buildEpub.
 // `name` is used as the title when the PDF has none.
-async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', onProgress } = {}) {
-  const extracted = await extractPdf(pdfBuffer, onProgress);
+async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', onProgress, ocrLanguage } = {}) {
+  const extracted = await extractPdf(pdfBuffer, onProgress, { ocrLanguage });
   const pages = cleanPages(extracted.pages);
   const paragraphs = pages.reduce((n, p) => n + p.filter(b => !b.heading && !b.image).length, 0);
   if (paragraphs === 0) {
-    throw new Error('No text found. The PDF is probably scanned images and needs OCR first.');
+    throw new Error('No text found, even with OCR. The PDF may contain only pictures.');
   }
   return {
     title: title || extracted.title || name,
     author: author || extracted.author || 'Unknown',
-    chapters: buildChapters(pages),
+    chapters: buildChapters(pages, extracted.startsLow),
     images: extracted.images,
     cover: extracted.cover,
     stats: { pages: pages.length, paragraphs, images: extracted.images.length },
@@ -487,8 +538,14 @@ async function main() {
   const opts = parseArgs(process.argv.slice(2));
   const [input, output] = opts.positional;
   if (!input) {
-    console.error('Usage: node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--font id]');
+    console.error(
+      'Usage: node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--font id] [--ocr-lang code]'
+    );
     console.error('Fonts: ' + FONTS.map(f => f.id).join(', '));
+    console.error(
+      'OCR languages (for scanned pages; detected when not given): ' +
+        Object.entries(LANGUAGES).map(([code, name]) => `${code} (${name})`).join(', ')
+    );
     process.exit(1);
   }
   const outFile = output || input.replace(/\.pdf$/i, '') + '.epub';
@@ -497,7 +554,12 @@ async function main() {
     title: opts.title,
     author: opts.author,
     font: opts.font,
+    ocrLanguage: opts.ocrLanguage,
     name: path.basename(input, path.extname(input)),
+    onProgress: ({ stage, done, total }) => {
+      if (stage === 'ocr' && process.stderr.isTTY) process.stderr.write(`\rOCR: page ${done} of ${total}`);
+      if (stage === 'ocr' && done === total && process.stderr.isTTY) process.stderr.write('\n');
+    },
   });
   fs.writeFileSync(outFile, epub);
   console.log(`Wrote ${outFile} (${pages} pages, ${chapters} chapters, ${paragraphs} paragraphs, ${images} images)`);

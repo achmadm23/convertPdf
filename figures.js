@@ -47,7 +47,8 @@ function findGaps(lines, layout, bodySize) {
   const long = lines.filter(l => layout.isLong(l) || isHeading(l)).sort((a, b) => b.y - a.y);
   const edges = [
     layout.blockTop + bodySize,
-    ...long.flatMap(l => [l.y + Math.max(bodySize, l.size), l.y - l.size * 0.3]),
+    // OCR'd lines know their exact top; for others it's estimated from the font size
+    ...long.flatMap(l => [l.top ?? l.y + Math.max(bodySize, l.size), l.y - l.size * 0.3]),
     layout.blockBottom - bodySize * 0.3,
   ];
   const gaps = [];
@@ -89,7 +90,8 @@ async function detectFigures(page, lines, gaps, layout) {
     const prose = layout.isProse(l);
     const x0 = Math.max(0, Math.floor((l.x - 2) * SCALE));
     const x1 = Math.min(width, Math.ceil((l.xEnd + 2) * SCALE));
-    const y0 = Math.max(0, Math.floor((pageHeight - l.y - size * (prose ? 1.1 : 1)) * SCALE));
+    const top = l.top !== undefined ? l.top + 1 : l.y + size * (prose ? 1.1 : 1);
+    const y0 = Math.max(0, Math.floor((pageHeight - top) * SCALE));
     const y1 = Math.min(height, Math.ceil((pageHeight - l.y + size * (prose ? 0.5 : 0.35)) * SCALE));
     for (let y = y0; y < y1; y++) {
       for (let p = y * width + x0; p < y * width + x1; p++) text[p] = Math.max(text[p], prose ? 2 : 1);
@@ -146,4 +148,4 @@ async function renderCover(page) {
   return canvas.encode('jpeg', 85);
 }
 
-module.exports = { measureLayout, findGaps, detectFigures, renderCover };
+module.exports = { measureLayout, findGaps, detectFigures, renderCover, renderPage };
