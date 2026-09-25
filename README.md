@@ -32,6 +32,20 @@ cd convertPdf
 npm install
 ```
 
+## Update
+
+To get the latest version:
+
+```
+cd convertPdf
+git pull origin main
+npm install
+```
+
+`npm install` fetches any packages that new versions need (OCR, for example, added `tesseract.js`). If the web app is running, stop it (Ctrl+C) and run `npm start` again so it uses the new code.
+
+If you use `ConvertPdf.exe`, [download the zip](https://github.com/achmadm23/convertPdf/releases/download/v1.0.0/ConvertPdf.zip) again instead.
+
 ## Web app (upload, preview, download)
 
 ```
@@ -43,10 +57,17 @@ Then open **http://localhost:3000** and:
 1. **Choose a PDF**, or drag it onto the page.
 2. Optionally type a **title** and **author**. If you leave them blank, they're taken from the PDF.
 3. Pick a **font**.
-4. Click **Convert**. The progress bar shows what's happening, for example "Reading scanned pages (OCR): page 57 of 244" or "Finding pictures: page 57 of 121".
+4. Click **Convert**. The progress bar shows what's happening, for example "Reading scanned pages: 57 of 244" or "Finding pictures: page 57 of 121", and about how long is left.
 5. **Preview** the book on the right. Turn pages with **‹ Prev / Next ›** or the arrow keys, and jump to a chapter from the contents list.
 6. Change the font as often as you like. The preview updates in about a second, without converting again.
 7. Click **Download**. The button stays disabled until the conversion has finished.
+
+For scanned books, a **Scanned pages** tab shows each page as OCR reads it: the scan, the text read from it, and how confidently it was read. Pages read at 75% or lower are marked (tick **Only pages at 75% or lower** to see just those). Once the conversion has finished, they have two buttons:
+
+- **Retry** reads the page again with other settings (higher resolution, black and white, the page as one block of text) and keeps the best reading if it's better than the first.
+- **Edit text** lets you correct the text or type it yourself, looking at the scan next to it. Leave an empty line between paragraphs. Your text is used instead of what OCR read, and the page stays editable.
+
+Then click **Update the book** to use the improved pages. This takes under a minute, because the other pages aren't read again. Pages read below 30% are mostly pictures (a cover, for example) and have neither button.
 
 The server keeps the last 5 converted books in memory so you can change fonts quickly. Restarting the server clears them.
 

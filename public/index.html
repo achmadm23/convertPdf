@@ -41,23 +41,17 @@
   .drop span { color: var(--muted); font-size: 0.88rem; word-break: break-all; }
   input[type=file] { display: none; }
   label.field { display: block; margin-top: 14px; font-size: 0.88rem; color: var(--muted); }
-  label.field input {
+  label.field input, label.field select {
     display: block; width: 100%; margin-top: 4px; padding: 8px 10px; font: inherit; font-size: 0.95rem;
     color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
   }
-  fieldset { border: 0; padding: 0; margin: 18px 0 0; }
-  legend { font-size: 0.88rem; color: var(--muted); margin-bottom: 6px; padding: 0; }
-  .fonts { display: grid; gap: 6px; }
-  .font {
-    display: flex; align-items: center; gap: 10px; padding: 8px 10px; cursor: pointer;
-    border: 1px solid var(--border); border-radius: 8px; transition: border-color .15s, background .15s;
+  label.field select { cursor: pointer; }
+  label.field select:focus-visible, label.field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .font-sample {
+    margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--tint);
+    font-size: 1.05rem; line-height: 1.4; color: var(--text);
   }
-  .font:hover { border-color: var(--accent); }
-  .font:has(input:checked) { border-color: var(--accent); background: var(--tint); }
-  .font input { accent-color: var(--accent); margin: 0; }
-  .font .sample { font-size: 1.35rem; width: 1.8em; text-align: center; line-height: 1; }
-  .font .name { font-size: 0.95rem; }
-  .font .note { display: block; font-size: 0.78rem; color: var(--muted); font-family: system-ui, sans-serif; }
+  .font-sample .note { display: block; font-size: 0.78rem; color: var(--muted); font-family: system-ui, sans-serif; }
   button, a.btn {
     display: block; width: 100%; margin-top: 18px; padding: 11px; font: inherit; font-weight: 600;
     text-align: center; text-decoration: none; border: 0; border-radius: 8px; cursor: pointer;
@@ -107,13 +101,67 @@
   [hidden] { display: none !important; }
   .placeholder b { display: block; color: #1f1d1a; font-size: 1.05rem; margin-bottom: 4px; }
   .book-info { padding: 8px 12px; font-size: 0.85rem; color: var(--muted); border-bottom: 1px solid var(--border); }
+
+  /* Book / Scanned pages tabs */
+  .tabs { display: flex; gap: 4px; padding: 10px 12px 0; border-bottom: 1px solid var(--border); }
+  .tabs button {
+    width: auto; margin: 0 0 -1px; padding: 7px 14px; font-weight: 500; font-size: 0.9rem;
+    background: transparent; color: var(--muted); border: 1px solid transparent; border-radius: 8px 8px 0 0;
+  }
+  .tabs button[aria-selected="true"] { color: var(--text); background: var(--card); border-color: var(--border); border-bottom-color: var(--card); }
+  .tabs .count { margin-left: 6px; padding: 1px 7px; border-radius: 10px; font-size: 0.75rem; background: #f3d9a4; color: #5b3d00; }
+
+  /* scanned pages, shown as OCR reads them (on the light paper background in both themes) */
+  .scans { position: absolute; inset: 0; overflow: auto; padding: 0 16px 16px; color: #1f1d1a; }
+  .scans-head {
+    position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+    padding: 10px 0; background: var(--paper); border-bottom: 1px solid #e3ddd2; font-size: 0.85rem; color: #6b665e;
+  }
+  .scans-head label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .scans-head input { accent-color: #2f6f5e; }
+  .scans-head .rebuild { width: auto; margin: 0 0 0 auto; padding: 6px 12px; font-size: 0.85rem; background: #2f6f5e; color: #fff; }
+  .scans.only-low .scan:not(.low) { display: none; }
+  .scan {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 16px;
+    padding: 14px 0; border-bottom: 1px solid #e3ddd2;
+  }
+  @media (max-width: 700px) { .scan { grid-template-columns: 1fr; } }
+  .scan img { width: 100%; height: auto; border: 1px solid #e3ddd2; border-radius: 4px; background: #fff; position: sticky; top: 56px; }
+  .scan-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 0.9rem; }
+  .scan-head b { font-weight: 600; }
+  .conf { padding: 1px 8px; border-radius: 10px; font-size: 0.78rem; font-variant-numeric: tabular-nums; background: #e2efe9; color: #1d5445; }
+  .scan.low .conf { background: #f3d9a4; color: #5b3d00; }
+  .conf.none { background: #ece8e1; color: #6b665e; }
+  .scan-head button {
+    width: auto; margin: 0 0 0 auto; padding: 4px 12px; font-size: 0.82rem; font-weight: 500;
+    background: #fff; color: #1f1d1a; border: 1px solid #cfc8bc;
+  }
+  .scan-head .page-action + .page-action { margin-left: 6px; }
+  .conf.typed { background: #dbe7f7; color: #1d3f6e; }
+  .scan-edit textarea {
+    display: block; width: 100%; min-height: 240px; padding: 10px; resize: vertical;
+    font: 14px/1.5 Georgia, "Times New Roman", serif; color: #1f1d1a; background: #fff;
+    border: 1px solid #cfc8bc; border-radius: 6px;
+  }
+  .scan-edit textarea:focus-visible { outline: 2px solid #2f6f5e; outline-offset: 1px; }
+  .edit-buttons { display: flex; gap: 8px; margin-top: 8px; }
+  .edit-buttons button { width: auto; margin: 0; padding: 6px 16px; font-size: 0.85rem; }
+  .edit-buttons .save { background: #2f6f5e; color: #fff; }
+  .edit-buttons .cancel { background: #fff; color: #1f1d1a; border: 1px solid #cfc8bc; }
+  .scan-note { margin: 0 0 8px; font-size: 0.82rem; color: #6b665e; }
+  .scan-note.good { color: #1d5445; }
+  .scan-text {
+    margin: 0; white-space: pre-wrap; word-break: break-word;
+    font: 13px/1.5 Georgia, "Times New Roman", serif; color: #1f1d1a;
+  }
+  .scan-text.empty { font-family: system-ui, sans-serif; color: #6b665e; font-style: italic; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <aside class="card">
     <h1>PDF to EPUB</h1>
-    <p class="sub">Upload a text PDF, preview it, and download it as an e-book.</p>
+    <p class="sub">Upload a PDF (scanned books too), preview it, and download it as an e-book.</p>
 
     <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a PDF file">
       <strong>Choose a PDF or drop it here</strong>
@@ -128,10 +176,10 @@
       <input id="author" placeholder="Taken from the PDF if left blank">
     </label>
 
-    <fieldset>
-      <legend>Font</legend>
-      <div class="fonts" id="fonts"></div>
-    </fieldset>
+    <label class="field">Font
+      <select id="fonts"></select>
+    </label>
+    <div class="font-sample" id="fontSample" aria-hidden="true"></div>
 
     <button id="convert" disabled>Convert</button>
     <div class="progress" id="progress" hidden>
@@ -147,17 +195,31 @@
   </aside>
 
   <section class="card preview" aria-label="Book preview">
+    <div class="tabs" id="tabs" role="tablist" hidden>
+      <button role="tab" id="tabBook" aria-selected="true" aria-controls="bookView">Book</button>
+      <button role="tab" id="tabScans" aria-selected="false" aria-controls="scans">Scanned pages<span class="count" id="lowCount" hidden></span></button>
+    </div>
     <div class="book-info" id="bookInfo" hidden></div>
-    <div class="toolbar">
+    <div class="toolbar" id="bookToolbar">
       <select id="toc" disabled aria-label="Go to chapter"><option>Contents</option></select>
       <button id="prev" disabled aria-label="Previous page">‹ Prev</button>
       <button id="next" disabled aria-label="Next page">Next ›</button>
     </div>
     <div class="stage">
-      <div class="placeholder" id="placeholder">
-        <div><b>Preview</b>Convert a PDF and the book will appear here.</div>
+      <div id="bookView">
+        <div class="placeholder" id="placeholder">
+          <div><b>Preview</b>Convert a PDF and the book will appear here.</div>
+        </div>
+        <div id="viewer"></div>
       </div>
-      <div id="viewer"></div>
+      <div class="scans" id="scans" role="tabpanel" aria-labelledby="tabScans" hidden>
+        <div class="scans-head">
+          <span id="scanSummary"></span>
+          <label><input type="checkbox" id="onlyLow"><span>Only pages at <span class="low-limit">75</span>% or lower</span></label>
+          <button class="rebuild" id="rebuild" hidden></button>
+        </div>
+        <div id="scanList"></div>
+      </div>
     </div>
   </section>
 </div>
@@ -189,32 +251,37 @@
   }
 
   // ---------- fonts ----------
+  let fontList = [];
+  const fontFamily = f => (f.embedded ? `'${f.name}', ${f.fallback}` : f.fallback);
+
   async function loadFonts() {
-    const fonts = await (await fetch('/fonts.json')).json();
-    if (!fonts.some(f => f.id === font)) font = 'default';
-    $('fonts').innerHTML = '';
-    for (const f of fonts) {
-      const family = f.embedded ? `'${f.name}', ${f.fallback}` : f.fallback;
-      const label = document.createElement('label');
-      label.className = 'font';
-      label.innerHTML = `<input type="radio" name="font"><span class="sample">Aa</span>
-        <span class="name"></span>`;
-      const radio = label.querySelector('input');
-      radio.value = f.id;
-      radio.checked = f.id === font;
-      label.querySelector('.sample').style.fontFamily = family;
-      const name = label.querySelector('.name');
-      name.style.fontFamily = family;
-      name.textContent = f.name;
-      if (!f.embedded) name.insertAdjacentHTML('beforeend', '<span class="note">Uses the e-reader\'s own font</span>');
-      radio.addEventListener('change', () => setFont(f.id));
-      $('fonts').append(label);
+    fontList = await (await fetch('/fonts.json')).json();
+    if (!fontList.some(f => f.id === font)) font = 'default';
+    const select = $('fonts');
+    select.innerHTML = '';
+    for (const f of fontList) {
+      const option = new Option(f.name, f.id, false, f.id === font);
+      option.style.fontFamily = fontFamily(f); // shown in its own typeface where the browser allows
+      select.append(option);
     }
+    select.addEventListener('change', () => setFont(select.value));
+    showFontSample();
+  }
+
+  // the dropdown can't reliably show each font, so a sample line below it does
+  function showFontSample() {
+    const f = fontList.find(x => x.id === font);
+    const sample = $('fontSample');
+    if (!f) return;
+    sample.style.fontFamily = fontFamily(f);
+    sample.textContent = 'The quick brown fox jumps over the lazy dog.';
+    if (!f.embedded) sample.insertAdjacentHTML('beforeend', '<span class="note">Uses the e-reader\'s own font</span>');
   }
 
   function setFont(id) {
     font = id;
     try { localStorage.setItem('font', id); } catch {}
+    showFontSample();
     if (bookId) {
       updateDownload();
       openPreview(true);
@@ -262,17 +329,28 @@
     if (title) headers['X-Title'] = encodeURIComponent(title);
     if (author) headers['X-Author'] = encodeURIComponent(author);
 
+    scans.reset();
     try {
-      bookMeta = await sendForConversion(file, headers, update => progress.update(update));
+      bookMeta = await sendForConversion(file, headers, {
+        onProgress: update => {
+          progress.update(update);
+          if (update.stage === 'ocr') scans.setTotal(update.total);
+        },
+        onSession: session => scans.start(session),
+        onPage: page => scans.add(page),
+      });
       progress.update({ stage: 'done' });
       bookId = bookMeta.id;
-      bookInfo.textContent =
-        `${bookMeta.title} · ${bookMeta.author} · ${bookMeta.pages} pages, ` +
-        `${bookMeta.chapters} chapters, ${bookMeta.images} pictures`;
-      bookInfo.hidden = false;
+      showBookInfo();
       converting = false;
       updateDownload();
-      showStatus('Done. Check the preview, then download.');
+      scans.finish(bookMeta);
+      showTab('book');
+      showStatus(
+        bookMeta.lowPages
+          ? `Done. ${bookMeta.lowPages} scanned ${bookMeta.lowPages === 1 ? 'page was' : 'pages were'} read at ${scans.limit}% or lower. Check them in Scanned pages: you can retry or type the text.`
+          : 'Done. Check the preview, then download.'
+      );
       openPreview(false).catch(() => showStatus('Converted, but the preview could not be shown.', { error: true }));
     } catch (err) {
       showStatus(err.message || 'Conversion failed.', { error: true });
@@ -285,18 +363,26 @@
     }
   });
 
-  // Upload the PDF and follow the server's progress stream. XHR rather than
+  // Upload the PDF and follow the server's stream of JSON lines. XHR rather than
   // fetch, because only XHR reports upload progress.
-  function sendForConversion(pdf, headers, onUpdate) {
+  function sendForConversion(pdf, headers, handlers) {
+    return streamRequest('/convert', pdf, headers, handlers, true);
+  }
+
+  // POST to a URL that answers with JSON lines: {progress}, {session}, {page},
+  // then {result} or {error}. Resolves with the result.
+  function streamRequest(url, body, headers, { onProgress, onSession, onPage }, uploading = false) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', '/convert');
+      xhr.open('POST', url);
       for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
 
-      xhr.upload.onprogress = e => {
-        if (e.lengthComputable) onUpdate({ stage: 'upload', done: e.loaded, total: e.total });
-      };
-      xhr.upload.onload = () => onUpdate({ stage: 'text', done: 0, total: 1 });
+      if (uploading) {
+        xhr.upload.onprogress = e => {
+          if (e.lengthComputable) onProgress({ stage: 'upload', done: e.loaded, total: e.total });
+        };
+        xhr.upload.onload = () => onProgress({ stage: 'text', done: 0, total: 1 });
+      }
 
       let read = 0;
       let result = null;
@@ -308,7 +394,9 @@
         for (const line of text.slice(read, end).split('\n')) {
           if (!line) continue;
           const msg = JSON.parse(line);
-          if (msg.progress) onUpdate(msg.progress);
+          if (msg.progress) onProgress(msg.progress);
+          if (msg.session && onSession) onSession(msg.session);
+          if (msg.page && onPage) onPage(msg.page);
           if (msg.result) result = msg.result;
           if (msg.error) error = msg.error;
         }
@@ -322,9 +410,257 @@
         else reject(new Error(error || 'Conversion failed.'));
       };
       xhr.onerror = () => reject(new Error('Lost connection to the converter. Is the server still running?'));
-      xhr.send(pdf);
+      xhr.send(body);
     });
   }
+
+  function showBookInfo() {
+    const scanned = bookMeta.scannedPages ? ` · ${bookMeta.scannedPages} scanned pages read with OCR` : '';
+    bookInfo.textContent =
+      `${bookMeta.title} · ${bookMeta.author} · ${bookMeta.pages} pages, ` +
+      `${bookMeta.chapters} chapters, ${bookMeta.images} pictures${scanned}`;
+    bookInfo.hidden = false;
+  }
+
+  // ---------- Book / Scanned pages tabs ----------
+  const tabBook = $('tabBook'), tabScans = $('tabScans');
+  let userPickedTab = false; // once the reader picks a tab, new pages don't switch it
+
+  function showTab(which) {
+    const scansShown = which === 'scans';
+    tabBook.setAttribute('aria-selected', String(!scansShown));
+    tabScans.setAttribute('aria-selected', String(scansShown));
+    $('bookView').hidden = scansShown;
+    $('bookToolbar').hidden = scansShown;
+    $('scans').hidden = !scansShown;
+    if (!scansShown && previewStale && bookId) {
+      openPreview(true).catch(() => showStatus('The preview could not be shown.', { error: true }));
+    }
+  }
+  tabBook.addEventListener('click', () => { userPickedTab = true; showTab('book'); });
+  tabScans.addEventListener('click', () => { userPickedTab = true; showTab('scans'); });
+
+  // ---------- scanned pages ----------
+  // Each page read with OCR, shown as it's read: the page, its text, and how
+  // confidently it was read. Pages read at or below the limit can be read again or typed in by hand.
+  const scans = (() => {
+    const list = $('scanList'), summary = $('scanSummary'), rebuildBtn = $('rebuild');
+    let sessionId = null;
+    let limit = 75;
+    let pictureBelow = 30;
+    let total = 0;
+    let done = false; // conversion finished, so pages can be read again
+    let busy = false; // a page is being read again, or the book rebuilt
+    let pending = 0; // pages read better, not yet in the book
+    const pages = new Map(); // n → { confidence, card }
+
+    // pages read very badly are pictures (a cover, an illustration), not text worth reading again
+    const isPicture = c => c !== null && c < pictureBelow;
+    const isLow = c => c !== null && c >= pictureBelow && c <= limit;
+    const lowCount = () => [...pages.values()].filter(p => !p.manual && isLow(p.confidence)).length;
+
+    function updateCounts() {
+      const low = lowCount();
+      const count = $('lowCount');
+      count.hidden = !low;
+      count.textContent = `${low} low`;
+      summary.textContent = `${pages.size}${total ? ` of ${total}` : ''} pages read` + (low ? ` · ${low} at ${limit}% or lower` : '');
+      rebuildBtn.hidden = !pending;
+      rebuildBtn.textContent = `Update the book with ${pending} improved ${pending === 1 ? 'page' : 'pages'}`;
+      rebuildBtn.disabled = busy;
+      for (const b of list.querySelectorAll('.page-action')) b.disabled = !done || busy;
+    }
+
+    // A page's card: its number, how well it was read, the text, and for low pages
+    // the Retry and Edit text buttons. Pages whose text was typed in by hand stay
+    // editable (and in the "only low pages" list), but aren't read again.
+    function renderCard(n, { confidence, text, manual = false }, note) {
+      const p = pages.get(n);
+      Object.assign(p, { confidence, text, manual });
+      const card = p.card;
+      card.classList.toggle('low', manual || isLow(confidence));
+      const badge =
+        manual ? '<span class="conf typed">typed by hand</span>'
+        : confidence === null ? '<span class="conf none">no text</span>'
+        : isPicture(confidence) ? `<span class="conf none">mostly picture (${confidence}%)</span>`
+        : `<span class="conf">${confidence}%</span>`;
+      const head = card.querySelector('.scan-head');
+      head.innerHTML = `<b>Page ${n}</b>${badge}`;
+      const addButton = (className, label, title, onClick) => {
+        const b = document.createElement('button');
+        b.className = `${className} page-action`;
+        b.textContent = label;
+        b.title = done ? title : 'Available when the conversion has finished';
+        b.addEventListener('click', onClick);
+        head.append(b);
+      };
+      if (isLow(confidence) && !manual) addButton('retry', 'Retry', 'Read this page again with other settings', () => retryPage(n));
+      if (manual || isLow(confidence)) addButton('edit', 'Edit text', 'Type or correct the text of this page', () => editPage(n));
+      const noteEl = card.querySelector('.scan-note');
+      noteEl.hidden = !note;
+      if (note) {
+        noteEl.textContent = note.text;
+        noteEl.className = 'scan-note' + (note.good ? ' good' : '');
+      }
+      card.querySelector('.scan-edit')?.remove();
+      const pre = card.querySelector('.scan-text');
+      pre.hidden = false;
+      pre.textContent = text || 'No text found on this page.';
+      pre.classList.toggle('empty', !text);
+    }
+
+    // Replace the page's text with an editable box, starting from what OCR read.
+    function editPage(n) {
+      const p = pages.get(n);
+      const card = p.card;
+      if (card.querySelector('.scan-edit')) return;
+      const pre = card.querySelector('.scan-text');
+      pre.hidden = true;
+      for (const b of card.querySelectorAll('.page-action')) b.hidden = true;
+      const box = document.createElement('div');
+      box.className = 'scan-edit';
+      box.innerHTML = `<p class="scan-note">Correct or type the page's text, looking at the scan. Leave an empty line between paragraphs.</p>
+        <textarea spellcheck="true" aria-label="Text of page ${n}"></textarea>
+        <div class="edit-buttons"><button class="save">Save</button><button class="cancel">Cancel</button></div>`;
+      const textarea = box.querySelector('textarea');
+      textarea.value = p.text || '';
+      pre.after(box);
+      textarea.style.height = Math.max(240, pre.offsetHeight || 0) + 'px';
+      textarea.focus();
+      box.querySelector('.cancel').addEventListener('click', () => {
+        renderCard(n, p);
+        updateCounts();
+      });
+      box.querySelector('.save').addEventListener('click', () => savePage(n, textarea.value, box));
+    }
+
+    async function savePage(n, text, box) {
+      const save = box.querySelector('.save');
+      save.disabled = true;
+      save.innerHTML = '<span class="spinner" aria-hidden="true"></span>Saving…';
+      try {
+        const res = await fetch(`/book/${sessionId}/pages/${n}/text`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+          body: text,
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const r = await res.json();
+        pending = r.pendingPages;
+        renderCard(n, { confidence: pages.get(n).confidence, text: r.text, manual: true },
+          { good: true, text: 'Your text will be used for this page. Update the book to use it.' });
+      } catch (err) {
+        save.disabled = false;
+        save.textContent = 'Save';
+        box.querySelector('.scan-note').textContent = err.message || 'Could not save the text.';
+      }
+      updateCounts();
+    }
+
+    async function retryPage(n) {
+      const card = pages.get(n).card;
+      const button = card.querySelector('.retry');
+      busy = true;
+      updateCounts();
+      button.innerHTML = '<span class="spinner" aria-hidden="true"></span>Reading again…';
+      try {
+        const res = await fetch(`/book/${sessionId}/pages/${n}/retry`, { method: 'POST' });
+        if (!res.ok) throw new Error(await res.text());
+        const r = await res.json();
+        pending = r.pendingPages;
+        const note = r.improved
+          ? { good: true, text: `Read again (${r.setting}): ${r.before}% → ${r.confidence}%. Update the book to use it.` }
+          : { text: `Tried other settings; the best (${r.setting}) read ${r.tried ?? 0}%, not better than ${r.before}%. Kept the first reading.` };
+        busy = false;
+        renderCard(n, { confidence: r.confidence, text: r.text }, note);
+      } catch (err) {
+        busy = false;
+        renderCard(n, pages.get(n), { text: err.message || 'Could not read the page again.' });
+      }
+      updateCounts();
+    }
+
+    rebuildBtn.addEventListener('click', async () => {
+      busy = true;
+      converting = true;
+      updateCounts();
+      updateDownload();
+      convertBtn.disabled = true;
+      progress.start('Updating the book…');
+      try {
+        bookMeta = await streamRequest(`/book/${sessionId}/rebuild`, null, {}, { onProgress: u => progress.update(u) });
+        progress.update({ stage: 'done' });
+        pending = 0;
+        showBookInfo();
+        showStatus('Book updated with the improved pages.');
+        converting = false;
+        updateDownload();
+        openPreview(true)
+          .then(() => showStatus('Book updated with the improved pages.'))
+          .catch(() => showStatus('Book updated, but the preview could not be shown.', { error: true }));
+      } catch (err) {
+        showStatus(err.message || 'Could not update the book.', { error: true });
+      } finally {
+        progress.stop();
+        busy = false;
+        converting = false;
+        convertBtn.disabled = !file;
+        updateDownload();
+        updateCounts();
+      }
+    });
+
+    $('onlyLow').addEventListener('change', e => $('scans').classList.toggle('only-low', e.target.checked));
+
+    return {
+      get limit() { return limit; },
+      reset() {
+        sessionId = null;
+        total = 0;
+        done = busy = false;
+        pending = 0;
+        pages.clear();
+        list.innerHTML = '';
+        userPickedTab = false;
+        $('tabs').hidden = true;
+        showTab('book');
+        updateCounts();
+      },
+      start(session) {
+        sessionId = session.id;
+        limit = session.lowConfidence;
+        pictureBelow = session.pictureBelow;
+        document.querySelectorAll('.low-limit').forEach(el => { el.textContent = limit; });
+      },
+      setTotal(t) { total = t; updateCounts(); },
+      // a page just read: add its card in page order, following along if the reader is at the bottom
+      add(page) {
+        const box = $('scans');
+        const following = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+        const card = document.createElement('div');
+        card.className = 'scan';
+        card.innerHTML = `<img alt="" loading="lazy"><div><div class="scan-head"></div><p class="scan-note" hidden></p><pre class="scan-text"></pre></div>`;
+        card.querySelector('img').src = `/book/${sessionId}/pages/${page.n}.jpg`;
+        card.querySelector('img').alt = `Scan of page ${page.n}`;
+        pages.set(page.n, { confidence: page.confidence, card });
+        renderCard(page.n, page);
+        const after = [...list.children].find(c => Number(c.dataset.n) > page.n);
+        card.dataset.n = page.n;
+        list.insertBefore(card, after || null);
+        if ($('tabs').hidden) {
+          $('tabs').hidden = false;
+          if (!userPickedTab) showTab('scans');
+        }
+        if (following && !box.hidden) box.scrollTop = box.scrollHeight;
+        updateCounts();
+      },
+      finish(meta) {
+        done = true;
+        total = meta.scannedPages || total;
+        updateCounts();
+      },
+    };
+  })();
 
   // Progress bar. Each stage fills its own share of the bar. Reading scanned
   // pages (OCR) is by far the slowest, then finding pictures, so they get the most room.
@@ -336,7 +672,7 @@
       text: { from: 3, to: 8, text: (d, t) => (t > 1 ? `Reading text: page ${d} of ${t}` : 'Reading text…') },
       ocr: {
         from: 8, to: 85,
-        text: (d, t) => `Reading scanned pages (OCR): page ${d} of ${t}`,
+        text: (d, t) => `Reading scanned pages: ${d} of ${t}`,
       },
       pictures: {
         from: 8, to: 98,
@@ -349,27 +685,53 @@
     let started = 0;
     let timer = null;
 
-    const clock = () => {
-      const s = Math.floor((Date.now() - started) / 1000);
+    // Time left, from how fast the slow stages (OCR, pictures) are actually going.
+    // Timing starts from a stage's first finished page, since OCR spends its first
+    // seconds starting up and picking the language.
+    const PICTURES_SECONDS_PER_PAGE = 0.1; // rough, for the part of the time estimate still to come after OCR
+    let bookPages = 0;
+    let rate = null; // { stage, at, done }
+    let finishAt = null; // estimated finishing time (ms), counted down between updates
+
+    const time = ms => {
+      const s = Math.max(0, Math.round(ms / 1000));
       return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    };
+    const estimate = (stage, done, total) => {
+      if (stage !== 'ocr' && stage !== 'pictures') return;
+      const now = Date.now();
+      if (!rate || rate.stage !== stage || done < rate.done) {
+        if (done > 0) rate = { stage, at: now, done };
+        return;
+      }
+      if (done - rate.done < 3) return; // too early to judge the speed
+      const perPage = (now - rate.at) / (done - rate.done);
+      let left = (total - done) * perPage;
+      if (stage === 'ocr') left += bookPages * PICTURES_SECONDS_PER_PAGE * 1000;
+      finishAt = now + left;
     };
     const render = () => {
       fill.style.width = percent + '%';
       bar.setAttribute('aria-valuenow', Math.round(percent));
-      numbers.textContent = `${Math.round(percent)}% · ${clock()}`;
+      const left = finishAt !== null && percent < 100 ? ` · about ${time(finishAt - Date.now())} left` : '';
+      numbers.textContent = `${Math.round(percent)}% · ${time(Date.now() - started)}${left}`;
     };
 
     return {
-      start() {
+      start(text = 'Uploading…') {
         percent = 0;
         stages.pictures.from = 8;
         started = Date.now();
-        label.textContent = 'Uploading…';
+        bookPages = 0;
+        rate = finishAt = null;
+        label.textContent = text;
         box.hidden = false;
         render();
         timer = setInterval(render, 1000);
       },
       update({ stage, done = 0, total = 0 }) {
+        if (stage === 'text' && total > 1) bookPages = total;
+        estimate(stage, done, total);
         // the pictures stage ending means only chapter building is left
         if (stage === 'pictures' && total && done >= total) stage = 'finishing';
         // after OCR, finding pictures only has the rest of the bar
@@ -405,7 +767,15 @@
   }
 
   // ---------- preview ----------
+  // The book can't be laid out while its tab is hidden, so then it's drawn when the tab is shown.
+  let previewStale = false;
+
   async function openPreview(keepPlace) {
+    if ($('bookView').hidden) {
+      previewStale = true;
+      return;
+    }
+    previewStale = false;
     const token = ++previewToken;
     const loc = keepPlace && rendition && rendition.currentLocation();
     const place = loc && loc.start ? { cfi: loc.start.cfi, href: loc.start.href } : null;

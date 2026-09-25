@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const JSZip = require('jszip');
 const { measureLayout, findGaps, detectFigures, renderCover } = require('./figures');
 const { FONTS, findFont, fontFaces, fontFaceCss, fontStack } = require('./fonts');
-const { ocrPages, LANGUAGES } = require('./ocr');
+const { recognizePages, finishPages, LANGUAGES } = require('./ocr');
 
 function parseArgs(argv) {
   const opts = { positional: [] };
@@ -143,23 +143,31 @@ function linesToBlocks(lines, bodySize) {
   return blocks;
 }
 
-// `onProgress({ stage, done, total })` is called as pages are processed.
-// Stages: 'text' (reading every page), 'ocr' (reading pages that have no text,
-// only when there are some), 'pictures' (rendering pages that may hold pictures).
-// `ocrLanguage` is a language code from ocr.js; empty means detect it.
-async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage } = {}) {
+// Open PDF bytes as a pdf.js document.
+async function openPdf(buffer) {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const data = new Uint8Array(buffer);
   // decoders for scanned images (JBIG2, JPEG 2000) and fonts, needed to render pages
   const pdfjsRoot = path.dirname(require.resolve('pdfjs-dist/package.json'));
-  const doc = await pdfjs.getDocument({
-    data,
+  return pdfjs.getDocument({
+    data: new Uint8Array(buffer),
     useSystemFonts: true,
     verbosity: 0,
     wasmUrl: path.join(pdfjsRoot, 'wasm') + '/',
     standardFontDataUrl: path.join(pdfjsRoot, 'standard_fonts') + '/',
     cMapUrl: path.join(pdfjsRoot, 'cmaps') + '/',
   }).promise;
+}
+
+// `onProgress({ stage, done, total })` is called as pages are processed.
+// Stages: 'text' (reading every page), 'ocr' (reading pages that have no text,
+// only when there are some), 'pictures' (rendering pages that may hold pictures).
+// OCR options:
+//   ocrLanguage: a language code from ocr.js; empty means detect it
+//   ocr: the `ocr` result of an earlier run on the same PDF, whose pages aren't read again
+//   onOcrPage(n, { confidence, text, thumbnail }): called as each scanned page is read
+// The result's `ocr` holds every scanned page's reading, for passing back in later.
+async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: previous, onOcrPage } = {}) {
+  const doc = await openPdf(buffer);
 
   let meta = {};
   try {
@@ -181,9 +189,17 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage } = {}) {
   });
   // every line found on the page, even ones left out of the text, for the page layout
   const layoutLines = [...pageLines];
+  let ocr = null;
   if (scanned.length) {
-    const ocrLines = await ocrPages(doc, scanned, { language: ocrLanguage, onProgress });
-    for (const [n, lines] of ocrLines) {
+    const readings = new Map(scanned.filter(n => previous?.pages.has(n)).map(n => [n, previous.pages.get(n)]));
+    const fresh = await recognizePages(
+      doc,
+      scanned.filter(n => !readings.has(n)),
+      { language: previous?.language || ocrLanguage, onProgress, onPage: onOcrPage }
+    );
+    for (const [n, r] of fresh.pages) readings.set(n, r);
+    ocr = { language: fresh.language || previous?.language, pages: readings };
+    for (const [n, lines] of finishPages(readings)) {
       layoutLines[n - 1] = lines;
       pageLines[n - 1] = lines.filter(l => !l.unreadable);
     }
@@ -244,7 +260,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage } = {}) {
 
   const startsLow = lowStartPages(pageLines, layoutLines, layout);
   const pages = pageLines.map(lines => linesToBlocks(lines, bodySize));
-  return { pages, images, cover, startsLow, title: meta.Title, author: meta.Author };
+  return { pages, images, cover, startsLow, ocr, title: meta.Title, author: meta.Author };
 }
 
 // Pages whose text starts far below the usual top of the text block, under a
@@ -516,8 +532,10 @@ ${spine.join('\n')}
 
 // Read a PDF into a book: chapters, images and cover, ready for buildEpub.
 // `name` is used as the title when the PDF has none.
-async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', onProgress, ocrLanguage } = {}) {
-  const extracted = await extractPdf(pdfBuffer, onProgress, { ocrLanguage });
+// OCR options are passed on to extractPdf; the book's `ocr` can be passed back in
+// as `ocr` to rebuild it without reading its scanned pages again.
+async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', onProgress, ...ocrOptions } = {}) {
+  const extracted = await extractPdf(pdfBuffer, onProgress, ocrOptions);
   const pages = cleanPages(extracted.pages);
   const paragraphs = pages.reduce((n, p) => n + p.filter(b => !b.heading && !b.image).length, 0);
   if (paragraphs === 0) {
@@ -529,6 +547,7 @@ async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', onProgr
     chapters: buildChapters(pages, extracted.startsLow),
     images: extracted.images,
     cover: extracted.cover,
+    ocr: extracted.ocr,
     stats: { pages: pages.length, paragraphs, images: extracted.images.length },
   };
 }
@@ -571,7 +590,7 @@ async function main() {
   console.log(`Wrote ${outFile} (${pages} pages, ${chapters} chapters, ${paragraphs} paragraphs, ${images} images)`);
 }
 
-module.exports = { convertPdfToEpub, analyzePdf, buildEpub, extractPdf, cleanPages, buildChapters };
+module.exports = { convertPdfToEpub, analyzePdf, buildEpub, extractPdf, openPdf, cleanPages, buildChapters };
 
 if (require.main === module) {
   main().catch(err => {
