@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "convert": "node index.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "build:exe": "node build/build-exe.js"
   },
   "private": true,
   "dependencies": {
@@ -19,5 +20,8 @@
     "epubjs": "^0.3.93",
     "jszip": "^3.10.2",
     "pdfjs-dist": "^6.3.289"
+  },
+  "devDependencies": {
+    "postject": "^1.0.0-alpha.6"
   }
 }

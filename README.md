@@ -48,6 +48,28 @@ PORT=8080 npm start          # macOS / Linux
 $env:PORT=8080; npm start    # Windows PowerShell
 ```
 
+## Share it as one file (ConvertPdf.exe)
+
+You can build a single `ConvertPdf.exe` for people who don't have Node.js:
+
+```
+npm run build:exe
+```
+
+This creates `dist/ConvertPdf.exe` (about 110 MB). Send that one file to anyone with Windows. They double-click it and:
+
+- the converter starts and their browser opens it at `http://localhost:3000`
+- a console window stays open. **Closing it stops the converter.**
+- converting happens on their own computer, so nothing is uploaded anywhere
+
+Details:
+
+- **First run:** the exe unpacks its files (about 47 MB) into `%LOCALAPPDATA%\ConvertPdf`, which takes about 2 seconds. Later starts take under a second. A newer exe replaces the old unpacked files automatically.
+- **Double-clicking again** while it's running just opens the browser again.
+- **Busy port:** if port 3000 is used by another program, it uses the next free one (3001, 3002, …).
+- **Windows warning:** the exe isn't code-signed, so Windows SmartScreen may say "Windows protected your PC" the first time. Click **More info → Run anyway**. Some antivirus programs are also cautious about unsigned exes.
+- **Platform:** the exe only works on the system it was built on, here Windows x64. To make a Mac or Linux version, run `npm run build:exe` on that system.
+
 ## Command line
 
 ```
@@ -96,3 +118,5 @@ Embedded fonts add about 100 KB to the book and look the same in every e-reader.
 | `fonts.js` | Font list and embedding. |
 | `server.js` | Local web server for the web app. |
 | `public/index.html` | The web app page (upload, progress, preview, font choice). |
+| `build/build-exe.js` | Builds `ConvertPdf.exe` (`npm run build:exe`). |
+| `build/launcher.js` | Start-up code inside the exe: unpacks the app and starts the server. |

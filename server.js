@@ -166,6 +166,61 @@ const server = http.createServer((req, res) => {
 // scanned books with pictures can take a few minutes to convert
 server.requestTimeout = 0;
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`PDF to EPUB converter running at http://localhost:${PORT}`);
-});
+// ConvertPdf.exe sets this so double-clicking it opens the app in the browser
+const openBrowser = process.env.CONVERTPDF_OPEN_BROWSER === '1' || process.argv.includes('--open');
+
+function open(url) {
+  const { spawn } = require('child_process');
+  const [cmd, args] =
+    process.platform === 'win32'
+      ? ['cmd', ['/c', 'start', '', url]]
+      : [process.platform === 'darwin' ? 'open' : 'xdg-open', [url]];
+  spawn(cmd, args, { detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
+}
+
+// Is the converter already running on this port (e.g. the exe was opened twice)?
+function isConverter(port) {
+  return new Promise(resolve => {
+    http
+      .get({ host: '127.0.0.1', port, path: '/fonts.json', timeout: 1500 }, res => {
+        res.resume();
+        resolve(res.statusCode === 200 && /json/.test(res.headers['content-type'] || ''));
+      })
+      .on('error', () => resolve(false))
+      .on('timeout', function () {
+        this.destroy();
+        resolve(false);
+      });
+  });
+}
+
+function listen(port, triesLeft) {
+  const onListening = () => {
+    server.off('error', onError);
+    const url = `http://localhost:${port}`;
+    console.log(`PDF to EPUB converter running at ${url}`);
+    if (openBrowser) {
+      console.log('Keep this window open while you use the converter. Close it to stop.');
+      open(url);
+    }
+  };
+  const onError = async err => {
+    // this port failed, so its "listening" handler must not fire for the next port
+    server.off('listening', onListening);
+    if (err.code !== 'EADDRINUSE') throw err;
+    if (await isConverter(port)) {
+      const url = `http://localhost:${port}`;
+      console.log(`ConvertPdf is already running at ${url}`);
+      if (openBrowser) open(url);
+      process.exit(0);
+    }
+    if (triesLeft > 0) return listen(port + 1, triesLeft - 1);
+    console.error(`Ports ${PORT}–${port} are all in use. Set PORT to a free port and try again.`);
+    process.exit(1);
+  };
+  server.once('error', onError);
+  server.once('listening', onListening);
+  server.listen(port, '127.0.0.1');
+}
+
+listen(Number(PORT), 10);
