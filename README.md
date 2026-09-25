@@ -10,6 +10,14 @@ Convert PDFs that contain text into EPUB e-books. It works on normal PDFs and on
 
 It runs entirely on your computer. Your files are never uploaded anywhere.
 
+## Download (Windows, no install)
+
+**[Download ConvertPdf.zip](https://github.com/achmadm23/convertPdf/releases/download/v1.0.0/ConvertPdf.zip)** (53 MB)
+
+Unzip it and double-click `ConvertPdf.exe`. You don't need Node.js. See [Share it as one file](#share-it-as-one-file-convertpdfexe) for what happens when it runs.
+
+To convert on macOS or Linux, or to change the code, install it from source as described below.
+
 ## Requirements
 
 - [Node.js](https://nodejs.org/) 22.13 or newer (required by pdf.js)
@@ -56,7 +64,7 @@ You can build a single `ConvertPdf.exe` for people who don't have Node.js:
 npm run build:exe
 ```
 
-This creates `dist/ConvertPdf.exe` (about 110 MB). Send that one file to anyone with Windows. They double-click it and:
+This creates `dist/ConvertPdf.exe` (about 110 MB, or about 53 MB zipped). Send it to anyone with Windows. They double-click it and:
 
 - the converter starts and their browser opens it at `http://localhost:3000`
 - a console window stays open. **Closing it stops the converter.**
