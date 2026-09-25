@@ -13,7 +13,7 @@ It runs entirely on your computer. Your files are never uploaded anywhere.
 
 ## Download (Windows, no install)
 
-**[Download ConvertPdf.zip](https://github.com/achmadm23/convertPdf/releases/download/v1.0.0/ConvertPdf.zip)** (53 MB)
+**[Download ConvertPdf.zip](https://github.com/achmadm23/convertPdf/releases/download/v1.0.0/ConvertPdf.zip)** (60 MB)
 
 Unzip it and double-click `ConvertPdf.exe`. You don't need Node.js. See [Share it as one file](#share-it-as-one-file-convertpdfexe) for what happens when it runs.
 
