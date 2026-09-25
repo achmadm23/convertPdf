@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF to EPUB</title>
+<link rel="stylesheet" href="/fonts.css">
+<style>
+  :root {
+    --bg: #f5f3ef; --card: #ffffff; --text: #1f1d1a; --muted: #6b665e;
+    --border: #d9d4cb; --accent: #2f6f5e; --accent-text: #ffffff;
+    --tint: #eef5f2; --error: #b3261e; --paper: #fffdf8; --shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1917; --card: #24221f; --text: #ece8e1; --muted: #a39e95;
+      --border: #3d3a35; --accent: #5fb39b; --accent-text: #0f1a17;
+      --tint: #1f2b27; --error: #f2b8b5; --paper: #f4f1ea; --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap {
+    max-width: 1180px; margin: 0 auto; padding: 24px 16px;
+    display: grid; grid-template-columns: 340px 1fr; gap: 20px; align-items: start;
+  }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+  aside.card { padding: 22px; }
+  h1 { margin: 0 0 2px; font-size: 1.35rem; }
+  p.sub { margin: 0 0 18px; color: var(--muted); font-size: 0.93rem; }
+  .drop {
+    border: 2px dashed var(--border); border-radius: 10px; padding: 24px 14px;
+    text-align: center; cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  .drop:hover, .drop.over, .drop:focus-visible { background: var(--tint); border-color: var(--accent); outline: none; }
+  .drop strong { display: block; margin-bottom: 2px; }
+  .drop span { color: var(--muted); font-size: 0.88rem; word-break: break-all; }
+  input[type=file] { display: none; }
+  label.field { display: block; margin-top: 14px; font-size: 0.88rem; color: var(--muted); }
+  label.field input {
+    display: block; width: 100%; margin-top: 4px; padding: 8px 10px; font: inherit; font-size: 0.95rem;
+    color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  }
+  fieldset { border: 0; padding: 0; margin: 18px 0 0; }
+  legend { font-size: 0.88rem; color: var(--muted); margin-bottom: 6px; padding: 0; }
+  .fonts { display: grid; gap: 6px; }
+  .font {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 8px; transition: border-color .15s, background .15s;
+  }
+  .font:hover { border-color: var(--accent); }
+  .font:has(input:checked) { border-color: var(--accent); background: var(--tint); }
+  .font input { accent-color: var(--accent); margin: 0; }
+  .font .sample { font-size: 1.35rem; width: 1.8em; text-align: center; line-height: 1; }
+  .font .name { font-size: 0.95rem; }
+  .font .note { display: block; font-size: 0.78rem; color: var(--muted); font-family: system-ui, sans-serif; }
+  button, a.btn {
+    display: block; width: 100%; margin-top: 18px; padding: 11px; font: inherit; font-weight: 600;
+    text-align: center; text-decoration: none; border: 0; border-radius: 8px; cursor: pointer;
+    background: var(--accent); color: var(--accent-text);
+  }
+  a.btn { margin-top: 10px; }
+  button:disabled, a.btn.disabled { opacity: .5; cursor: not-allowed; }
+  a.btn.disabled { pointer-events: none; }
+  #status { margin-top: 12px; min-height: 1.5em; font-size: 0.92rem; }
+  .progress { margin-top: 14px; }
+  .progress .bar { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
+  .progress .fill { height: 100%; width: 0; background: var(--accent); border-radius: 4px; transition: width .3s ease; }
+  .progress-text {
+    display: flex; justify-content: space-between; gap: 8px; margin-top: 6px;
+    font-size: 0.85rem; color: var(--muted);
+  }
+  #progressNumbers { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  @media (prefers-reduced-motion: reduce) { .progress .fill { transition: none; } }
+  #status.error { color: var(--error); }
+  .spinner {
+    display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px;
+    border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+  section.preview { display: flex; flex-direction: column; height: calc(100vh - 48px); min-height: 520px; overflow: hidden; }
+  @media (max-width: 860px) { section.preview { height: 80vh; } }
+  .toolbar {
+    display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border);
+  }
+  .toolbar select {
+    flex: 1; min-width: 0; padding: 7px 8px; font: inherit; font-size: 0.9rem;
+    color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .toolbar button {
+    width: auto; margin: 0; padding: 7px 12px; font-weight: 500; font-size: 0.9rem;
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  }
+  .stage { flex: 1; position: relative; background: var(--paper); border-radius: 0 0 12px 12px; }
+  #viewer { position: absolute; inset: 12px 16px; }
+  .placeholder {
+    position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+    color: #6b665e; padding: 24px; font-size: 0.95rem;
+  }
+  [hidden] { display: none !important; }
+  .placeholder b { display: block; color: #1f1d1a; font-size: 1.05rem; margin-bottom: 4px; }
+  .book-info { padding: 8px 12px; font-size: 0.85rem; color: var(--muted); border-bottom: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside class="card">
+    <h1>PDF to EPUB</h1>
+    <p class="sub">Upload a text PDF, preview it, and download it as an e-book.</p>
+
+    <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a PDF file">
+      <strong>Choose a PDF or drop it here</strong>
+      <span id="fileName">No file selected</span>
+    </div>
+    <input type="file" id="file" accept="application/pdf,.pdf">
+
+    <label class="field">Title (optional)
+      <input id="title" placeholder="Taken from the PDF if left blank">
+    </label>
+    <label class="field">Author (optional)
+      <input id="author" placeholder="Taken from the PDF if left blank">
+    </label>
+
+    <fieldset>
+      <legend>Font</legend>
+      <div class="fonts" id="fonts"></div>
+    </fieldset>
+
+    <button id="convert" disabled>Convert</button>
+    <div class="progress" id="progress" hidden>
+      <div class="bar" id="progressBar" role="progressbar" aria-label="Conversion progress"
+           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="fill" id="progressFill"></div></div>
+      <div class="progress-text">
+        <span id="progressLabel">Starting…</span>
+        <span id="progressNumbers"></span>
+      </div>
+    </div>
+    <div id="status" role="status"></div>
+    <a class="btn disabled" id="download" aria-disabled="true" tabindex="-1">Download EPUB</a>
+  </aside>
+
+  <section class="card preview" aria-label="Book preview">
+    <div class="book-info" id="bookInfo" hidden></div>
+    <div class="toolbar">
+      <select id="toc" disabled aria-label="Go to chapter"><option>Contents</option></select>
+      <button id="prev" disabled aria-label="Previous page">‹ Prev</button>
+      <button id="next" disabled aria-label="Next page">Next ›</button>
+    </div>
+    <div class="stage">
+      <div class="placeholder" id="placeholder">
+        <div><b>Preview</b>Convert a PDF and the book will appear here.</div>
+      </div>
+      <div id="viewer"></div>
+    </div>
+  </section>
+</div>
+
+<script src="/vendor/jszip.min.js"></script>
+<script src="/vendor/epub.min.js"></script>
+<script>
+  const $ = id => document.getElementById(id);
+  const drop = $('drop'), input = $('file'), convertBtn = $('convert'), status = $('status');
+  const download = $('download'), toc = $('toc'), prevBtn = $('prev'), nextBtn = $('next');
+  const viewer = $('viewer'), placeholder = $('placeholder'), bookInfo = $('bookInfo');
+
+  let file = null;
+  let bookId = null;
+  let bookMeta = null;
+  let converting = false;
+  let font = 'default';
+  let epub = null;
+  let rendition = null;
+  let previewToken = 0;
+
+  try { font = localStorage.getItem('font') || font; } catch {}
+
+  function showStatus(msg, { error = false, busy = false } = {}) {
+    status.className = error ? 'error' : '';
+    status.innerHTML = '';
+    if (busy) status.insertAdjacentHTML('beforeend', '<span class="spinner" aria-hidden="true"></span>');
+    status.append(msg);
+  }
+
+  // ---------- fonts ----------
+  async function loadFonts() {
+    const fonts = await (await fetch('/fonts.json')).json();
+    if (!fonts.some(f => f.id === font)) font = 'default';
+    $('fonts').innerHTML = '';
+    for (const f of fonts) {
+      const family = f.embedded ? `'${f.name}', ${f.fallback}` : f.fallback;
+      const label = document.createElement('label');
+      label.className = 'font';
+      label.innerHTML = `<input type="radio" name="font"><span class="sample">Aa</span>
+        <span class="name"></span>`;
+      const radio = label.querySelector('input');
+      radio.value = f.id;
+      radio.checked = f.id === font;
+      label.querySelector('.sample').style.fontFamily = family;
+      const name = label.querySelector('.name');
+      name.style.fontFamily = family;
+      name.textContent = f.name;
+      if (!f.embedded) name.insertAdjacentHTML('beforeend', '<span class="note">Uses the e-reader\'s own font</span>');
+      radio.addEventListener('change', () => setFont(f.id));
+      $('fonts').append(label);
+    }
+  }
+
+  function setFont(id) {
+    font = id;
+    try { localStorage.setItem('font', id); } catch {}
+    if (bookId) {
+      updateDownload();
+      openPreview(true);
+    }
+  }
+
+  // ---------- file choice ----------
+  function setFile(f) {
+    if (!f) return;
+    if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') {
+      showStatus('Please choose a PDF file.', { error: true });
+      return;
+    }
+    file = f;
+    $('fileName').textContent = `${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`;
+    convertBtn.disabled = false;
+    showStatus('');
+  }
+
+  drop.addEventListener('click', () => input.click());
+  drop.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+  });
+  input.addEventListener('change', () => setFile(input.files[0]));
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('over');
+    setFile(e.dataTransfer.files[0]);
+  });
+
+  // ---------- convert ----------
+  convertBtn.addEventListener('click', async () => {
+    if (!file) return;
+    convertBtn.disabled = true;
+    converting = true;
+    updateDownload();
+    showStatus('');
+    progress.start();
+
+    const headers = { 'Content-Type': 'application/pdf', 'X-Filename': encodeURIComponent(file.name) };
+    const title = $('title').value.trim();
+    const author = $('author').value.trim();
+    if (title) headers['X-Title'] = encodeURIComponent(title);
+    if (author) headers['X-Author'] = encodeURIComponent(author);
+
+    try {
+      bookMeta = await sendForConversion(file, headers, update => progress.update(update));
+      progress.update({ stage: 'done' });
+      bookId = bookMeta.id;
+      bookInfo.textContent =
+        `${bookMeta.title} · ${bookMeta.author} · ${bookMeta.pages} pages, ` +
+        `${bookMeta.chapters} chapters, ${bookMeta.images} pictures`;
+      bookInfo.hidden = false;
+      converting = false;
+      updateDownload();
+      showStatus('Done. Check the preview, then download.');
+      openPreview(false).catch(() => showStatus('Converted, but the preview could not be shown.', { error: true }));
+    } catch (err) {
+      showStatus(err.message || 'Conversion failed.', { error: true });
+    } finally {
+      progress.stop();
+      convertBtn.disabled = false;
+      // after a failed conversion, the previously converted book can still be downloaded
+      converting = false;
+      updateDownload();
+    }
+  });
+
+  // Upload the PDF and follow the server's progress stream. XHR rather than
+  // fetch, because only XHR reports upload progress.
+  function sendForConversion(pdf, headers, onUpdate) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/convert');
+      for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
+
+      xhr.upload.onprogress = e => {
+        if (e.lengthComputable) onUpdate({ stage: 'upload', done: e.loaded, total: e.total });
+      };
+      xhr.upload.onload = () => onUpdate({ stage: 'text', done: 0, total: 1 });
+
+      let read = 0;
+      let result = null;
+      let error = null;
+      const readLines = () => {
+        if (xhr.status !== 200) return;
+        const text = xhr.responseText;
+        const end = text.lastIndexOf('\n') + 1;
+        for (const line of text.slice(read, end).split('\n')) {
+          if (!line) continue;
+          const msg = JSON.parse(line);
+          if (msg.progress) onUpdate(msg.progress);
+          if (msg.result) result = msg.result;
+          if (msg.error) error = msg.error;
+        }
+        read = end;
+      };
+      xhr.onprogress = readLines;
+      xhr.onload = () => {
+        if (xhr.status !== 200) return reject(new Error(xhr.responseText || 'Conversion failed.'));
+        readLines();
+        if (result) resolve(result);
+        else reject(new Error(error || 'Conversion failed.'));
+      };
+      xhr.onerror = () => reject(new Error('Lost connection to the converter. Is the server still running?'));
+      xhr.send(pdf);
+    });
+  }
+
+  // Progress bar. Each stage fills its own share of the bar; finding pictures
+  // renders pages and is by far the slowest, so it gets the most room.
+  const progress = (() => {
+    const box = $('progress'), bar = $('progressBar'), fill = $('progressFill');
+    const label = $('progressLabel'), numbers = $('progressNumbers');
+    const stages = {
+      upload: { from: 0, to: 3, text: () => 'Uploading…' },
+      text: { from: 3, to: 8, text: (d, t) => (t > 1 ? `Reading text: page ${d} of ${t}` : 'Reading text…') },
+      pictures: {
+        from: 8, to: 98,
+        text: (d, t) => (t ? `Finding pictures: page ${d} of ${t}` : 'Finding pictures…'),
+      },
+      finishing: { from: 98, to: 99, text: () => 'Building chapters…' },
+      done: { from: 100, to: 100, text: () => 'Done' },
+    };
+    let percent = 0;
+    let started = 0;
+    let timer = null;
+
+    const clock = () => {
+      const s = Math.floor((Date.now() - started) / 1000);
+      return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    };
+    const render = () => {
+      fill.style.width = percent + '%';
+      bar.setAttribute('aria-valuenow', Math.round(percent));
+      numbers.textContent = `${Math.round(percent)}% · ${clock()}`;
+    };
+
+    return {
+      start() {
+        percent = 0;
+        started = Date.now();
+        label.textContent = 'Uploading…';
+        box.hidden = false;
+        render();
+        timer = setInterval(render, 1000);
+      },
+      update({ stage, done = 0, total = 0 }) {
+        // the pictures stage ending means only chapter building is left
+        if (stage === 'pictures' && total && done >= total) stage = 'finishing';
+        const s = stages[stage];
+        if (!s) return;
+        const share = stage === 'pictures' || stage === 'text' || stage === 'upload' ? (total ? done / total : 0) : 0;
+        percent = Math.max(percent, s.from + (s.to - s.from) * share); // never moves backwards
+        label.textContent = s.text(done, total);
+        render();
+      },
+      stop() {
+        clearInterval(timer);
+        setTimeout(() => { box.hidden = true; }, percent >= 100 ? 1200 : 0);
+      },
+    };
+  })();
+
+  // The download button only works once a conversion has finished.
+  function updateDownload() {
+    const ready = bookId && !converting;
+    if (ready) {
+      download.href = `/book/${bookId}.epub?font=${encodeURIComponent(font)}&download=1`;
+      download.textContent = `Download ${bookMeta.fileName}`;
+    } else {
+      download.removeAttribute('href');
+      download.textContent = converting ? 'Download (converting…)' : 'Download EPUB';
+    }
+    download.classList.toggle('disabled', !ready);
+    download.setAttribute('aria-disabled', String(!ready));
+    download.tabIndex = ready ? 0 : -1;
+  }
+
+  // ---------- preview ----------
+  async function openPreview(keepPlace) {
+    const token = ++previewToken;
+    const loc = keepPlace && rendition && rendition.currentLocation();
+    const place = loc && loc.start ? { cfi: loc.start.cfi, href: loc.start.href } : null;
+    if (keepPlace) showStatus('Updating preview…', { busy: true });
+
+    const res = await fetch(`/book/${bookId}.epub?font=${encodeURIComponent(font)}`);
+    if (!res.ok) {
+      showStatus(await res.text(), { error: true });
+      return;
+    }
+    const data = await res.arrayBuffer();
+    if (token !== previewToken) return; // a newer font was picked meanwhile
+
+    if (epub) epub.destroy();
+    viewer.innerHTML = '';
+    placeholder.hidden = true;
+    epub = ePub(data);
+    rendition = epub.renderTo(viewer, { width: '100%', height: '100%', spread: 'none' });
+    rendition.on('relocated', onRelocated);
+    rendition.on('keyup', onKey);
+    // go back to the same spot; if that fails, at least the same chapter
+    try {
+      await rendition.display(place ? place.cfi : undefined);
+    } catch {}
+    const now = rendition.currentLocation();
+    if (place && (!now || !now.start || now.start.href !== place.href)) await rendition.display(place.href);
+    fillToc(await epub.loaded.navigation);
+    prevBtn.disabled = nextBtn.disabled = toc.disabled = false;
+    if (keepPlace) showStatus('Preview updated.');
+  }
+
+  function fillToc(nav) {
+    toc.innerHTML = '';
+    const add = (items, depth) => {
+      for (const item of items) {
+        const opt = document.createElement('option');
+        opt.value = item.href;
+        opt.textContent = ' '.repeat(depth) + item.label.trim();
+        toc.append(opt);
+        if (item.subitems && item.subitems.length) add(item.subitems, depth + 1);
+      }
+    };
+    add(nav.toc, 0);
+    syncToc();
+  }
+
+  function syncToc() {
+    const loc = rendition && rendition.currentLocation();
+    if (!loc || !loc.start) return;
+    const file = loc.start.href.split('#')[0];
+    const option = [...toc.options].find(o => o.value.split('#')[0] === file);
+    if (option) toc.value = option.value;
+  }
+
+  function onRelocated(loc) {
+    syncToc();
+    prevBtn.disabled = loc.atStart;
+    nextBtn.disabled = loc.atEnd;
+  }
+
+  function onKey(e) {
+    if (!rendition) return;
+    if (e.key === 'ArrowLeft') rendition.prev();
+    if (e.key === 'ArrowRight') rendition.next();
+  }
+
+  toc.addEventListener('change', () => rendition && rendition.display(toc.value));
+  prevBtn.addEventListener('click', () => rendition && rendition.prev());
+  nextBtn.addEventListener('click', () => rendition && rendition.next());
+  document.addEventListener('keyup', e => {
+    if (e.target.closest('input, select, textarea')) return;
+    onKey(e);
+  });
+
+  loadFonts().catch(() => showStatus('Could not load the font list.', { error: true }));
+</script>
+</body>
+</html>
