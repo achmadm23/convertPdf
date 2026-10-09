@@ -62,12 +62,14 @@ Then open **http://localhost:3000** and:
 6. Change the font as often as you like. The preview updates in about a second, without converting again.
 7. Click **Download**. The button stays disabled until the conversion has finished.
 
-For scanned books, a **Scanned pages** tab shows each page as OCR reads it: the scan, the text read from it, and how confidently it was read. Pages read at 75% or lower are marked (tick **Only pages at 75% or lower** to see just those). Once the conversion has finished, they have two buttons:
+For scanned books, a **Scanned pages** tab shows each page as OCR reads it: the scan, the text read from it, and how confidently it was read. Pages read at 75% or lower are marked. Once the conversion has finished, they have two buttons:
 
 - **Retry** reads the page again with other settings (higher resolution, black and white, the page as one block of text) and keeps the best reading if it's better than the first.
 - **Edit text** lets you correct the text or type it yourself, looking at the scan next to it. Leave an empty line between paragraphs. Your text is used instead of what OCR read, and the page stays editable.
 
-Then click **Update the book** to use the improved pages. This takes under a minute, because the other pages aren't read again. Pages read below 30% are mostly pictures (a cover, for example) and have neither button.
+Pages read at 90% or lower also have **Keep as picture**, which puts the whole page in the book as a picture instead of its text: for a handwritten letter, a table, or a page OCR garbles. **Use text** undoes it. A first page kept as a picture becomes the book's cover. Tick **Only pages at 90% or lower** to see just the pages with these buttons.
+
+Then click **Update the book** to use the changed pages. This takes under a minute, because the other pages aren't read again. Pages read below 30% are mostly pictures (a cover, for example) and have neither Retry nor Edit text.
 
 The server keeps the last 5 converted books in memory so you can change fonts quickly. Restarting the server clears them.
 

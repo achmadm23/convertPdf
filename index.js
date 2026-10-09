@@ -189,6 +189,9 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   });
   // every line found on the page, even ones left out of the text, for the page layout
   const layoutLines = [...pageLines];
+  // scanned pages kept whole as a picture instead of their text (chosen in the web UI);
+  // they have no lines until the picture is put in, after pictures are found
+  const picturePages = new Set();
   let ocr = null;
   if (scanned.length) {
     const readings = new Map(scanned.filter(n => previous?.pages.has(n)).map(n => [n, previous.pages.get(n)]));
@@ -199,7 +202,13 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
     );
     for (const [n, r] of fresh.pages) readings.set(n, r);
     ocr = { language: fresh.language || previous?.language, pages: readings };
-    for (const [n, lines] of finishPages(readings)) {
+    for (const [n, r] of readings) {
+      if (!r.picture) continue;
+      picturePages.add(n);
+      layoutLines[n - 1] = pageLines[n - 1] = [];
+    }
+    const textReadings = new Map([...readings].filter(([n]) => !picturePages.has(n)));
+    for (const [n, lines] of finishPages(textReadings)) {
       layoutLines[n - 1] = lines;
       pageLines[n - 1] = lines.filter(l => !l.unreadable);
     }
@@ -215,9 +224,9 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   const firstChecked = hasCoverCandidate ? 2 : 1;
   const candidates = [];
   for (let n = firstChecked; n <= doc.numPages; n++) {
-    if (findGaps(pageLines[n - 1], layout, bodySize).length) candidates.push(n);
+    if (!picturePages.has(n) && findGaps(pageLines[n - 1], layout, bodySize).length) candidates.push(n);
   }
-  const renders = candidates.length + (hasCoverCandidate ? 1 : 0);
+  const renders = candidates.length + picturePages.size + (hasCoverCandidate ? 1 : 0);
   let rendered = 0;
   onProgress({ stage: 'pictures', done: 0, total: renders });
 
@@ -230,11 +239,14 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
     if (picture && picture.top - picture.bottom > height * 0.5) {
       cover = await renderCover(first);
       pageLines[0] = [];
+      picturePages.delete(1); // it's the cover, so not a picture in the text as well
     }
     onProgress({ stage: 'pictures', done: ++rendered, total: renders });
   }
   // page 1 wasn't the cover after all, so check it for pictures like any other page
-  if (hasCoverCandidate && !cover && findGaps(pageLines[0], layout, bodySize).length) candidates.unshift(1);
+  if (hasCoverCandidate && !cover && !picturePages.has(1) && findGaps(pageLines[0], layout, bodySize).length) {
+    candidates.unshift(1);
+  }
 
   // crop pictures from pages with gaps in their text, and put them in the
   // text flow in place of the labels it contains
@@ -256,6 +268,19 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
       lines.splice(at < 0 ? lines.length : at, 0, { image: name, y: fig.top });
       pageLines[n - 1] = lines;
     }
+  }
+
+  // pages kept as a picture: the whole page, cropped to its ink like a cover
+  for (const n of picturePages) {
+    const page = await doc.getPage(n);
+    const height = page.view[3] - page.view[1];
+    const [picture] = await detectFigures(page, [], [{ top: height, bottom: 0 }], layout);
+    page.cleanup();
+    onProgress({ stage: 'pictures', done: Math.min(++rendered, renders), total: renders });
+    if (!picture) continue; // a blank page
+    const name = `img${images.length + 1}.jpg`;
+    images.push({ name, data: picture.data });
+    pageLines[n - 1] = [{ image: name, y: picture.top }];
   }
 
   const startsLow = lowStartPages(pageLines, layoutLines, layout);

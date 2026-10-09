@@ -120,7 +120,7 @@
   .scans-head label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
   .scans-head input { accent-color: #2f6f5e; }
   .scans-head .rebuild { width: auto; margin: 0 0 0 auto; padding: 6px 12px; font-size: 0.85rem; background: #2f6f5e; color: #fff; }
-  .scans.only-low .scan:not(.low) { display: none; }
+  .scans.only-low .scan:not(.checkable) { display: none; }
   .scan {
     display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 16px;
     padding: 14px 0; border-bottom: 1px solid #e3ddd2;
@@ -138,6 +138,8 @@
   }
   .scan-head .page-action + .page-action { margin-left: 6px; }
   .conf.typed { background: #dbe7f7; color: #1d3f6e; }
+  .conf.kept { background: #e6dcf2; color: #4a2f6e; }
+  .scan.as-picture .scan-text { opacity: .45; }
   .scan-edit textarea {
     display: block; width: 100%; min-height: 240px; padding: 10px; resize: vertical;
     font: 14px/1.5 Georgia, "Times New Roman", serif; color: #1f1d1a; background: #fff;
@@ -215,7 +217,7 @@
       <div class="scans" id="scans" role="tabpanel" aria-labelledby="tabScans" hidden>
         <div class="scans-head">
           <span id="scanSummary"></span>
-          <label><input type="checkbox" id="onlyLow"><span>Only pages at <span class="low-limit">75</span>% or lower</span></label>
+          <label><input type="checkbox" id="onlyLow"><span>Only pages at <span class="offer-limit">90</span>% or lower</span></label>
           <button class="rebuild" id="rebuild" hidden></button>
         </div>
         <div id="scanList"></div>
@@ -448,6 +450,7 @@
     let sessionId = null;
     let limit = 75;
     let pictureBelow = 30;
+    let offerPicture = 90;
     let total = 0;
     let done = false; // conversion finished, so pages can be read again
     let busy = false; // a page is being read again, or the book rebuilt
@@ -457,7 +460,9 @@
     // pages read very badly are pictures (a cover, an illustration), not text worth reading again
     const isPicture = c => c !== null && c < pictureBelow;
     const isLow = c => c !== null && c >= pictureBelow && c <= limit;
-    const lowCount = () => [...pages.values()].filter(p => !p.manual && isLow(p.confidence)).length;
+    // pages read at or below this can go in the book as a picture of the whole page
+    const canBePicture = c => c !== null && c <= offerPicture;
+    const lowCount = () => [...pages.values()].filter(p => !p.manual && !p.picture && isLow(p.confidence)).length;
 
     function updateCounts() {
       const low = lowCount();
@@ -466,21 +471,25 @@
       count.textContent = `${low} low`;
       summary.textContent = `${pages.size}${total ? ` of ${total}` : ''} pages read` + (low ? ` · ${low} at ${limit}% or lower` : '');
       rebuildBtn.hidden = !pending;
-      rebuildBtn.textContent = `Update the book with ${pending} improved ${pending === 1 ? 'page' : 'pages'}`;
+      rebuildBtn.textContent = `Update the book with ${pending} changed ${pending === 1 ? 'page' : 'pages'}`;
       rebuildBtn.disabled = busy;
       for (const b of list.querySelectorAll('.page-action')) b.disabled = !done || busy;
     }
 
     // A page's card: its number, how well it was read, the text, and for low pages
     // the Retry and Edit text buttons. Pages whose text was typed in by hand stay
-    // editable (and in the "only low pages" list), but aren't read again.
-    function renderCard(n, { confidence, text, manual = false }, note) {
+    // editable (and in the "only low pages" list), but aren't read again. Pages
+    // read at or below offerPicture can be kept as a picture instead of their text.
+    function renderCard(n, { confidence, text, manual = false, picture = false }, note) {
       const p = pages.get(n);
-      Object.assign(p, { confidence, text, manual });
+      Object.assign(p, { confidence, text, manual, picture });
       const card = p.card;
-      card.classList.toggle('low', manual || isLow(confidence));
+      card.classList.toggle('low', !picture && (manual || isLow(confidence)));
+      card.classList.toggle('checkable', manual || picture || canBePicture(confidence));
+      card.classList.toggle('as-picture', picture);
       const badge =
-        manual ? '<span class="conf typed">typed by hand</span>'
+        picture ? '<span class="conf kept">kept as picture</span>'
+        : manual ? '<span class="conf typed">typed by hand</span>'
         : confidence === null ? '<span class="conf none">no text</span>'
         : isPicture(confidence) ? `<span class="conf none">mostly picture (${confidence}%)</span>`
         : `<span class="conf">${confidence}%</span>`;
@@ -494,8 +503,15 @@
         b.addEventListener('click', onClick);
         head.append(b);
       };
-      if (isLow(confidence) && !manual) addButton('retry', 'Retry', 'Read this page again with other settings', () => retryPage(n));
-      if (manual || isLow(confidence)) addButton('edit', 'Edit text', 'Type or correct the text of this page', () => editPage(n));
+      if (picture) {
+        addButton('as-text', 'Use text', "Put this page's text in the book again", () => keepAsPicture(n, false));
+      } else {
+        if (isLow(confidence) && !manual) addButton('retry', 'Retry', 'Read this page again with other settings', () => retryPage(n));
+        if (manual || isLow(confidence)) addButton('edit', 'Edit text', 'Type or correct the text of this page', () => editPage(n));
+        if (manual || canBePicture(confidence)) {
+          addButton('keep-picture', 'Keep as picture', 'Put the whole page in the book as a picture instead of its text', () => keepAsPicture(n, true));
+        }
+      }
       const noteEl = card.querySelector('.scan-note');
       noteEl.hidden = !note;
       if (note) {
@@ -557,6 +573,32 @@
       updateCounts();
     }
 
+    // Put the page in the book as a picture (keep = true), or its text again.
+    async function keepAsPicture(n, keep) {
+      const p = pages.get(n);
+      const button = p.card.querySelector(keep ? '.keep-picture' : '.as-text');
+      busy = true;
+      updateCounts();
+      button.innerHTML = '<span class="spinner" aria-hidden="true"></span>Saving…';
+      try {
+        const res = await fetch(`/book/${sessionId}/pages/${n}/picture`, { method: keep ? 'POST' : 'DELETE' });
+        if (!res.ok) throw new Error(await res.text());
+        const r = await res.json();
+        pending = r.pendingPages;
+        busy = false;
+        renderCard(n, { ...p, picture: r.picture }, {
+          good: true,
+          text: r.picture
+            ? 'The whole page will be a picture in the book. Update the book to use it.'
+            : "The page's text will be used again. Update the book to use it.",
+        });
+      } catch (err) {
+        busy = false;
+        renderCard(n, p, { text: err.message || 'Could not change the page.' });
+      }
+      updateCounts();
+    }
+
     async function retryPage(n) {
       const card = pages.get(n).card;
       const button = card.querySelector('.retry');
@@ -592,11 +634,11 @@
         progress.update({ stage: 'done' });
         pending = 0;
         showBookInfo();
-        showStatus('Book updated with the improved pages.');
+        showStatus('Book updated with the changed pages.');
         converting = false;
         updateDownload();
         openPreview(true)
-          .then(() => showStatus('Book updated with the improved pages.'))
+          .then(() => showStatus('Book updated with the changed pages.'))
           .catch(() => showStatus('Book updated, but the preview could not be shown.', { error: true }));
       } catch (err) {
         showStatus(err.message || 'Could not update the book.', { error: true });
@@ -630,7 +672,8 @@
         sessionId = session.id;
         limit = session.lowConfidence;
         pictureBelow = session.pictureBelow;
-        document.querySelectorAll('.low-limit').forEach(el => { el.textContent = limit; });
+        offerPicture = session.offerPicture;
+        document.querySelectorAll('.offer-limit').forEach(el => { el.textContent = offerPicture; });
       },
       setTotal(t) { total = t; updateCounts(); },
       // a page just read: add its card in page order, following along if the reader is at the bottom

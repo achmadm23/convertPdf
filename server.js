@@ -14,6 +14,7 @@ const MAX_BYTES = 300 * 1024 * 1024;
 const MAX_BOOKS = 5; // converted books kept in memory so fonts can be switched quickly
 const LOW_CONFIDENCE = 75; // scanned pages read this well (%) or worse can be read again or typed in
 const PICTURE_BELOW = 30; // ...unless they're read this badly: then they're pictures, not text
+const OFFER_PICTURE = 90; // scanned pages read this well (%) or worse can be kept as a picture of the page
 const MAX_TEXT_BYTES = 1024 * 1024; // typed-in text for one page
 
 const page = path.join(__dirname, 'public', 'index.html');
@@ -103,7 +104,7 @@ function bookSummary(session) {
     chapters: book.chapters.length,
     ...book.stats,
     scannedPages: scanned.length,
-    lowPages: scanned.filter(r => !r.manual && r.confidence >= PICTURE_BELOW && r.confidence <= LOW_CONFIDENCE).length,
+    lowPages: scanned.filter(r => !r.manual && !r.picture && r.confidence >= PICTURE_BELOW && r.confidence <= LOW_CONFIDENCE).length,
   };
 }
 
@@ -123,7 +124,9 @@ async function handleConvert(req, res) {
   const name = path.basename(fileName, path.extname(fileName));
   const session = newSession(pdf, { title: header(req, 'x-title'), author: header(req, 'x-author'), name });
   await streamJob(res, async (send, onProgress) => {
-    send({ session: { id: session.id, lowConfidence: LOW_CONFIDENCE, pictureBelow: PICTURE_BELOW } });
+    send({
+      session: { id: session.id, lowConfidence: LOW_CONFIDENCE, pictureBelow: PICTURE_BELOW, offerPicture: OFFER_PICTURE },
+    });
     const started = Date.now();
     const book = await analyzePdf(pdf, {
       ...session.options,
@@ -150,6 +153,7 @@ async function handleRetry(res, session, n) {
   const current = session.book?.ocr?.pages.get(n);
   if (!current) return sendError(res, 404, 'That page was not read with OCR.');
   if (current.manual) return sendError(res, 409, 'This page has text typed in by hand, which is kept.');
+  if (current.picture) return sendError(res, 409, 'This page is kept as a picture. Use its text first.');
   if (session.busy) return sendError(res, 409, 'Busy with another page. Try again in a moment.');
   session.busy = true;
   try {
@@ -192,6 +196,19 @@ async function handleText(req, res, session, n) {
   session.improved.add(n);
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ text: typed.text, pendingPages: session.improved.size }));
+}
+
+// POST /book/<id>/pages/<n>/picture: put the whole page in the book as a picture
+// instead of its text. DELETE: use its text again. Used the next time the book is rebuilt.
+function handlePicture(res, session, n, keep) {
+  const current = session.book?.ocr?.pages.get(n);
+  if (!current) return sendError(res, 404, 'That page was not read with OCR.');
+  if (session.busy) return sendError(res, 409, 'Busy updating the book. Try again in a moment.');
+  const { picture, ...reading } = current;
+  session.book.ocr.pages.set(n, keep ? { ...reading, picture: true } : reading);
+  session.improved.add(n);
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ picture: keep, pendingPages: session.improved.size }));
 }
 
 // POST /book/<id>/rebuild: build the book again using improved page readings.
@@ -240,7 +257,7 @@ const server = http.createServer((req, res) => {
       console.error(err);
       sendError(res, 500, 'Could not build the EPUB.');
     });
-  } else if ((match = route.match(/^\/book\/([\w-]+)\/(?:pages\/(\d+)\.jpg|pages\/(\d+)\/retry|(rebuild)|pages\/(\d+)\/text)$/))) {
+  } else if ((match = route.match(/^\/book\/([\w-]+)\/(?:pages\/(\d+)\.jpg|pages\/(\d+)\/retry|(rebuild)|pages\/(\d+)\/text|pages\/(\d+)\/picture)$/))) {
     const session = sessions.get(match[1]);
     if (!session) return sendError(res, 404, 'This book has expired. Please convert the PDF again.');
     const fail = err => {
@@ -260,6 +277,8 @@ const server = http.createServer((req, res) => {
       handleRebuild(res, session).catch(fail);
     } else if (req.method === 'POST' && match[5]) {
       handleText(req, res, session, Number(match[5])).catch(fail);
+    } else if ((req.method === 'POST' || req.method === 'DELETE') && match[6]) {
+      handlePicture(res, session, Number(match[6]), req.method === 'POST');
     } else {
       sendError(res, 404, 'Not found');
     }
