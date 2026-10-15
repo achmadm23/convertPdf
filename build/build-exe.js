@@ -36,7 +36,7 @@ for (const pkg of Object.keys(require(path.join(root, 'package.json')).dependenc
   if (pkg.startsWith('@fontsource/')) PACKAGES[pkg] = { include: FONT_FILES };
 }
 
-const APP_FILES = ['index.js', 'figures.js', 'fonts.js', 'ocr.js', 'server.js', 'package.json', 'public/index.html'];
+const APP_FILES = ['index.js', 'figures.js', 'eink.js', 'fonts.js', 'ocr.js', 'server.js', 'package.json', 'public/index.html'];
 
 function walk(dir, base = dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {

@@ -3,6 +3,7 @@
 // render just those pages, and crop any ink in the gaps that isn't text.
 
 const { createCanvas } = require('@napi-rs/canvas');
+const { screenImage } = require('./eink');
 
 const SCALE = 2; // render resolution: 2 pixels per PDF point (144 dpi)
 const INK = 225; // pixel luminance below this counts as ink
@@ -137,15 +138,14 @@ async function detectFigures(page, lines, gaps, layout) {
       bottom: pageHeight - bottom / SCALE,
       left: left / SCALE,
       right: right / SCALE,
-      data: await crop.encode('jpeg', 82),
+      data: screenImage(crop),
     });
   }
   return figures;
 }
 
 async function renderCover(page) {
-  const canvas = await renderPage(page, 1.5);
-  return canvas.encode('jpeg', 85);
+  return screenImage(await renderPage(page, 1.5));
 }
 
 module.exports = { measureLayout, findGaps, detectFigures, renderCover, renderPage };

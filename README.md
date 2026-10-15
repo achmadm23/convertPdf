@@ -6,6 +6,7 @@ Convert PDFs into EPUB e-books. It works on normal PDFs and on scanned books, wi
 - removes running headers, footers and page numbers
 - splits the book into its real chapters, with section headings in the table of contents
 - keeps the pictures (photos, charts, diagrams) where they appear in the text, and uses a picture-only first page as the cover
+- shows every picture, the cover and pages kept as a picture on a page of its own that it fills, in the 4 shades of gray of an e-ink screen, like a page of an XTC book (480 x 800, the Xteink format)
 - embeds a font of your choice, or leaves the font to the e-reader
 - reads scanned pages with built-in OCR (English and Indonesian), with nothing extra to install
 
@@ -161,6 +162,7 @@ To add a language, install its data (for example `npm install @tesseract.js-data
 |---|---|
 | `index.js` | Reads the PDF, builds paragraphs and chapters, writes the EPUB. Also the command-line tool. |
 | `figures.js` | Finds and crops pictures, and renders the cover. |
+| `eink.js` | Turns pictures into full-screen e-ink pages (480 x 800, 4 shades of gray, dithered). |
 | `ocr.js` | Reads scanned pages with OCR (Tesseract). |
 | `fonts.js` | Font list and embedding. |
 | `server.js` | Local web server for the web app. |

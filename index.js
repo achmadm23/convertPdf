@@ -258,7 +258,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
     page.cleanup();
     onProgress({ stage: 'pictures', done: Math.min(++rendered, renders), total: renders });
     for (const fig of figures) {
-      const name = `img${images.length + 1}.jpg`;
+      const name = `img${images.length + 1}.png`;
       images.push({ name, data: fig.data });
       // text shown inside the cropped picture is dropped; anything outside it stays
       const inside = l =>
@@ -278,7 +278,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
     page.cleanup();
     onProgress({ stage: 'pictures', done: Math.min(++rendered, renders), total: renders });
     if (!picture) continue; // a blank page
-    const name = `img${images.length + 1}.jpg`;
+    const name = `img${images.length + 1}.png`;
     images.push({ name, data: picture.data });
     pageLines[n - 1] = [{ image: name, y: picture.top }];
   }
@@ -427,26 +427,45 @@ function buildChaptersByPage(pages, pagesPerChapter = 10) {
   return chapters;
 }
 
-function chapterXhtml(ch) {
-  const body = ch.blocks
-    .map((b, i) => {
-      if (b.image) return `    <figure><img src="images/${b.image}" alt=""/></figure>`;
-      if (b.heading) return `    <h3 id="s${i}">${escapeXml(b.text)}</h3>`;
-      return `    <p>${escapeXml(b.text)}</p>`;
-    })
-    .join('\n');
+function xhtmlFile(title, body, bodyClass) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
   <head>
-    <title>${escapeXml(ch.title)}</title>
+    <title>${escapeXml(title)}</title>
     <link rel="stylesheet" type="text/css" href="style.css"/>
   </head>
-  <body>
-    <h2>${escapeXml(ch.title)}</h2>
+  <body${bodyClass ? ` class="${bodyClass}"` : ''}>
 ${body}
   </body>
 </html>`;
+}
+
+// A chapter's files: its text, with every picture on a page of its own that it
+// fills, like a page of an XTC book. The title goes above the first text.
+function chapterFiles(ch, number) {
+  const parts = [];
+  ch.blocks.forEach((b, i) => {
+    const last = parts[parts.length - 1];
+    if (b.image) parts.push({ image: b.image });
+    else if (last && !last.image) last.blocks.push({ ...b, id: `s${i}` });
+    else parts.push({ blocks: [{ ...b, id: `s${i}` }] });
+  });
+  let titled = parts.find(p => !p.image);
+  if (!titled) parts.unshift((titled = { blocks: [] }));
+  return parts.map((part, k) => {
+    const name = k ? `chapter${number}-${k + 1}.xhtml` : `chapter${number}.xhtml`;
+    if (part.image) {
+      const body = `    <img src="images/${part.image}" alt=""/>`;
+      return { name, sections: [], xhtml: xhtmlFile(ch.title, body, 'picture') };
+    }
+    const lines = part.blocks.map(b =>
+      b.heading ? `    <h3 id="${b.id}">${escapeXml(b.text)}</h3>` : `    <p>${escapeXml(b.text)}</p>`
+    );
+    if (part === titled) lines.unshift(`    <h2>${escapeXml(ch.title)}</h2>`);
+    const sections = part.blocks.filter(b => b.heading).map(b => ({ href: `${name}#${b.id}`, text: b.text }));
+    return { name, sections, xhtml: xhtmlFile(ch.title, lines.join('\n')) };
+  });
 }
 
 // Package an analysed book as an EPUB. This is fast, so the same book can be
@@ -481,42 +500,33 @@ h2 { text-align: center; margin: 1.5em 0; }
 h3 { margin: 1.5em 0 0.75em; }
 h3 + p { text-indent: 0; }
 p { text-indent: 1.5em; margin: 0 0 0.5em 0; text-align: justify; }
-figure { margin: 1em 0; text-align: center; page-break-inside: avoid; }
-figure img { max-width: 100%; height: auto; }
-body.cover { margin: 0; text-align: center; }
-body.cover img { max-width: 100%; max-height: 100vh; }`);
+body.picture, body.cover { margin: 0; padding: 0; text-align: center; }
+body.picture img, body.cover img { width: auto; height: auto; max-width: 100%; max-height: 100vh; }`);
 
   for (const img of images) {
     zip.file(`OEBPS/images/${img.name}`, img.data, { compression: 'STORE' });
-    manifest.push(`    <item id="${img.name.replace('.', '-')}" href="images/${img.name}" media-type="image/jpeg"/>`);
+    manifest.push(`    <item id="${img.name.replace('.', '-')}" href="images/${img.name}" media-type="image/png"/>`);
   }
   if (cover) {
-    zip.file('OEBPS/images/cover.jpg', cover, { compression: 'STORE' });
-    zip.file('OEBPS/cover.xhtml', `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
-  <head>
-    <title>Cover</title>
-    <link rel="stylesheet" type="text/css" href="style.css"/>
-  </head>
-  <body class="cover">
-    <img src="images/cover.jpg" alt="Cover"/>
-  </body>
-</html>`);
-    manifest.push('    <item id="cover-image" href="images/cover.jpg" media-type="image/jpeg" properties="cover-image"/>');
+    zip.file('OEBPS/images/cover.png', cover, { compression: 'STORE' });
+    zip.file('OEBPS/cover.xhtml', xhtmlFile('Cover', '    <img src="images/cover.png" alt="Cover"/>', 'cover'));
+    manifest.push('    <item id="cover-image" href="images/cover.png" media-type="image/png" properties="cover-image"/>');
     manifest.push('    <item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>');
     spine.push('    <itemref idref="cover"/>');
   }
   chapters.forEach((ch, i) => {
-    const name = `chapter${i + 1}.xhtml`;
-    zip.file(`OEBPS/${name}`, chapterXhtml(ch));
-    manifest.push(`    <item id="ch${i + 1}" href="${name}" media-type="application/xhtml+xml"/>`);
-    spine.push(`    <itemref idref="ch${i + 1}"/>`);
-    const sections = ch.blocks
-      .map((b, j) => (b.heading ? `          <li><a href="${name}#s${j}">${escapeXml(b.text)}</a></li>` : null))
-      .filter(Boolean);
+    const files = chapterFiles(ch, i + 1);
+    files.forEach((file, k) => {
+      const id = k ? `ch${i + 1}-${k + 1}` : `ch${i + 1}`;
+      zip.file(`OEBPS/${file.name}`, file.xhtml);
+      manifest.push(`    <item id="${id}" href="${file.name}" media-type="application/xhtml+xml"/>`);
+      spine.push(`    <itemref idref="${id}"/>`);
+    });
+    const sections = files
+      .flatMap(f => f.sections)
+      .map(s => `          <li><a href="${s.href}">${escapeXml(s.text)}</a></li>`);
     const sub = sections.length ? `\n          <ol>\n${sections.join('\n')}\n          </ol>\n        ` : '';
-    navItems.push(`        <li><a href="${name}">${escapeXml(ch.title)}</a>${sub}</li>`);
+    navItems.push(`        <li><a href="${files[0].name}">${escapeXml(ch.title)}</a>${sub}</li>`);
   });
 
   zip.file('OEBPS/nav.xhtml', `<?xml version="1.0" encoding="UTF-8"?>
