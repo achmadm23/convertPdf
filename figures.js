@@ -2,7 +2,7 @@
 // so instead of extracting embedded images we look for gaps in the body text,
 // render just those pages, and crop any ink in the gaps that isn't text.
 
-const { createCanvas } = require('@napi-rs/canvas');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const { screenImage } = require('./eink');
 
 const SCALE = 2; // render resolution: 2 pixels per PDF point (144 dpi)
@@ -148,4 +148,16 @@ async function renderCover(page) {
   return screenImage(await renderPage(page, 1.5));
 }
 
-module.exports = { measureLayout, findGaps, detectFigures, renderCover, renderPage };
+// A cover from a picture file (JPEG, PNG, WebP, GIF, ...) chosen by the user,
+// drawn for the e-ink screen like the rest of the book's pictures.
+async function imageCover(data) {
+  let image;
+  try {
+    image = await loadImage(data);
+  } catch {
+    throw new Error('That file is not a picture that can be read. Use a JPEG, PNG or WebP image.');
+  }
+  return screenImage(image);
+}
+
+module.exports = { measureLayout, findGaps, detectFigures, renderCover, imageCover, renderPage };

@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { analyzePdf, buildEpub, openPdf } = require('./index');
+const { imageCover } = require('./figures');
 const { retryPage, manualReading } = require('./ocr');
 const { FONTS, findFont, fontFaces, fontFaceCss } = require('./fonts');
 
@@ -16,6 +17,7 @@ const LOW_CONFIDENCE = 75; // scanned pages read this well (%) or worse can be r
 const PICTURE_BELOW = 30; // ...unless they're read this badly: then they're pictures, not text
 const OFFER_PICTURE = 90; // scanned pages read this well (%) or worse can be kept as a picture of the page
 const MAX_TEXT_BYTES = 1024 * 1024; // typed-in text for one page
+const MAX_COVER_BYTES = 20 * 1024 * 1024; // a cover picture chosen by the user
 
 const page = path.join(__dirname, 'public', 'index.html');
 const vendor = {
@@ -25,12 +27,13 @@ const vendor = {
 const fontFiles = new Map(FONTS.flatMap(f => fontFaces(f).map(face => [face.file, face.path])));
 
 // One per conversion: the PDF and options (to rebuild the book), previews of its
-// scanned pages, and the book once it's converted. Only the last few are kept.
+// scanned pages, the book once it's converted, and a cover picture if the user
+// chose one. Only the last few are kept.
 const sessions = new Map();
 
 function newSession(pdf, options) {
   const id = crypto.randomUUID();
-  const session = { id, pdf, options, thumbnails: new Map(), book: null, busy: false, improved: new Set() };
+  const session = { id, pdf, options, thumbnails: new Map(), book: null, cover: null, busy: false, improved: new Set() };
   sessions.set(id, session);
   while (sessions.size > MAX_BOOKS) sessions.delete(sessions.keys().next().value);
   return session;
@@ -229,12 +232,30 @@ async function handleRebuild(res, session) {
   }
 }
 
+// POST /book/<id>/cover: use a picture (the request body) as the book's cover
+// instead of the one found in the PDF. DELETE: go back to the PDF's cover.
+// Kept with the session, so it stays when the book is rebuilt.
+async function handleCover(req, res, session, use) {
+  if (use) {
+    try {
+      session.cover = await imageCover(await readBody(req, MAX_COVER_BYTES));
+    } catch (err) {
+      return sendError(res, 400, err.message);
+    }
+  } else {
+    session.cover = null;
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ cover: use }));
+}
+
 // GET /book/<id>.epub?font=<id>[&download=1]: package the book with a font.
 async function handleBook(req, res, id, query) {
-  const book = sessions.get(id)?.book;
+  const session = sessions.get(id);
+  const book = session?.book;
   if (!book) return sendError(res, 404, 'This book has expired. Please convert the PDF again.');
   const font = findFont(query.get('font'));
-  const epub = await buildEpub(book, { font: font.id });
+  const epub = await buildEpub(book, { font: font.id, cover: session.cover });
   const headers = { 'Content-Type': 'application/epub+zip', 'Content-Length': epub.length };
   if (query.get('download')) {
     headers['Content-Disposition'] = `attachment; filename*=UTF-8''${encodeURIComponent(book.fileName)}`;
@@ -256,6 +277,13 @@ const server = http.createServer((req, res) => {
     handleBook(req, res, match[1], url.searchParams).catch(err => {
       console.error(err);
       sendError(res, 500, 'Could not build the EPUB.');
+    });
+  } else if ((req.method === 'POST' || req.method === 'DELETE') && (match = route.match(/^\/book\/([\w-]+)\/cover$/))) {
+    const session = sessions.get(match[1]);
+    if (!session) return sendError(res, 404, 'This book has expired. Please convert the PDF again.');
+    handleCover(req, res, session, req.method === 'POST').catch(err => {
+      console.error(err);
+      if (!res.headersSent) sendError(res, 500, 'Could not use that picture as the cover.');
     });
   } else if ((match = route.match(/^\/book\/([\w-]+)\/(?:pages\/(\d+)\.jpg|pages\/(\d+)\/retry|(rebuild)|pages\/(\d+)\/text|pages\/(\d+)\/picture)$/))) {
     const session = sessions.get(match[1]);

@@ -47,6 +47,23 @@
   }
   label.field select { cursor: pointer; }
   label.field select:focus-visible, label.field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .cover-field { margin-top: 14px; font-size: 0.88rem; color: var(--muted); }
+  .cover-pick {
+    display: flex; align-items: center; gap: 12px; margin-top: 4px; padding: 8px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px; transition: background .15s, border-color .15s;
+  }
+  .cover-pick.over { background: var(--tint); border-color: var(--accent); }
+  /* the e-reader's 480 x 800 screen */
+  .cover-thumb { flex: none; width: 48px; height: 80px; overflow: hidden; border: 1px solid var(--border); border-radius: 3px; background: #fff; }
+  .cover-thumb.empty { display: grid; place-items: center; border-style: dashed; background: transparent; font-size: 0.7rem; }
+  .cover-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .cover-info { flex: 1; min-width: 0; }
+  #coverName { display: block; color: var(--text); font-size: 0.85rem; overflow-wrap: anywhere; }
+  .cover-buttons { display: flex; gap: 6px; margin-top: 6px; }
+  .cover-buttons button {
+    width: auto; margin: 0; padding: 5px 10px; font-weight: 500; font-size: 0.82rem;
+    background: var(--card); color: var(--text); border: 1px solid var(--border);
+  }
   .font-sample {
     margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--tint);
     font-size: 1.05rem; line-height: 1.4; color: var(--text);
@@ -177,6 +194,20 @@
     <label class="field">Author (optional)
       <input id="author" placeholder="Taken from the PDF if left blank">
     </label>
+    <div class="cover-field">
+      <span id="coverLabel">Cover (optional)</span>
+      <div class="cover-pick" id="coverPick" role="group" aria-labelledby="coverLabel">
+        <div class="cover-thumb empty" id="coverThumb"><span>PDF</span><img alt="Chosen cover" hidden></div>
+        <div class="cover-info">
+          <span id="coverName">Taken from the PDF</span>
+          <div class="cover-buttons">
+            <button type="button" id="coverChoose">Choose image</button>
+            <button type="button" id="coverRemove" hidden>Remove</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <input type="file" id="coverFile" accept="image/jpeg,image/png,image/webp,image/gif">
 
     <label class="field">Font
       <select id="fonts"></select>
@@ -316,6 +347,81 @@
     setFile(e.dataTransfer.files[0]);
   });
 
+  // ---------- cover ----------
+  // A picture chosen to replace the PDF's cover. It's sent to the server once the
+  // book is converted, and can be changed or removed afterwards like the font.
+  const MAX_COVER_MB = 20;
+  let coverFile = null;
+  let coverUrl = null;
+
+  function showCover() {
+    if (coverUrl) URL.revokeObjectURL(coverUrl);
+    coverUrl = coverFile ? URL.createObjectURL(coverFile) : null;
+    const thumb = $('coverThumb'), img = thumb.querySelector('img');
+    thumb.classList.toggle('empty', !coverFile);
+    thumb.querySelector('span').hidden = !!coverFile;
+    img.hidden = !coverFile;
+    if (coverUrl) img.src = coverUrl;
+    else img.removeAttribute('src');
+    $('coverName').textContent = coverFile ? coverFile.name : 'Taken from the PDF';
+    $('coverChoose').textContent = coverFile ? 'Change' : 'Choose image';
+    $('coverRemove').hidden = !coverFile;
+  }
+
+  function setCover(f) {
+    if (f && !f.type.startsWith('image/')) {
+      showStatus('Please choose a picture (JPEG, PNG or WebP) for the cover.', { error: true });
+      return;
+    }
+    if (f && f.size > MAX_COVER_MB * 1024 * 1024) {
+      showStatus(`The cover picture is too large (max ${MAX_COVER_MB} MB).`, { error: true });
+      return;
+    }
+    coverFile = f || null;
+    showCover();
+    if (bookId && !converting) applyCover();
+    else if (f) showStatus('The cover will be used when the book is converted.');
+  }
+
+  // Give the converted book the chosen cover, or its own cover again.
+  async function sendCover() {
+    const res = await fetch(`/book/${bookId}/cover`, coverFile
+      ? { method: 'POST', headers: { 'Content-Type': coverFile.type }, body: coverFile }
+      : { method: 'DELETE' });
+    if (!res.ok) throw new Error(await res.text());
+  }
+
+  async function applyCover() {
+    showStatus(coverFile ? 'Setting the cover…' : 'Using the cover from the PDF…', { busy: true });
+    try {
+      await sendCover();
+      await openPreview(true);
+      showStatus(coverFile ? 'Cover updated.' : 'Using the cover from the PDF.');
+    } catch (err) {
+      // the book keeps its previous cover, so don't show a picture it isn't using
+      if (coverFile) {
+        coverFile = null;
+        showCover();
+      }
+      showStatus(err.message || 'Could not change the cover.', { error: true });
+    }
+  }
+
+  const coverInput = $('coverFile'), coverPick = $('coverPick');
+  $('coverChoose').addEventListener('click', () => coverInput.click());
+  $('coverRemove').addEventListener('click', () => setCover(null));
+  coverInput.addEventListener('change', () => {
+    setCover(coverInput.files[0]);
+    coverInput.value = ''; // so choosing the same file again still counts
+  });
+  coverPick.addEventListener('dragover', e => { e.preventDefault(); coverPick.classList.add('over'); });
+  coverPick.addEventListener('dragleave', () => coverPick.classList.remove('over'));
+  coverPick.addEventListener('drop', e => {
+    e.preventDefault();
+    coverPick.classList.remove('over');
+    if (e.dataTransfer.files[0]) setCover(e.dataTransfer.files[0]);
+  });
+
   // ---------- convert ----------
   convertBtn.addEventListener('click', async () => {
     if (!file) return;
@@ -343,15 +449,25 @@
       });
       progress.update({ stage: 'done' });
       bookId = bookMeta.id;
+      let coverNote = '';
+      if (coverFile) {
+        try {
+          await sendCover();
+        } catch (err) {
+          coverFile = null;
+          showCover();
+          coverNote = ` The cover picture could not be used, so the PDF's cover is kept: ${err.message}`;
+        }
+      }
       showBookInfo();
       converting = false;
       updateDownload();
       scans.finish(bookMeta);
       showTab('book');
       showStatus(
-        bookMeta.lowPages
+        (bookMeta.lowPages
           ? `Done. ${bookMeta.lowPages} scanned ${bookMeta.lowPages === 1 ? 'page was' : 'pages were'} read at ${scans.limit}% or lower. Check them in Scanned pages: you can retry or type the text.`
-          : 'Done. Check the preview, then download.'
+          : 'Done. Check the preview, then download.') + coverNote
       );
       openPreview(false).catch(() => showStatus('Converted, but the preview could not be shown.', { error: true }));
     } catch (err) {

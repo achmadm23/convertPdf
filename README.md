@@ -6,6 +6,7 @@ Convert PDFs into EPUB e-books. It works on normal PDFs and on scanned books, wi
 - removes running headers, footers and page numbers
 - splits the book into its real chapters, with section headings in the table of contents
 - keeps the pictures (photos, charts, diagrams) where they appear in the text, and uses a picture-only first page as the cover
+- lets you use a picture of your own as the cover instead
 - shows every picture, the cover and pages kept as a picture on a page of its own that it fills, in the 4 shades of gray of an e-ink screen, like a page of an XTC book (480 x 800, the Xteink format)
 - embeds a font of your choice, or leaves the font to the e-reader
 - reads scanned pages with built-in OCR (English and Indonesian), with nothing extra to install
@@ -57,11 +58,12 @@ Then open **http://localhost:3000** and:
 
 1. **Choose a PDF**, or drag it onto the page.
 2. Optionally type a **title** and **author**. If you leave them blank, they're taken from the PDF.
-3. Pick a **font**.
-4. Click **Convert**. The progress bar shows what's happening, for example "Reading scanned pages: 57 of 244" or "Finding pictures: page 57 of 121", and about how long is left.
-5. **Preview** the book on the right. Turn pages with **‹ Prev / Next ›** or the arrow keys, and jump to a chapter from the contents list.
-6. Change the font as often as you like. The preview updates in about a second, without converting again.
-7. Click **Download**. The button stays disabled until the conversion has finished.
+3. Optionally choose a **cover** picture (JPEG, PNG or WebP, up to 20 MB), or drop it on the Cover box. It replaces the cover taken from the PDF and is shown in the e-reader's 4 shades of gray.
+4. Pick a **font**.
+5. Click **Convert**. The progress bar shows what's happening, for example "Reading scanned pages: 57 of 244" or "Finding pictures: page 57 of 121", and about how long is left.
+6. **Preview** the book on the right. Turn pages with **‹ Prev / Next ›** or the arrow keys, and jump to a chapter from the contents list.
+7. Change the font or the cover as often as you like. The preview updates in about a second, without converting again. **Remove** goes back to the PDF's own cover.
+8. Click **Download**. The button stays disabled until the conversion has finished.
 
 For scanned books, a **Scanned pages** tab shows each page as OCR reads it: the scan, the text read from it, and how confidently it was read. Pages read at 75% or lower are marked. Once the conversion has finished, they have two buttons:
 
@@ -106,16 +108,18 @@ Details:
 ## Command line
 
 ```
-node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--font id] [--ocr-lang code]
+node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--font id] [--cover image] [--ocr-lang code]
 ```
 
 If you leave out `output.epub`, the EPUB is saved next to the PDF with the same name.
+
+`--cover` uses a picture (JPEG, PNG or WebP) as the book's cover instead of the PDF's first page.
 
 `--ocr-lang` sets the language of scanned pages: `eng` (English) or `ind` (Indonesian). Without it, the converter tries both on a few pages and uses the one it reads best.
 
 ```
 node index.js "Homo Deus.pdf"
-node index.js book.pdf book.epub --title "My Book" --author "Jane Doe" --font literata
+node index.js book.pdf book.epub --title "My Book" --author "Jane Doe" --font literata --cover cover.jpg
 ```
 
 ## Fonts
@@ -161,7 +165,7 @@ To add a language, install its data (for example `npm install @tesseract.js-data
 | File | What it does |
 |---|---|
 | `index.js` | Reads the PDF, builds paragraphs and chapters, writes the EPUB. Also the command-line tool. |
-| `figures.js` | Finds and crops pictures, and renders the cover. |
+| `figures.js` | Finds and crops pictures, and renders the cover (from the PDF or a picture you choose). |
 | `eink.js` | Turns pictures into full-screen e-ink pages (480 x 800, 4 shades of gray, dithered). |
 | `ocr.js` | Reads scanned pages with OCR (Tesseract). |
 | `fonts.js` | Font list and embedding. |
