@@ -169,7 +169,11 @@
   }
   .placeholder b { font: italic 400 18px Georgia, 'Times New Roman', serif; color: #3D3D3A; }
   #screenView { position: absolute; inset: 0; background: #fff; }
-  #screenView img { display: block; width: 100%; height: 100%; }
+  #screenView img { position: absolute; top: 0; left: 0; display: block; width: 100%; height: 100%; transform-origin: 0 0; }
+  /* the reader turned on its side: wider, with its chin on the side it turned to */
+  .device.landscape { width: min(100%, 620px); padding: 18px 44px 18px 18px; }
+  .device.landscape.left { padding: 18px 18px 18px 44px; }
+  .turn { width: min(100%, 380px); }
   .pager { display: flex; flex-direction: column; gap: 4px; width: min(100%, 380px); }
   .pager-text { display: flex; justify-content: space-between; gap: 12px; font: 12px var(--mono); color: var(--muted); }
   .pager-text b { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -319,16 +323,20 @@
       <p class="note" id="deviceNote">Pictures and the cover are drawn for this screen, and the preview shows the book at its size.</p>
       <fieldset class="group" id="partsField">
         <legend>Full-page pictures</legend>
-        <div class="seg three">
-          <input type="radio" name="pictureParts" id="parts1" value="1" checked>
-          <label for="parts1">Whole</label>
-          <input type="radio" name="pictureParts" id="parts2" value="2">
-          <label for="parts2">2 parts</label>
-          <input type="radio" name="pictureParts" id="parts3" value="3">
-          <label for="parts3">3 parts</label>
+        <div class="seg">
+          <input type="radio" name="pictureTurn" id="pictureSideways" value="sideways">
+          <label for="pictureSideways">Sideways</label>
+          <input type="radio" name="pictureTurn" id="pictureUpright" value="upright" checked>
+          <label for="pictureUpright">Upright</label>
         </div>
         <p class="note" id="partsNote" style="margin-top: 4px"></p>
       </fieldset>
+      <label class="field" id="pictureSplitField">Cut each picture into
+        <select id="pictureSplit">
+          <option value="3">3 overlapping parts</option>
+          <option value="2">2 halves</option>
+        </select>
+      </label>
       <!-- XTC: every PDF page drawn as a picture for the reader's screen -->
       <div class="reader-xtc" id="xtcSettings" hidden>
       <fieldset class="group">
@@ -416,7 +424,7 @@
     </div>
     <p class="book-info" id="bookInfo" hidden></p>
     <div class="stage" id="bookView">
-      <div class="device">
+      <div class="device" id="reader">
         <div class="screen" id="screen">
           <div class="placeholder" id="placeholder">
             <b>Your book appears here</b>
@@ -429,6 +437,12 @@
       <div class="pager">
         <div class="pager-text"><b id="where">No book yet</b><span id="position">– / –</span></div>
         <input type="range" id="slider" min="0" max="1" step="1" value="0" disabled aria-label="Page">
+      </div>
+      <div class="seg turn" role="group" aria-label="Hold the reader">
+        <input type="radio" name="view" id="viewPortrait" value="portrait" checked disabled>
+        <label for="viewPortrait">Portrait</label>
+        <input type="radio" name="view" id="viewLandscape" value="landscape" disabled>
+        <label for="viewLandscape">Landscape</label>
       </div>
     </div>
     <div class="scans" id="scans" role="tabpanel" aria-labelledby="tabScans" hidden>
@@ -546,6 +560,7 @@
     const xtc = radio('format') === 'xtc';
     $('deviceNote').hidden = xtc;
     $('partsField').hidden = xtc;
+    $('pictureSplitField').hidden = xtc || radio('pictureTurn') !== 'sideways';
     $('xtcSettings').hidden = !xtc;
     $('formatNote').hidden = !xtc;
     $('formatNote').textContent = 'Every page drawn for the reader’s screen, exactly as it looks in the PDF.';
@@ -586,35 +601,40 @@
 
   // ---------- full-page pictures (EPUB) ----------
   // Portrait pictures that fill most of their page: whole and upright, or turned
-  // sideways in 2 or 3 parts. All three are made while converting, so changing
-  // this updates the book at once.
-  const pictureParts = () => Number(radio('pictureParts'));
+  // sideways and cut into 2 or 3 parts, as XTC pages are. All three are made while
+  // converting, so changing this updates the book at once.
+  const pictureParts = () => (radio('pictureTurn') === 'sideways' ? Number($('pictureSplit').value) : 1);
 
   function showParts() {
     const parts = pictureParts();
     const count = bookMeta && !isXtc() ? bookMeta.fullPagePictures : null;
     $('partsNote').textContent =
       (parts > 1
-        ? `Portrait pictures that fill most of a page are turned on their side and cut into ${parts} parts that each fill the screen. Turn the e-reader on its side to read them.`
-        : 'Each picture stays upright, on a page of its own.') +
+        ? `Turn the reader on its side. Pictures that fill most of a page are bigger, in ${parts} parts that each fill the screen.`
+        : 'Each picture whole and upright, on a page of its own.') +
       (count === null ? '' : count ? ` This book has ${count} full-page ${count === 1 ? 'picture' : 'pictures'}.` : ' This book has no full-page pictures.');
   }
 
   try {
     const saved = localStorage.getItem('pictureParts');
-    if (saved === '2' || saved === '3') $(`parts${saved}`).checked = true;
+    if (saved === '2' || saved === '3') {
+      $('pictureSideways').checked = true;
+      $('pictureSplit').value = saved;
+    }
   } catch {}
   showParts();
-  document.querySelectorAll('input[name="pictureParts"]').forEach(r =>
-    r.addEventListener('change', () => {
-      try { localStorage.setItem('pictureParts', String(pictureParts())); } catch {}
-      showParts();
-      if (bookId && !isXtc() && !converting) {
-        updateDownload();
-        openPreview(true).catch(() => showStatus('The preview could not be shown.', { error: true }));
-      }
-    })
-  );
+  showOutput();
+  const changeParts = () => {
+    try { localStorage.setItem('pictureParts', String(pictureParts())); } catch {}
+    showParts();
+    showOutput();
+    if (bookId && !isXtc() && !converting) {
+      updateDownload();
+      openPreview(true).catch(() => showStatus('The preview could not be shown.', { error: true }));
+    }
+  };
+  document.querySelectorAll('input[name="pictureTurn"]').forEach(r => r.addEventListener('change', changeParts));
+  $('pictureSplit').addEventListener('change', changeParts);
 
   // ---------- file choice ----------
   function setFile(f) {
@@ -1373,6 +1393,13 @@
     placeholder.hidden = true;
     epub = ePub(data);
     rendition = epub.renderTo(viewer, { width: '100%', height: '100%', spread: 'none' });
+    sidewaysSections = new Map();
+    // a section loaded is the one about to be shown, so it's turned at once
+    rendition.hooks.content.register(shown => {
+      const sideways = shown.document.body.classList.contains('sideways');
+      sidewaysSections.set(shown.sectionIndex, sideways);
+      holdFor(sideways);
+    });
     rendition.on('relocated', onRelocated);
     rendition.on('keyup', onKey);
     slider.disabled = true;
@@ -1439,22 +1466,54 @@
 
   // An EPUB is laid out at the reader's own screen size (480 x 800 on an X4 Pro),
   // so lines and picture pages fall as they will on the device, then shrunk to
-  // fit the drawn e-reader.
+  // fit the drawn e-reader. An XTC page is a picture of that screen.
+  //
+  // The reader can be shown held upright (portrait) or on its side (landscape).
+  // A page turned sideways (picture parts, sideways XTC pages) is shown in
+  // landscape so it reads upright, and other pages in portrait; Portrait and
+  // Landscape turn the page shown, until the next one.
+  let landscape = false;
+  let sidewaysSections = new Map(); // EPUB section (spine index) → a page turned sideways, as each is loaded
+  let turnLeft = true; // turned to the left (anticlockwise), as for a page turned 90° to the right
+
   function fitViewer() {
     const m = bookMeta;
-    if (!m || !m.width || isXtc()) {
+    const reader = $('reader');
+    const el = m && isXtc() ? $('screenImage') : viewer;
+    for (const r of document.querySelectorAll('input[name="view"]')) r.disabled = !m || !m.width;
+    if (!m || !m.width) {
+      landscape = false;
+      $('viewPortrait').checked = true;
+      reader.classList.remove('landscape', 'left');
       $('screen').style.aspectRatio = '';
       Object.assign(viewer.style, { width: '', height: '', transform: '' });
       return;
     }
-    $('screen').style.aspectRatio = `${m.width} / ${m.height}`;
-    Object.assign(viewer.style, {
-      width: `${m.width}px`,
-      height: `${m.height}px`,
-      transform: `scale(${$('screen').clientWidth / m.width})`,
-    });
+    (landscape ? $('viewLandscape') : $('viewPortrait')).checked = true;
+    reader.classList.toggle('landscape', landscape);
+    reader.classList.toggle('left', landscape && !turnLeft);
+    $('screen').style.aspectRatio = landscape ? `${m.height} / ${m.width}` : `${m.width} / ${m.height}`;
+    const scale = $('screen').clientWidth / (landscape ? m.height : m.width);
+    const turn = !landscape ? '' : turnLeft
+      ? `translate(0, ${scale * m.width}px) rotate(-90deg) `
+      : `translate(${scale * m.height}px, 0) rotate(90deg) `;
+    Object.assign(el.style, { width: `${m.width}px`, height: `${m.height}px`, transform: `${turn}scale(${scale})` });
   }
-  new ResizeObserver(() => { if (bookMeta && !isXtc()) fitViewer(); }).observe($('screen'));
+  new ResizeObserver(() => { if (bookMeta) fitViewer(); }).observe($('screen'));
+
+  // each page in its own way: sideways ones in landscape
+  function holdFor(sideways, left = true) {
+    landscape = sideways;
+    turnLeft = left;
+    fitViewer();
+  }
+
+  document.querySelectorAll('input[name="view"]').forEach(r =>
+    r.addEventListener('change', () => {
+      landscape = radio('view') === 'landscape';
+      fitViewer();
+    })
+  );
 
   // An XTC book is shown a page at a time, as pictures of the reader's screen.
   let screen = 1;
@@ -1467,7 +1526,7 @@
     viewer.hidden = true;
     placeholder.hidden = true;
     $('screenView').hidden = false;
-    $('screen').style.aspectRatio = `${bookMeta.width} / ${bookMeta.height}`;
+    viewer.style.transform = '';
     if (!keepPlace) screen = 1;
     slider.min = 1;
     slider.max = bookMeta.pages;
@@ -1497,6 +1556,7 @@
     $('where').textContent = from.cover ? 'Cover'
       : `${chapter}PDF page ${from.page}${from.of > 1 ? `, part ${from.part} of ${from.of}` : ''}`;
     $('position').textContent = `${screen} / ${bookMeta.pages}`;
+    holdFor(!!from.turn, from.turn !== -90);
     slider.setAttribute('aria-valuetext', `Page ${screen} of ${bookMeta.pages}`);
   }
 
@@ -1534,6 +1594,7 @@
 
   function onRelocated(loc) {
     if (!loc || !loc.start) return;
+    holdFor(!!sidewaysSections.get(loc.start.index));
     // a chapter's section headings share its file, so the chapter itself is the place shown
     const file = loc.start.href.split('#')[0];
     const inFile = contents.filter(it => it.target.split('#')[0] === file);

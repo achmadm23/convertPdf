@@ -1,6 +1,6 @@
 # convertPdf — Business Requirements Document
 
-Date: 2026-10-19 · Product version: v1.2.2
+Date: 2026-10-19 · Product version: v1.2.3
 
 ## 1. Executive summary
 
@@ -30,7 +30,7 @@ The product succeeds when a non-technical reader can turn a PDF into an e-book t
 
 ## 3. Scope
 
-Version 1.2.2 covers one-way conversion of a single PDF into a single EPUB or XTC book, on the user's own machine.
+Version 1.2.3 covers one-way conversion of a single PDF into a single EPUB or XTC book, on the user's own machine.
 
 **In scope**
 
@@ -41,7 +41,8 @@ Version 1.2.2 covers one-way conversion of a single PDF into a single EPUB or XT
 - XTC output for Xteink X3, X4 and X4 Pro: every page drawn for the screen, in black and white (`.xtc`) or 4 grays (`.xtch`)
 - Four delivery channels: website on GitHub Pages (converting in the browser), local web app, command-line tool, Windows executable
 - In-app preview, live OCR page review, retry, manual text entry and keep-as-picture (whole, or in 2 or 3 sideways parts)
-- Reader choice (Xteink X4 Pro, X4 or X3): pictures and cover sized for its screen, the preview laid out at its size, and full-page pictures whole or in 2 or 3 sideways parts
+- Reader choice (Xteink X4 Pro, X4 or X3): pictures and cover sized for its screen, the preview laid out at its size, and full-page pictures upright, or sideways in 2 or 3 parts
+- Preview held in portrait or landscape, with pages turned sideways shown in landscape
 
 **Out of scope**
 
@@ -104,7 +105,7 @@ flowchart LR
 
 ## 6. Functional requirements
 
-42 requirements, 15 of them Must, define what version 1.2.2 delivers; priorities use MoSCoW.
+43 requirements, 15 of them Must, define what version 1.2.3 delivers; priorities use MoSCoW.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
@@ -149,7 +150,8 @@ flowchart LR
 | FR-40 | OCR review | Let a page kept as a picture be whole and upright, or turned on its side and cut into 2 parts (halves) or 3 parts (thirds that overlap a little) that each fill the screen; a first page cut into parts stays in the book instead of becoming the cover | Should |
 | FR-41 | Reader | Size an EPUB's pictures and cover for the chosen Xteink reader (480 x 800 for the X4 and X4 Pro, 528 x 792 for the X3), the X4 Pro by default; `--device` on the command line | Should |
 | FR-42 | Preview | Lay the EPUB preview out at the reader's screen size, then shrink it to fit; give every page that is only a picture its own slider stop | Should |
-| FR-43 | Pictures | Let full-page portrait pictures stay whole or turn on their side in 2 or 3 parts that each fill the screen, one setting for the book, switched without converting again; `--picture-parts` on the command line | Should |
+| FR-43 | Pictures | Let full-page portrait pictures stay upright, or go sideways as XTC pages do, cut into 2 halves or 3 overlapping parts that each fill the screen (the cut is offered only for Sideways); one setting for the book, switched without converting again; `--picture-parts` on the command line | Should |
+| FR-44 | Preview | Show the preview held in portrait or landscape: pages turned sideways (EPUB picture parts, sideways XTC pages) show in landscape so they read upright, other pages in portrait, and Portrait and Landscape buttons turn the page shown | Should |
 
 ## 7. Non-functional requirements
 

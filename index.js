@@ -308,7 +308,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
     const parts = pictureParts(n);
     pageLines[n - 1] = (parts > 1 ? sidewaysParts(picture.crop, parts, screen) : [picture.data]).map((data, i) => {
       const name = `img${images.length + 1}.png`;
-      images.push({ name, data });
+      images.push({ name, data, ...(parts > 1 && { sideways: true }) });
       return { image: name, y: picture.top - i };
     });
   }
@@ -472,8 +472,10 @@ ${body}
 }
 
 // A chapter's files: its text, with every picture on a page of its own that it
-// fills, like a page of an XTC book. The title goes above the first text.
-function chapterFiles(ch, number) {
+// fills, like a page of an XTC book. The title goes above the first text. Pages of
+// pictures turned on their side (`sideways`, image names) are marked "sideways",
+// which a preview can use to show them turned.
+function chapterFiles(ch, number, sideways = new Set()) {
   const parts = [];
   ch.blocks.forEach((b, i) => {
     const last = parts[parts.length - 1];
@@ -487,7 +489,7 @@ function chapterFiles(ch, number) {
     const name = k ? `chapter${number}-${k + 1}.xhtml` : `chapter${number}.xhtml`;
     if (part.image) {
       const body = `    <img src="images/${part.image}" alt=""/>`;
-      return { name, sections: [], xhtml: xhtmlFile(ch.title, body, 'picture') };
+      return { name, sections: [], xhtml: xhtmlFile(ch.title, body, sideways.has(part.image) ? 'picture sideways' : 'picture') };
     }
     const lines = part.blocks.map(b =>
       b.heading ? `    <h3 id="${b.id}">${escapeXml(b.text)}</h3>` : `    <p>${escapeXml(b.text)}</p>`
@@ -506,7 +508,7 @@ function splitPictures(chapters, images, parts) {
   const partName = (name, k) => name.replace(/\.png$/, `-${k + 1}.png`);
   return {
     images: images.flatMap(img =>
-      partsOf.has(img.name) ? partsOf.get(img.name).map((data, k) => ({ name: partName(img.name, k), data })) : [img]
+      partsOf.has(img.name) ? partsOf.get(img.name).map((data, k) => ({ name: partName(img.name, k), data, sideways: true })) : [img]
     ),
     chapters: chapters.map(ch => ({
       ...ch,
@@ -562,8 +564,9 @@ body.picture img, body.cover img { width: auto; height: auto; max-width: 100%; m
     manifest.push('    <item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>');
     spine.push('    <itemref idref="cover"/>');
   }
+  const sideways = new Set(images.filter(img => img.sideways).map(img => img.name));
   chapters.forEach((ch, i) => {
-    const files = chapterFiles(ch, i + 1);
+    const files = chapterFiles(ch, i + 1, sideways);
     files.forEach((file, k) => {
       const id = k ? `ch${i + 1}-${k + 1}` : `ch${i + 1}`;
       zip.file(`OEBPS/${file.name}`, file.xhtml);

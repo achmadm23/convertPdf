@@ -286,7 +286,7 @@ async function convertPdfPages(pdfBuffer, { title, author, name = 'Untitled', on
     parts.forEach((part, i) => {
       const screenCanvas = fitOnScreen(canvas, crop.x, crop.y + part.y, crop.w, part.h, part.turn, screen);
       pages.push(encodeScreen(screenCanvas, opts, stretch));
-      sources.push({ page: n, part: i + 1, of: parts.length });
+      sources.push({ page: n, part: i + 1, of: parts.length, ...(part.turn && { turn: part.turn }) });
     });
     onProgress({ stage: 'xtc', done: n, total: doc.numPages });
   }
@@ -316,7 +316,7 @@ async function coverPage(data, book) {
 
 // The book's pages, with `cover` (from coverPage) in place of the PDF's first
 // page when that is the cover, or before it otherwise. `sources` says where each
-// page comes from: { cover: true }, or { page, part, of } in the PDF.
+// page comes from: { cover: true }, or { page, part, of, turn? } in the PDF.
 function bookPages(book, cover) {
   const coverSource = { cover: true };
   if (book.options.firstPageIsCover) {
