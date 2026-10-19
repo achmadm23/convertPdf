@@ -116,6 +116,12 @@ function toLines(data, pageHeight, scale) {
   for (const block of data.blocks || []) {
     for (const para of block.paragraphs) {
       const paraWords = para.lines.flatMap(l => l.words);
+      // the typical word height, so a large decorative first letter doesn't make the line a heading
+      const sizeOf = line => Math.round(median(line.words.filter(w => w.text.trim()).map(w => w.bbox.y1 - w.bbox.y0)) / scale);
+      const sizes = para.lines.map(sizeOf).filter(Number.isFinite);
+      // a chapter title page can have 3 lines, "CHAPTER 3" and a title wrapped onto
+      // two, all in the same type; lines of different sizes (a credit and a logo) aren't one
+      const titleLines = para.lines.length <= 2 || (para.lines.length === 3 && Math.max(...sizes) <= Math.min(...sizes) * 1.25);
       const paraInfo = {
         confidence: median(paraWords.map(w => w.confidence)) ?? 0,
         lines: para.lines.length,
@@ -125,8 +131,7 @@ function toLines(data, pageHeight, scale) {
         const words = line.words.filter(w => w.text.trim());
         if (!words.length || line.confidence < MIN_CONFIDENCE) continue;
         if (!words.some(w => /[\p{L}\d]/u.test(w.text))) continue; // specks read as punctuation
-        // the typical word height, so a large decorative first letter doesn't make the line a heading
-        const size = Math.round(median(words.map(w => w.bbox.y1 - w.bbox.y0)) / scale);
+        const size = sizeOf(line);
         const baseline = (line.baseline.y0 + line.baseline.y1) / 2;
         const text = words.map(w => w.text).join(' ');
         lines.push({
@@ -138,7 +143,7 @@ function toLines(data, pageHeight, scale) {
           size,
           // headings are short, stand alone, and are printed clearly; anything else in
           // large type (a letter in a handwriting font, say) is body text
-          mayBeHeading: para.lines.length <= 2 && text.length <= 60 && line.confidence >= 80,
+          mayBeHeading: titleLines && text.length <= 60 && line.confidence >= 80,
           para: paraInfo, // shared by the paragraph's lines
           // each word's box, so words read inside a picture can be told from the text beside it
           words: words.map(w => ({
@@ -386,23 +391,39 @@ function markUnreadable(pages) {
 
 // Only lines that look like headings keep a size above the body text size,
 // which is the size used for the most text across all the scanned pages. A line
-// as wide as the text block is body text in a larger font, not a heading.
+// as wide as the text block is body text in a larger font, not a heading, unless
+// its paragraph is centred line under line, like a long chapter title.
 function normalizeSizes(pages) {
   const all = [...pages.values()].flat();
   const chars = new Map();
   for (const l of all) chars.set(l.size, (chars.get(l.size) || 0) + l.text.length);
   const bodySize = [...chars.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
   const bodyWidth = median(all.filter(l => l.size === bodySize).map(l => l.xEnd - l.x)) ?? Infinity;
-  const isHeading = l => l.mayBeHeading && l.xEnd - l.x < bodyWidth * 0.8;
+  const centred = centredParagraphs(all);
+  const isHeading = l => l.mayBeHeading && (l.xEnd - l.x < bodyWidth * 0.8 || centred.has(l.para));
   for (const [n, lines] of pages) {
     pages.set(
       n,
       lines.map(({ mayBeHeading, para, ...l }) =>
-        isHeading({ ...l, mayBeHeading }) ? l : { ...l, size: Math.min(l.size, bodySize) }
+        isHeading({ ...l, mayBeHeading, para }) ? l : { ...l, size: Math.min(l.size, bodySize) }
       )
     );
   }
   return pages;
+}
+
+// Paragraphs of 2 or more lines centred one under the other: the middles of their
+// lines line up, but their left edges don't. Lines of body text all start at the
+// left edge of the text block, however wide they are.
+function centredParagraphs(lines) {
+  const byPara = new Map();
+  for (const l of lines) byPara.set(l.para, [...(byPara.get(l.para) || []), l]);
+  const spread = values => Math.max(...values) - Math.min(...values);
+  return new Set(
+    [...byPara]
+      .filter(([, ls]) => ls.length >= 2 && spread(ls.map(l => (l.x + l.xEnd) / 2)) <= 6 && spread(ls.map(l => l.x)) > 12)
+      .map(([para]) => para)
+  );
 }
 
 // Raw readings → Map(page number → lines) for the converter, judging paragraphs
