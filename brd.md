@@ -262,6 +262,7 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 
 | Version | Date | What changed |
 | --- | --- | --- |
+| v1.2.3 | 2026-10-19 | Pictures found anywhere on scanned pages, beside the text too; full-page pictures Sideways or Upright, as for XTC; a Portrait / Landscape preview, landscape laying the book out wide; flat mid-grays in pictures no longer print white (FR-43 to FR-45) |
 | v1.2.2 | 2026-10-19 | EPUB pictures and the preview sized for the chosen reader (X4 Pro by default); full-page pictures whole or in 2 or 3 sideways parts; a slider stop for every picture page (FR-41 to FR-43) |
 | v1.2.1 | 2026-10-19 | A scanned page kept as a picture can be turned sideways and cut into 2 or 3 parts, each filling the screen (FR-40) |
 | v1.2.0 | 2026-10-19 | Website at achmadm23.github.io/convertPdf, converting in the browser and published by GitHub Actions (FR-38, FR-39) |
