@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const JSZip = require('jszip');
-const { measureLayout, findGaps, detectFigures, findPictures, sidewaysParts, renderCover, imageCover } = require('./figures');
+const { measureLayout, findGaps, detectFigures, findPictures, cropBoxes, sidewaysParts, renderCover, imageCover } = require('./figures');
 const { recognizePages, finishPages, LANGUAGES } = require('./ocr');
 const { openPdf } = require('./pdf');
 const { DEVICES, DITHERING, convertPdfPages, coverPage, bookPages, buildXtc, extensionFor } = require('./xtc');
@@ -267,7 +267,11 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   const readWords = new Set(
     scanned.filter(n => !picturePages.has(n) && !ocr.pages.get(n)?.manual && layoutLines[n - 1].some(l => l.words))
   );
-  const mayHavePictures = n => readWords.has(n) || findGaps(pageLines[n - 1], layout, bodySize).length > 0;
+  // pages whose pictures the user drew boxes around (see figures.js cleanBoxes):
+  // those are its pictures, instead of the ones found
+  const drawn = n => ocr?.pages.get(n)?.boxes;
+  const mayHavePictures = n =>
+    drawn(n) ? drawn(n).length > 0 : readWords.has(n) || findGaps(pageLines[n - 1], layout, bodySize).length > 0;
   const hasCoverCandidate = pageLines.length > 0 && pageLines[0].filter(layout.isLong).length < 5;
   const firstChecked = hasCoverCandidate ? 2 : 1;
   const candidates = [];
@@ -281,7 +285,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   let cover = null;
   // a first page that is mostly picture with hardly any body text is the cover,
   // unless it was kept as a picture in parts, which go in the book instead
-  if (hasCoverCandidate && pictureParts(1) === 1) {
+  if (hasCoverCandidate && pictureParts(1) === 1 && !drawn(1)) {
     const first = await doc.getPage(1);
     const height = first.view[3] - first.view[1];
     const [picture] = await detectFigures(first, pageLines[0], [{ top: height, bottom: 0 }], layout, screen);
@@ -300,13 +304,26 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   // crop pictures from pages with gaps in their text, and put them in the
   // text flow in place of the labels it contains
   const images = [];
+  // where the pictures are on each scanned page, as boxes like the ones drawn
+  // (cleanBoxes), for showing them on the page
+  const pictureBoxes = {};
   for (const n of candidates) {
     const page = await doc.getPage(n);
-    const figures = readWords.has(n)
-      ? await findPictures(page, layoutLines[n - 1], layout, screen)
-      : await detectFigures(page, pageLines[n - 1], findGaps(pageLines[n - 1], layout, bodySize), layout, screen);
+    const figures = drawn(n)
+      ? await cropBoxes(page, drawn(n), screen)
+      : readWords.has(n)
+        ? await findPictures(page, layoutLines[n - 1], layout, screen)
+        : await detectFigures(page, pageLines[n - 1], findGaps(pageLines[n - 1], layout, bodySize), layout, screen);
+    const pageWidth = page.view[2] - page.view[0];
     const pageHeight = page.view[3] - page.view[1];
     page.cleanup();
+    if (ocr?.pages.has(n)) {
+      const share = v => Math.round(v * 10000) / 10000;
+      pictureBoxes[n] = figures.map(f => ({
+        x: share(f.left / pageWidth), y: share(1 - f.top / pageHeight),
+        w: share((f.right - f.left) / pageWidth), h: share((f.top - f.bottom) / pageHeight),
+      }));
+    }
     onProgress({ stage: 'pictures', done: Math.min(++rendered, renders), total: renders });
     for (const fig of figures) {
       const name = `img${images.length + 1}.png`;
@@ -317,8 +334,11 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
       const fullPage = high >= pageHeight * FULL_PAGE && high > fig.right - fig.left;
       const split = fullPage && { 2: sidewaysParts(fig.crop, 2, screen), 3: sidewaysParts(fig.crop, 3, screen) };
       images.push({ name, data: fig.data, ...(split && { split }) });
-      // text shown inside the cropped picture is dropped; anything outside it stays
-      const lines = readWords.has(n)
+      // text shown inside the cropped picture is dropped; anything outside it stays.
+      // Text typed in by hand all stays: it isn't where it was on the page
+      const lines = ocr?.pages.get(n)?.manual
+        ? [...pageLines[n - 1]]
+        : readWords.has(n)
         ? besidePicture(pageLines[n - 1].map(l => wordsOutside(l, fig)).filter(Boolean), fig)
         : pageLines[n - 1].filter(l => !(l.y <= fig.top + 2 && l.y >= fig.bottom - 2 && l.x >= fig.left - 2 && l.xEnd <= fig.right + 2));
       const at = lines.findIndex(l => l.y < fig.top);
@@ -346,7 +366,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
 
   const startsLow = lowStartPages(pageLines, layoutLines, layout);
   const pages = pageLines.map(lines => linesToBlocks(lines, bodySize));
-  return { pages, images, cover, startsLow, ocr, title: meta.Title, author: meta.Author };
+  return { pages, images, cover, startsLow, ocr, pictureBoxes, title: meta.Title, author: meta.Author };
 }
 
 // Pages whose text starts far below the usual top of the text block, under a
@@ -673,6 +693,7 @@ async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', device 
     images: extracted.images,
     cover: extracted.cover,
     ocr: extracted.ocr,
+    pictureBoxes: extracted.pictureBoxes,
     device, // the e-reader its pictures are drawn for
     stats: { pages: pages.length, paragraphs, images: extracted.images.length, fullPagePictures: extracted.images.filter(i => i.split).length },
   };

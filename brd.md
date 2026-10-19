@@ -43,7 +43,7 @@ Version 1.2.3 covers one-way conversion of a single PDF into a single EPUB or XT
 - In-app preview, live OCR page review, retry, manual text entry and keep-as-picture (whole, or in 2 or 3 sideways parts)
 - Reader choice (Xteink X4 Pro, X4 or X3): pictures and cover sized for its screen, the preview laid out at its size, and full-page pictures upright, or sideways in 2 or 3 parts
 - Preview held in portrait or landscape: landscape lays the book out for the wide screen, and in portrait pages turned sideways show in landscape
-- Pictures on scanned pages found anywhere on the page, beside the text too, with the text around them kept as text
+- Pictures on scanned pages found anywhere on the page, beside the text too, with the text around them kept as text, and boxes drawn around a page's pictures by hand when one is missed or wrong
 
 **Out of scope**
 
@@ -87,7 +87,7 @@ flowchart TD
     rebuild --> pictures["Place pictures as e-ink pages<br/><small>sized for the reader, 4 shades of gray</small>"]
     pictures --> write["Write the EPUB<br/><small>chapters, contents and cover</small>"]
     write --> preview["Preview, change the cover<br/><small>the book updates in about 1 second</small>"]
-    preview -- "if scanned" --> fix["Fix flagged scanned pages<br/><small>Retry, Edit text or Keep as picture</small>"]
+    preview -- "if scanned" --> fix["Fix flagged scanned pages<br/><small>Retry, Edit text, Draw a box or Keep as picture</small>"]
     fix -- "Update the book" --> write
     preview --> download["Download the EPUB<br/><small>enabled once conversion finishes</small>"]
 ```
@@ -106,7 +106,7 @@ flowchart LR
 
 ## 6. Functional requirements
 
-44 requirements, 15 of them Must, define what version 1.2.3 delivers; priorities use MoSCoW.
+45 requirements, 15 of them Must, define what version 1.2.3 delivers; priorities use MoSCoW.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
@@ -115,7 +115,7 @@ flowchart LR
 | FR-03 | Input | Accept an optional title and author; when blank, take them from the PDF | Must |
 | FR-04 | Text | Rebuild real paragraphs and join sentences that break across pages | Must |
 | FR-05 | Text | Remove running headers, footers and page numbers | Must |
-| FR-06 | Structure | Split the book into chapters by heading size (on scans, by where text starts low under a title); fall back to 10-page chapters; list section headings in the table of contents | Must |
+| FR-06 | Structure | Split the book into chapters by heading size (on scans, a title of up to 3 lines in one size, centred one under another, is a heading; failing headings, chapters start where text starts low under a title); fall back to 10-page chapters; list section headings in the table of contents | Must |
 | FR-07 | Pictures | Find, crop and place photos, charts and diagrams where they appear in the text | Must |
 | FR-08 | Pictures | Use a picture-only first page as the cover | Should |
 | FR-09 | Pictures | Show each picture, the cover and pages kept as pictures on a full page sized for the reader (480 x 800, or 528 x 792 for the X3) in 4 dithered shades of gray | Must |
@@ -154,6 +154,7 @@ flowchart LR
 | FR-43 | Pictures | Let full-page portrait pictures stay upright, or go sideways as XTC pages do, cut into 2 halves or 3 overlapping parts that each fill the screen (the cut is offered only for Sideways); one setting for the book, switched without converting again; `--picture-parts` on the command line | Should |
 | FR-44 | Preview | Let the preview be held in portrait or landscape, the choice kept from page to page and for next time: in landscape an EPUB is laid out for the wide screen (800 x 480) with picture parts filling it upright, and XTC pages turn with the reader; in portrait pages turned sideways (EPUB picture parts, sideways XTC pages) show in landscape so they read upright | Should |
 | FR-45 | Pictures | Find pictures anywhere on a scanned page, beside the text as well as between paragraphs: words read inside a picture (a sign, a speech bubble) go with the picture, and text beside it stays one paragraph; a framed box of text, a rule or the scanner's shadow is not a picture | Should |
+| FR-46 | OCR review | Mark the pictures found on each scanned page on its scan, and let boxes be drawn, moved, resized and removed around them (Draw a box); what is inside the boxes goes in the book as pictures and the text outside them stays text, with no boxes the page is all text, and Use found pictures goes back; the boxes stay when the page is read again or its text typed | Should |
 
 ## 7. Non-functional requirements
 
@@ -220,8 +221,8 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
 | OCR misreads handwriting, decorative lettering or poor scans | Wrong or garbled text in the book | Drop low-confidence lines and paragraphs; show them as pictures; Retry, Edit text and Keep as picture |
-| Chapter titles cannot be read or found | Poor table of contents | Detect chapter starts by page layout; fall back to 10-page chapters |
-| Multi-column pages and tables lose their layout | Hard-to-read passages | Documented limitation; Keep as picture for scanned pages; pictures beside the text are found on scanned pages (FR-45) |
+| Chapter titles cannot be read or found | Poor table of contents | Recognise titles of up to 3 centred lines on scans; detect chapter starts by page layout; fall back to 10-page chapters |
+| Multi-column pages and tables lose their layout | Hard-to-read passages | Documented limitation; Keep as picture for scanned pages; pictures beside the text are found on scanned pages (FR-45), or boxed by hand (FR-46) |
 | SmartScreen or antivirus blocks the unsigned exe | Users give up before first run | README steps (More info, Run anyway); code signing as a future option |
 | Large scanned books exhaust memory on small machines | Slow or failed conversion | Cap at 8 cores, bound pages waiting for OCR, 300 MB upload limit |
 | Server restart loses converted books | User must convert again | Download promptly; documented in README |

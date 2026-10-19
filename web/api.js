@@ -4,7 +4,7 @@
 
 const { analyzePdf, buildEpub, readerScreen } = require('../index');
 const { openPdf } = require('../pdf');
-const { imageCover } = require('../figures');
+const { imageCover, cleanBoxes } = require('../figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('../xtc');
 const { retryPage, manualReading } = require('../ocr');
 
@@ -61,7 +61,16 @@ function bookSummary(s) {
     scannedPages: scanned.length,
     ...readerSummary(book.device),
     lowPages: scanned.filter(r => !r.manual && !r.picture && r.confidence >= PICTURE_BELOW && r.confidence <= LOW_CONFIDENCE).length,
+    pictures: scannedPictures(book),
   };
+}
+
+// Where the pictures are on each scanned page, and whether the user drew them.
+function scannedPictures(book) {
+  if (!book.ocr) return {};
+  return Object.fromEntries(
+    [...book.ocr.pages].map(([n, r]) => [n, { drawn: !!r.boxes, boxes: book.pictureBoxes?.[n] || [] }])
+  );
 }
 
 // The e-reader an EPUB's pictures are drawn for, for the page's preview.
@@ -132,7 +141,7 @@ async function retry(id, n) {
     const best = await retryPage(await openPdf(s.pdf), n, s.book.ocr.language);
     const improved = (best.confidence ?? -1) > (current.confidence ?? -1);
     if (improved) {
-      s.book.ocr.pages.set(n, best);
+      s.book.ocr.pages.set(n, { ...best, ...(current.boxes && { boxes: current.boxes }) });
       s.improved.add(n);
     }
     return {
@@ -156,7 +165,7 @@ async function setText(id, n, text) {
   if (!current) throw new Error('That page was not read with OCR.');
   if (s.busy) throw new Error('Busy updating the book. Try again in a moment.');
   const typed = manualReading(text, current);
-  s.book.ocr.pages.set(n, typed);
+  s.book.ocr.pages.set(n, { ...typed, ...(current.boxes && { boxes: current.boxes }) });
   s.improved.add(n);
   return { text: typed.text, pendingPages: s.improved.size };
 }
@@ -173,6 +182,20 @@ async function setPicture(id, n, keep, parts = 1) {
   s.book.ocr.pages.set(n, keep ? { ...reading, picture: true, ...(parts > 1 && { pictureParts: parts }) } : reading);
   s.improved.add(n);
   return { picture: keep, parts: keep ? parts : 1, pendingPages: s.improved.size };
+}
+
+// Use the pictures in boxes drawn by the user for a scanned page (boxes: [{ x, y, w, h }, ...],
+// see figures.js cleanBoxes) instead of the ones found, or the found ones again (null).
+async function setBoxes(id, n, boxes) {
+  const s = session(id);
+  const current = s.book?.ocr?.pages.get(n);
+  if (!current) throw new Error('That page was not read with OCR.');
+  if (s.busy) throw new Error('Busy updating the book. Try again in a moment.');
+  const { boxes: old, ...reading } = current;
+  const use = boxes && cleanBoxes(boxes);
+  s.book.ocr.pages.set(n, use ? { ...reading, boxes: use } : reading);
+  s.improved.add(n);
+  return { drawn: !!use, boxes: use || null, pendingPages: s.improved.size };
 }
 
 // Build the book again with the changed pages.
@@ -248,4 +271,4 @@ async function download(id, pictureParts) {
 // eslint-disable-next-line no-undef
 const version = async () => __VERSION__;
 
-window.convertPdfApi = { convert, retry, setText, setPicture, rebuild, setCover, epub, scanUrl, screenUrl, download, version };
+window.convertPdfApi = { convert, retry, setText, setPicture, setBoxes, rebuild, setCover, epub, scanUrl, screenUrl, download, version };

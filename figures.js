@@ -333,6 +333,49 @@ async function findPictures(page, lines, layout, screen) {
   return figures.sort((a, b) => b.top - a.top);
 }
 
+const MAX_BOXES = 20; // pictures drawn on one page
+
+// Boxes drawn around pictures on a page by the user, checked: each { x, y, w, h }
+// as shares of the page's width and height from its top left corner, inside the page.
+function cleanBoxes(boxes) {
+  if (!Array.isArray(boxes)) throw new Error('The picture boxes could not be read.');
+  if (boxes.length > MAX_BOXES) throw new Error(`A page can have up to ${MAX_BOXES} pictures.`);
+  return boxes.map(b => {
+    const [x, y, w, h] = [b?.x, b?.y, b?.w, b?.h].map(Number);
+    if (![x, y, w, h].every(Number.isFinite)) throw new Error('A picture box could not be read.');
+    const left = Math.max(0, x), top = Math.max(0, y);
+    const right = Math.min(1, x + w), bottom = Math.min(1, y + h);
+    if (right - left < 0.02 || bottom - top < 0.02) throw new Error('A picture box is too small.');
+    const round = v => Math.round(v * 10000) / 10000;
+    return { x: round(left), y: round(top), w: round(right - left), h: round(bottom - top) };
+  });
+}
+
+// The pictures in boxes drawn by the user (see cleanBoxes), cropped like found ones.
+async function cropBoxes(page, boxes, screen) {
+  const canvas = await renderPage(page, SCALE);
+  const pageWidth = page.view[2] - page.view[0];
+  const pageHeight = page.view[3] - page.view[1];
+  return boxes
+    .map(b => {
+      const left = Math.round(b.x * canvas.width), top = Math.round(b.y * canvas.height);
+      const crop = createCanvas(
+        Math.max(1, Math.min(canvas.width, Math.round((b.x + b.w) * canvas.width)) - left),
+        Math.max(1, Math.min(canvas.height, Math.round((b.y + b.h) * canvas.height)) - top)
+      );
+      crop.getContext('2d').drawImage(canvas, left, top, crop.width, crop.height, 0, 0, crop.width, crop.height);
+      return {
+        top: pageHeight * (1 - b.y),
+        bottom: pageHeight * (1 - b.y - b.h),
+        left: pageWidth * b.x,
+        right: pageWidth * (b.x + b.w),
+        data: screenImage(crop, screen),
+        crop,
+      };
+    })
+    .sort((a, b) => b.top - a.top);
+}
+
 // A tall picture (a whole page kept as a picture) turned on its side and cut
 // into parts, each a picture of its own that fills the e-reader's screen, so its
 // text comes out bigger. As in an XTC book: 2 parts are halves, 3 parts are
@@ -370,4 +413,4 @@ async function imageCover(data, screen) {
   return screenImage(image, screen);
 }
 
-module.exports = { measureLayout, findGaps, detectFigures, findPictures, sidewaysParts, renderCover, imageCover, renderPage };
+module.exports = { measureLayout, findGaps, detectFigures, findPictures, cleanBoxes, cropBoxes, sidewaysParts, renderCover, imageCover, renderPage };

@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { analyzePdf, buildEpub, openPdf, readerScreen } = require('./index');
-const { imageCover } = require('./figures');
+const { imageCover, cleanBoxes } = require('./figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('./xtc');
 const { retryPage, manualReading } = require('./ocr');
 
@@ -20,6 +20,7 @@ const PICTURE_BELOW = 30; // ...unless they're read this badly: then they're pic
 const OFFER_PICTURE = 90; // scanned pages read this well (%) or worse can be kept as a picture of the page
 const MAX_TEXT_BYTES = 1024 * 1024; // typed-in text for one page
 const MAX_COVER_BYTES = 20 * 1024 * 1024; // a cover picture chosen by the user
+const MAX_BOXES_BYTES = 16 * 1024; // the boxes drawn around a page's pictures
 
 const page = path.join(__dirname, 'public', 'index.html');
 const vendor = {
@@ -124,7 +125,17 @@ function bookSummary(session) {
     scannedPages: scanned.length,
     ...readerSummary(book.device),
     lowPages: scanned.filter(r => !r.manual && !r.picture && r.confidence >= PICTURE_BELOW && r.confidence <= LOW_CONFIDENCE).length,
+    pictures: scannedPictures(book),
   };
+}
+
+// Where the pictures are on each scanned page (boxes, see figures.js cleanBoxes),
+// and whether the user drew them.
+function scannedPictures(book) {
+  if (!book.ocr) return {};
+  return Object.fromEntries(
+    [...book.ocr.pages].map(([n, r]) => [n, { drawn: !!r.boxes, boxes: book.pictureBoxes?.[n] || [] }])
+  );
 }
 
 // The e-reader an EPUB's pictures are drawn for, for the page's preview.
@@ -225,7 +236,7 @@ async function handleRetry(res, session, n) {
     const best = await retryPage(await openPdf(session.pdf), n, session.book.ocr.language);
     const improved = (best.confidence ?? -1) > (current.confidence ?? -1);
     if (improved) {
-      session.book.ocr.pages.set(n, best);
+      session.book.ocr.pages.set(n, { ...best, ...(current.boxes && { boxes: current.boxes }) });
       session.improved.add(n);
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -257,7 +268,7 @@ async function handleText(req, res, session, n) {
     return sendError(res, 400, err.message);
   }
   const typed = manualReading(text, current);
-  session.book.ocr.pages.set(n, typed);
+  session.book.ocr.pages.set(n, { ...typed, ...(current.boxes && { boxes: current.boxes }) });
   session.improved.add(n);
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ text: typed.text, pendingPages: session.improved.size }));
@@ -276,6 +287,28 @@ function handlePicture(res, session, n, keep, parts = 1) {
   session.improved.add(n);
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ picture: keep, parts: keep ? parts : 1, pendingPages: session.improved.size }));
+}
+
+// POST /book/<id>/pages/<n>/boxes: use the pictures in boxes drawn by the user
+// (the request body, JSON: [{ x, y, w, h }, ...], see figures.js cleanBoxes) for
+// a scanned page instead of the ones found; the text outside them stays text.
+// No boxes: no pictures. DELETE: use the pictures found again. Used the next time
+// the book is rebuilt.
+async function handleBoxes(req, res, session, n, use) {
+  const current = session.book?.ocr?.pages.get(n);
+  if (!current) return sendError(res, 404, 'That page was not read with OCR.');
+  if (session.busy) return sendError(res, 409, 'Busy updating the book. Try again in a moment.');
+  let boxes;
+  try {
+    if (use) boxes = cleanBoxes(JSON.parse((await readBody(req, MAX_BOXES_BYTES)).toString('utf8')));
+  } catch (err) {
+    return sendError(res, 400, err instanceof SyntaxError ? 'The picture boxes could not be read.' : err.message);
+  }
+  const { boxes: old, ...reading } = current;
+  session.book.ocr.pages.set(n, use ? { ...reading, boxes } : reading);
+  session.improved.add(n);
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ drawn: use, boxes: boxes || null, pendingPages: session.improved.size }));
 }
 
 // POST /book/<id>/rebuild: build the book again using improved page readings.
@@ -382,7 +415,7 @@ const server = http.createServer((req, res) => {
       console.error(err);
       if (!res.headersSent) sendError(res, 500, 'Could not use that picture as the cover.');
     });
-  } else if ((match = route.match(/^\/book\/([\w-]+)\/(?:pages\/(\d+)\.jpg|pages\/(\d+)\/retry|(rebuild)|pages\/(\d+)\/text|pages\/(\d+)\/picture)$/))) {
+  } else if ((match = route.match(/^\/book\/([\w-]+)\/(?:pages\/(\d+)\.jpg|pages\/(\d+)\/retry|(rebuild)|pages\/(\d+)\/text|pages\/(\d+)\/picture|pages\/(\d+)\/boxes)$/))) {
     const session = sessions.get(match[1]);
     if (!session) return sendError(res, 404, 'This book has expired. Please convert the PDF again.');
     const fail = err => {
@@ -406,6 +439,8 @@ const server = http.createServer((req, res) => {
       const parts = Number(url.searchParams.get('parts')) || 1;
       if (![1, 2, 3].includes(parts)) return sendError(res, 400, 'A page can be kept as 1, 2 or 3 pictures.');
       handlePicture(res, session, Number(match[6]), req.method === 'POST', parts);
+    } else if ((req.method === 'POST' || req.method === 'DELETE') && match[7]) {
+      handleBoxes(req, res, session, Number(match[7]), req.method === 'POST').catch(fail);
     } else {
       sendError(res, 404, 'Not found');
     }

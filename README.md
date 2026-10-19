@@ -84,6 +84,8 @@ For scanned books, a **Scanned pages** tab shows each page as OCR reads it: the 
 
 Pages read at 90% or lower also have **Keep as picture**, which puts the whole page in the book as a picture instead of its text: for a handwritten letter, a table, or a page OCR garbles. Choose **Whole page** to keep it upright, or **2 parts** or **3 parts** to have it turned on its side and cut into halves, or thirds that overlap a little, as in an XTC book: each part fills the screen, so the text is bigger. Turn your e-reader on its side to read them. **Use text** undoes it. A first page kept whole as a picture becomes the book's cover. Tick **Only pages at 90% or lower** to see just the pages with these buttons.
 
+Once the book is converted, the pictures found on each scanned page are marked on its scan with dashed boxes. When a picture was missed, cut short, or isn't a picture, click **Draw a box** to show the page larger and fix it: drag across the page to draw a box around a picture, drag a box to move it or its corner to resize it, and × removes it. **Save pictures** puts what's inside the boxes in the book as pictures, and the text outside them stays text; with no boxes, the whole page is text. **Use found pictures** goes back to the ones the converter found.
+
 Then click **Update the book** to use the changed pages. This takes under a minute, because the other pages aren't read again. Pages read below 30% are mostly pictures (a cover, for example) and have neither Retry nor Edit text.
 
 The server keeps the last 5 converted books in memory so you can change their cover quickly. Restarting the server clears them.

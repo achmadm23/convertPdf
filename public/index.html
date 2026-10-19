@@ -196,7 +196,11 @@
   }
   .scan.low { background: color-mix(in srgb, var(--warn-bg) 25%, var(--field)); }
   @media (max-width: 700px) { .scan { grid-template-columns: 1fr; } }
-  .scan img { width: 100%; max-width: 220px; height: auto; background: #fff; border: 1px solid var(--rule); border-radius: 4px; position: sticky; top: 64px; }
+  .scan-thumb { position: sticky; top: 64px; align-self: start; width: 100%; max-width: 220px; }
+  .scan-thumb img, .box-page img { display: block; width: 100%; height: auto; background: #fff; border: 1px solid var(--rule); border-radius: 4px; }
+  /* the pictures on a page: found ones dashed, ones the user drew solid */
+  .pic-box { position: absolute; border: 2px dashed var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); pointer-events: none; }
+  .pic-box.drawn { border-style: solid; }
   .scan-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 8px; }
   .scan-head b { font-weight: 600; }
   .scan-head .page-action:first-of-type { margin-left: auto; }
@@ -216,6 +220,16 @@
   }
   .edit-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .picture-choice { margin-bottom: 12px; }
+  .conf.drawn { color: var(--kept-text); background: var(--kept-bg); }
+  /* drawing boxes around a page's pictures */
+  .box-editor { grid-column: 1 / -1; }
+  .box-page { position: relative; width: min(100%, 560px); cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .box-page .pic-box { border-style: solid; pointer-events: auto; cursor: move; }
+  .box-page .remove {
+    position: absolute; top: -14px; right: -14px; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%;
+    font: 600 16px/28px var(--sans); color: var(--accent-text); background: var(--accent); cursor: pointer;
+  }
+  .box-page .grip { position: absolute; right: -8px; bottom: -8px; width: 16px; height: 16px; border-radius: 3px; background: var(--accent); cursor: nwse-resize; }
 
   /* side panel */
   .side h2 { margin: 0; padding: 20px 20px 4px; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -517,6 +531,10 @@
         json(`book/${id}/pages/${n}/text`, { method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: text }),
       setPicture: (id, n, keep, parts = 1) =>
         json(`book/${id}/pages/${n}/picture${keep ? `?parts=${parts}` : ''}`, { method: keep ? 'POST' : 'DELETE' }),
+      setBoxes: (id, n, boxes) =>
+        json(`book/${id}/pages/${n}/boxes`, boxes
+          ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(boxes) }
+          : { method: 'DELETE' }),
       setCover: (id, file) =>
         json(`book/${id}/cover`, file ? { method: 'POST', headers: { 'Content-Type': file.type }, body: file } : { method: 'DELETE' }),
       epub: (id, parts = 1) => send(`book/${id}.epub?parts=${parts}`).then(res => res.arrayBuffer()),
@@ -949,9 +967,12 @@
     // the Retry and Edit text buttons. Pages whose text was typed in by hand stay
     // editable (and in the "only low pages" list), but aren't read again. Pages
     // read at or below offerPicture can be kept as a picture instead of their text.
-    function renderCard(n, { confidence, text, manual = false, picture = false, pictureParts = 1 }, note) {
+    // The pictures on the page are marked on its scan (`boxes`, shares of the page),
+    // and boxes can be drawn around them instead (`drawn`).
+    function renderCard(n, info, note) {
       const p = pages.get(n);
-      Object.assign(p, { confidence, text, manual, picture, pictureParts });
+      const { confidence, text, manual = false, picture = false, pictureParts = 1, boxes = p.boxes ?? null, drawn = p.drawn ?? false } = info;
+      Object.assign(p, { confidence, text, manual, picture, pictureParts, boxes, drawn });
       const card = p.card;
       card.classList.toggle('low', !picture && (manual || isLow(confidence)));
       card.classList.toggle('checkable', manual || picture || canBePicture(confidence));
@@ -962,8 +983,11 @@
         : confidence === null ? '<span class="conf none">no text</span>'
         : isPicture(confidence) ? `<span class="conf none">mostly picture (${confidence}%)</span>`
         : `<span class="conf">${confidence}%</span>`;
+      const marked = !picture && drawn
+        ? `<span class="conf drawn">${boxes?.length ? `${boxes.length} ${boxes.length === 1 ? 'picture' : 'pictures'} drawn` : 'no pictures'}</span>`
+        : '';
       const head = card.querySelector('.scan-head');
-      head.innerHTML = `<b>Page ${n}</b>${badge}`;
+      head.innerHTML = `<b>Page ${n}</b>${badge}${marked}`;
       const addButton = (className, label, title, onClick) => {
         const b = document.createElement('button');
         b.type = 'button';
@@ -978,13 +1002,18 @@
       } else {
         if (isLow(confidence) && !manual) addButton('retry', 'Retry', 'Read this page again with other settings', () => retryPage(n));
         if (manual || isLow(confidence)) addButton('edit', 'Edit text', 'Type or correct the text of this page', () => editPage(n));
+        addButton('draw', 'Draw a box', 'Draw boxes around the pictures on this page: they go in the book as pictures, and the text beside them stays text', () => drawPictures(n));
         if (manual || canBePicture(confidence)) {
           addButton('keep-picture', 'Keep as picture', 'Put the whole page in the book as a picture instead of its text', () => choosePicture(n));
         }
       }
-      // close an open text box or picture choice first: each has a note of its own
+      // close an open text box, picture choice or box drawing first: each has a note of its own
       card.querySelector('.scan-edit')?.remove();
       card.querySelector('.picture-choice')?.remove();
+      card.querySelector('.box-editor')?.remove();
+      const thumb = card.querySelector('.scan-thumb');
+      thumb.querySelectorAll('.pic-box').forEach(el => el.remove());
+      if (!picture) for (const b of boxes || []) thumb.append(boxElement(b, drawn));
       const noteEl = card.querySelector('.scan-note');
       noteEl.hidden = !note;
       if (note) {
@@ -1035,6 +1064,139 @@
         save.disabled = false;
         save.textContent = 'Save';
         box.querySelector('.scan-note').textContent = err.message || 'Could not save the text.';
+      }
+      updateCounts();
+    }
+
+    // A box around a picture, placed on a page's scan by its shares of the page.
+    function boxElement(b, drawn) {
+      const el = document.createElement('div');
+      el.className = 'pic-box' + (drawn ? ' drawn' : '');
+      placeBox(el, b);
+      return el;
+    }
+    function placeBox(el, b) {
+      Object.assign(el.style, { left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.w * 100}%`, height: `${b.h * 100}%` });
+    }
+
+    // Draw boxes around the pictures on the page, starting from the ones found (or
+    // drawn before): drag across the page for a new box, drag a box to move it or
+    // its corner to resize it, × to remove it. What's in the boxes goes in the book
+    // as pictures, the text outside them stays text.
+    function drawPictures(n) {
+      const p = pages.get(n);
+      const card = p.card;
+      if (card.querySelector('.box-editor')) return;
+      for (const b of card.querySelectorAll('.page-action')) b.hidden = true;
+      const boxes = (p.boxes || []).map(b => ({ ...b }));
+      const editor = document.createElement('div');
+      editor.className = 'box-editor';
+      editor.innerHTML = `<p class="scan-note">Drag across the page to draw a box around each picture. Drag a box to move it, or its corner to resize it; × removes it. What's inside the boxes goes in the book as pictures, and the text outside them stays text.</p>
+        <div class="box-page"><img alt="Page ${n}, to draw boxes on" draggable="false"></div>
+        <div class="edit-buttons">
+          <button type="button" class="btn primary save">Save pictures</button>
+          <button type="button" class="btn clear">Remove all</button>
+          ${p.drawn ? '<button type="button" class="btn found">Use found pictures</button>' : ''}
+          <button type="button" class="btn cancel">Cancel</button>
+        </div>`;
+      const sheet = editor.querySelector('.box-page');
+      sheet.querySelector('img').src = api.scanUrl(sessionId, n);
+      card.append(editor);
+
+      const clamp = (v, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
+      const MIN = 0.02; // smaller boxes are a slip of the mouse
+      const draw = () => {
+        sheet.querySelectorAll('.pic-box').forEach(el => el.remove());
+        boxes.forEach((b, i) => {
+          const el = boxElement(b, true);
+          el.dataset.i = i;
+          el.innerHTML = `<button type="button" class="remove" aria-label="Remove picture ${i + 1}">×</button><span class="grip"></span>`;
+          sheet.append(el);
+        });
+        editor.querySelector('.clear').disabled = !boxes.length;
+      };
+      draw();
+
+      let drag = null;
+      const at = e => {
+        const r = sheet.getBoundingClientRect();
+        return { x: clamp((e.clientX - r.left) / r.width), y: clamp((e.clientY - r.top) / r.height) };
+      };
+      sheet.addEventListener('pointerdown', e => {
+        if (e.button !== 0 || e.target.closest('.remove')) return;
+        e.preventDefault();
+        const start = at(e);
+        const el = e.target.closest('.pic-box');
+        const i = el ? Number(el.dataset.i) : boxes.push({ x: start.x, y: start.y, w: 0, h: 0 }) - 1;
+        const mode = !el ? 'new' : e.target.classList.contains('grip') ? 'size' : 'move';
+        if (!el) draw();
+        drag = { i, start, from: { ...boxes[i] }, mode, el: sheet.querySelector(`.pic-box[data-i="${i}"]`) };
+        sheet.setPointerCapture(e.pointerId);
+      });
+      sheet.addEventListener('pointermove', e => {
+        if (!drag) return;
+        const pt = at(e), b = boxes[drag.i], f = drag.from, s = drag.start;
+        if (drag.mode === 'new') {
+          Object.assign(b, { x: Math.min(pt.x, s.x), y: Math.min(pt.y, s.y), w: Math.abs(pt.x - s.x), h: Math.abs(pt.y - s.y) });
+        } else if (drag.mode === 'size') {
+          Object.assign(b, { w: clamp(pt.x - f.x, MIN, 1 - f.x), h: clamp(pt.y - f.y, MIN, 1 - f.y) });
+        } else {
+          Object.assign(b, { x: clamp(f.x + pt.x - s.x, 0, 1 - f.w), y: clamp(f.y + pt.y - s.y, 0, 1 - f.h) });
+        }
+        placeBox(drag.el, b);
+      });
+      const end = () => {
+        if (!drag) return;
+        const b = boxes[drag.i];
+        if (b.w < MIN || b.h < MIN) boxes.splice(drag.i, 1);
+        drag = null;
+        draw();
+      };
+      sheet.addEventListener('pointerup', end);
+      sheet.addEventListener('pointercancel', end);
+      sheet.addEventListener('click', e => {
+        const remove = e.target.closest('.remove');
+        if (!remove) return;
+        boxes.splice(Number(remove.parentElement.dataset.i), 1);
+        draw();
+      });
+
+      editor.querySelector('.clear').addEventListener('click', () => {
+        boxes.length = 0;
+        draw();
+      });
+      editor.querySelector('.cancel').addEventListener('click', () => {
+        renderCard(n, p);
+        updateCounts();
+      });
+      editor.querySelector('.save').addEventListener('click', e => saveBoxes(n, boxes, e.currentTarget));
+      editor.querySelector('.found')?.addEventListener('click', e => saveBoxes(n, null, e.currentTarget));
+      editor.scrollIntoView({ block: 'nearest' });
+    }
+
+    // Use the boxes drawn for the page's pictures, or the pictures found again (null).
+    async function saveBoxes(n, boxes, button) {
+      const p = pages.get(n);
+      const editor = p.card.querySelector('.box-editor');
+      for (const b of editor.querySelectorAll('button')) b.disabled = true;
+      button.innerHTML = '<span class="spinner" aria-hidden="true"></span>Saving…';
+      try {
+        const r = await api.setBoxes(sessionId, n, boxes);
+        pending = r.pendingPages;
+        const count = r.boxes?.length;
+        // the pictures found are shown again once the book is updated
+        renderCard(n, { ...p, drawn: r.drawn, boxes: r.boxes }, {
+          good: true,
+          text: !r.drawn
+            ? 'The pictures found on the page will be used again. Update the book to see them.'
+            : count
+              ? `${count === 1 ? 'The picture in the box' : `The ${count} pictures in the boxes`} will go in the book, and the rest of the page stays text. Update the book to use ${count === 1 ? 'it' : 'them'}.`
+              : 'The whole page will be text, with no pictures. Update the book to use it.',
+        });
+      } catch (err) {
+        for (const b of editor.querySelectorAll('button')) b.disabled = false;
+        button.textContent = boxes ? 'Save pictures' : 'Use found pictures';
+        editor.querySelector('.scan-note').textContent = err.message || 'Could not save the pictures.';
       }
       updateCounts();
     }
@@ -1124,6 +1286,7 @@
         bookMeta = await api.rebuild(sessionId, { onProgress: u => progress.update(u) });
         progress.update({ stage: 'done' });
         pending = 0;
+        showPictures(bookMeta.pictures);
         showBookInfo();
         showStatus('Book updated with the changed pages.');
         converting = false;
@@ -1143,6 +1306,14 @@
         updateCounts();
       }
     });
+
+    // Mark the pictures of each page on its scan, once the book is (re)built.
+    function showPictures(pictures = {}) {
+      for (const [n, p] of pages) {
+        const found = pictures[n];
+        renderCard(n, { ...p, boxes: found?.boxes || [], drawn: !!found?.drawn });
+      }
+    }
 
     $('onlyLow').addEventListener('change', e => $('scans').classList.toggle('only-low', e.target.checked));
 
@@ -1176,7 +1347,7 @@
         const following = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
         const card = document.createElement('article');
         card.className = 'scan';
-        card.innerHTML = `<img alt="" loading="lazy"><div><div class="scan-head"></div><p class="scan-note" hidden></p><pre class="scan-text"></pre></div>`;
+        card.innerHTML = `<div class="scan-thumb"><img alt="" loading="lazy"></div><div><div class="scan-head"></div><p class="scan-note" hidden></p><pre class="scan-text"></pre></div>`;
         card.querySelector('img').src = api.scanUrl(sessionId, page.n);
         card.querySelector('img').alt = `Scan of page ${page.n}`;
         pages.set(page.n, { confidence: page.confidence, card });
@@ -1195,6 +1366,7 @@
       finish(meta) {
         done = true;
         total = meta.scannedPages || total;
+        showPictures(meta.pictures);
         updateCounts();
       },
     };
