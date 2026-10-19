@@ -158,9 +158,31 @@ async function detectFigures(page, lines, gaps, layout) {
       left: left / SCALE,
       right: right / SCALE,
       data: screenImage(crop),
+      crop, // the picture itself, for cutting it into parts (sidewaysParts)
     });
   }
   return figures;
+}
+
+// A tall picture (a whole page kept as a picture) turned on its side and cut
+// into parts, each a picture of its own that fills the e-reader's screen, so its
+// text comes out bigger. As in an XTC book: 2 parts are halves, 3 parts are
+// thirds that overlap a little, so no line is only ever seen cut in two.
+// Read with the e-reader turned on its side; the top of the page is on the right.
+function sidewaysParts(canvas, parts) {
+  const { width, height } = canvas;
+  const partHeight = parts === 2 ? Math.ceil(height / 2) : Math.ceil(height * 0.37);
+  const step = parts > 1 ? (height - partHeight) / (parts - 1) : 0;
+  return Array.from({ length: parts }, (_, i) => {
+    const top = Math.round(step * i);
+    const h = Math.min(partHeight, height - top);
+    const turned = createCanvas(h, width);
+    const ctx = turned.getContext('2d');
+    ctx.translate(h, 0);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(canvas, 0, top, width, h, 0, 0, width, h);
+    return screenImage(turned);
+  });
 }
 
 async function renderCover(page) {
@@ -179,4 +201,4 @@ async function imageCover(data) {
   return screenImage(image);
 }
 
-module.exports = { measureLayout, findGaps, detectFigures, renderCover, imageCover, renderPage };
+module.exports = { measureLayout, findGaps, detectFigures, sidewaysParts, renderCover, imageCover, renderPage };

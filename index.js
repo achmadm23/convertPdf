@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const JSZip = require('jszip');
-const { measureLayout, findGaps, detectFigures, renderCover, imageCover } = require('./figures');
+const { measureLayout, findGaps, detectFigures, sidewaysParts, renderCover, imageCover } = require('./figures');
 const { recognizePages, finishPages, LANGUAGES } = require('./ocr');
 const { openPdf } = require('./pdf');
 const { DEVICES, DITHERING, convertPdfPages, coverPage, bookPages, buildXtc, extensionFor } = require('./xtc');
@@ -206,6 +206,8 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   // they have no lines until the picture is put in, after pictures are found
   const picturePages = new Set();
   let ocr = null;
+  // how many parts a page kept as a picture is cut into (1: the whole page upright)
+  const pictureParts = n => (picturePages.has(n) && ocr?.pages.get(n)?.pictureParts) || 1;
   if (scanned.length) {
     const readings = new Map(scanned.filter(n => previous?.pages.has(n)).map(n => [n, previous.pages.get(n)]));
     const fresh = await recognizePages(
@@ -244,8 +246,9 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   onProgress({ stage: 'pictures', done: 0, total: renders });
 
   let cover = null;
-  // a first page that is mostly picture with hardly any body text is the cover
-  if (hasCoverCandidate) {
+  // a first page that is mostly picture with hardly any body text is the cover,
+  // unless it was kept as a picture in parts, which go in the book instead
+  if (hasCoverCandidate && pictureParts(1) === 1) {
     const first = await doc.getPage(1);
     const height = first.view[3] - first.view[1];
     const [picture] = await detectFigures(first, pageLines[0], [{ top: height, bottom: 0 }], layout);
@@ -283,7 +286,8 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
     }
   }
 
-  // pages kept as a picture: the whole page, cropped to its ink like a cover
+  // pages kept as a picture: the whole page, cropped to its ink like a cover,
+  // upright or turned sideways and cut into 2 or 3 parts
   for (const n of picturePages) {
     const page = await doc.getPage(n);
     const height = page.view[3] - page.view[1];
@@ -291,9 +295,12 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
     page.cleanup();
     onProgress({ stage: 'pictures', done: Math.min(++rendered, renders), total: renders });
     if (!picture) continue; // a blank page
-    const name = `img${images.length + 1}.png`;
-    images.push({ name, data: picture.data });
-    pageLines[n - 1] = [{ image: name, y: picture.top }];
+    const parts = pictureParts(n);
+    pageLines[n - 1] = (parts > 1 ? sidewaysParts(picture.crop, parts) : [picture.data]).map((data, i) => {
+      const name = `img${images.length + 1}.png`;
+      images.push({ name, data });
+      return { image: name, y: picture.top - i };
+    });
   }
 
   const startsLow = lowStartPages(pageLines, layoutLines, layout);

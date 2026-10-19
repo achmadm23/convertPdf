@@ -255,17 +255,19 @@ async function handleText(req, res, session, n) {
   res.end(JSON.stringify({ text: typed.text, pendingPages: session.improved.size }));
 }
 
-// POST /book/<id>/pages/<n>/picture: put the whole page in the book as a picture
-// instead of its text. DELETE: use its text again. Used the next time the book is rebuilt.
-function handlePicture(res, session, n, keep) {
+// POST /book/<id>/pages/<n>/picture[?parts=2|3]: put the whole page in the book as
+// a picture instead of its text, upright or turned sideways and cut into parts.
+// DELETE: use its text again. Used the next time the book is rebuilt.
+function handlePicture(res, session, n, keep, parts = 1) {
   const current = session.book?.ocr?.pages.get(n);
   if (!current) return sendError(res, 404, 'That page was not read with OCR.');
   if (session.busy) return sendError(res, 409, 'Busy updating the book. Try again in a moment.');
-  const { picture, ...reading } = current;
-  session.book.ocr.pages.set(n, keep ? { ...reading, picture: true } : reading);
+  const { picture, pictureParts, ...reading } = current;
+  const kept = keep ? { ...reading, picture: true, ...(parts > 1 && { pictureParts: parts }) } : reading;
+  session.book.ocr.pages.set(n, kept);
   session.improved.add(n);
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ picture: keep, pendingPages: session.improved.size }));
+  res.end(JSON.stringify({ picture: keep, parts: keep ? parts : 1, pendingPages: session.improved.size }));
 }
 
 // POST /book/<id>/rebuild: build the book again using improved page readings.
@@ -392,7 +394,9 @@ const server = http.createServer((req, res) => {
     } else if (req.method === 'POST' && match[5]) {
       handleText(req, res, session, Number(match[5])).catch(fail);
     } else if ((req.method === 'POST' || req.method === 'DELETE') && match[6]) {
-      handlePicture(res, session, Number(match[6]), req.method === 'POST');
+      const parts = Number(url.searchParams.get('parts')) || 1;
+      if (![1, 2, 3].includes(parts)) return sendError(res, 400, 'A page can be kept as 1, 2 or 3 pictures.');
+      handlePicture(res, session, Number(match[6]), req.method === 'POST', parts);
     } else {
       sendError(res, 404, 'Not found');
     }

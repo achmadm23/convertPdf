@@ -1,6 +1,6 @@
 # convertPdf — Business Requirements Document
 
-Date: 2026-10-19 · Product version: v1.2.0
+Date: 2026-10-19 · Product version: v1.2.1
 
 ## 1. Executive summary
 
@@ -253,6 +253,7 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 
 | Version | Date | What changed |
 | --- | --- | --- |
+| v1.2.1 | 2026-10-19 | A scanned page kept as a picture can be turned sideways and cut into 2 or 3 parts, each filling the screen |
 | v1.2.0 | 2026-10-19 | Website at achmadm23.github.io/convertPdf, converting in the browser and published by GitHub Actions (FR-38, FR-39) |
 | v1.1.2 | 2026-10-19 | The app shows its version beside its name (FR-37) |
 | v1.1.1 | 2026-10-19 | Machine-translated PDFs: pages read top to bottom, pictures in the right place, and text kept out of pictures (FR-35, FR-36) |

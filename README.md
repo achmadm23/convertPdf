@@ -24,7 +24,7 @@ The site is published from this repository by GitHub Pages: every push to `main`
 
 ## Download (Windows, no install)
 
-**[Download ConvertPdf.zip](https://github.com/achmadm23/convertPdf/releases/download/v1.2.0/ConvertPdf.zip)** (60 MB)
+**[Download ConvertPdf.zip](https://github.com/achmadm23/convertPdf/releases/download/v1.2.1/ConvertPdf.zip)** (60 MB)
 
 Unzip it and double-click `ConvertPdf.exe`. You don't need Node.js. See [Share it as one file](#share-it-as-one-file-convertpdfexe) for what happens when it runs.
 
@@ -55,7 +55,7 @@ npm install
 
 `npm install` fetches any packages that new versions need (OCR, for example, added `tesseract.js`). If the web app is running, stop it (Ctrl+C) and run `npm start` again so it uses the new code.
 
-If you use `ConvertPdf.exe`, [download the zip](https://github.com/achmadm23/convertPdf/releases/download/v1.2.0/ConvertPdf.zip) again instead.
+If you use `ConvertPdf.exe`, [download the zip](https://github.com/achmadm23/convertPdf/releases/download/v1.2.1/ConvertPdf.zip) again instead.
 
 ## Web app (upload, preview, download)
 
@@ -82,7 +82,7 @@ For scanned books, a **Scanned pages** tab shows each page as OCR reads it: the 
 - **Retry** reads the page again with other settings (higher resolution, black and white, the page as one block of text) and keeps the best reading if it's better than the first.
 - **Edit text** lets you correct the text or type it yourself, looking at the scan next to it. Leave an empty line between paragraphs. Your text is used instead of what OCR read, and the page stays editable.
 
-Pages read at 90% or lower also have **Keep as picture**, which puts the whole page in the book as a picture instead of its text: for a handwritten letter, a table, or a page OCR garbles. **Use text** undoes it. A first page kept as a picture becomes the book's cover. Tick **Only pages at 90% or lower** to see just the pages with these buttons.
+Pages read at 90% or lower also have **Keep as picture**, which puts the whole page in the book as a picture instead of its text: for a handwritten letter, a table, or a page OCR garbles. Choose **Whole page** to keep it upright, or **2 parts** or **3 parts** to have it turned on its side and cut into halves, or thirds that overlap a little, as in an XTC book: each part fills the screen, so the text is bigger. Turn your e-reader on its side to read them. **Use text** undoes it. A first page kept whole as a picture becomes the book's cover. Tick **Only pages at 90% or lower** to see just the pages with these buttons.
 
 Then click **Update the book** to use the changed pages. This takes under a minute, because the other pages aren't read again. Pages read below 30% are mostly pictures (a cover, for example) and have neither Retry nor Edit text.
 

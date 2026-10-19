@@ -154,16 +154,18 @@ async function setText(id, n, text) {
   return { text: typed.text, pendingPages: s.improved.size };
 }
 
-// Put a scanned page in the book as a picture (keep), or its text again.
-async function setPicture(id, n, keep) {
+// Put a scanned page in the book as a picture (keep), upright or turned sideways
+// and cut into 2 or 3 parts, or its text again.
+async function setPicture(id, n, keep, parts = 1) {
   const s = session(id);
   const current = s.book?.ocr?.pages.get(n);
   if (!current) throw new Error('That page was not read with OCR.');
   if (s.busy) throw new Error('Busy updating the book. Try again in a moment.');
-  const { picture, ...reading } = current;
-  s.book.ocr.pages.set(n, keep ? { ...reading, picture: true } : reading);
+  if (![1, 2, 3].includes(parts)) throw new Error('A page can be kept as 1, 2 or 3 pictures.');
+  const { picture, pictureParts, ...reading } = current;
+  s.book.ocr.pages.set(n, keep ? { ...reading, picture: true, ...(parts > 1 && { pictureParts: parts }) } : reading);
   s.improved.add(n);
-  return { picture: keep, pendingPages: s.improved.size };
+  return { picture: keep, parts: keep ? parts : 1, pendingPages: s.improved.size };
 }
 
 // Build the book again with the changed pages.

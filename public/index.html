@@ -208,7 +208,8 @@
     display: block; width: 100%; min-height: 240px; padding: 10px; resize: vertical;
     font: 14px/1.55 Georgia, 'Times New Roman', serif; background: var(--field); border: 1px solid var(--input); border-radius: 8px;
   }
-  .edit-buttons { display: flex; gap: 8px; margin-top: 8px; }
+  .edit-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .picture-choice { margin-bottom: 12px; }
 
   /* side panel */
   .side h2 { margin: 0; padding: 20px 20px 4px; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -482,7 +483,8 @@
       retry: (id, n) => json(`book/${id}/pages/${n}/retry`, { method: 'POST' }),
       setText: (id, n, text) =>
         json(`book/${id}/pages/${n}/text`, { method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: text }),
-      setPicture: (id, n, keep) => json(`book/${id}/pages/${n}/picture`, { method: keep ? 'POST' : 'DELETE' }),
+      setPicture: (id, n, keep, parts = 1) =>
+        json(`book/${id}/pages/${n}/picture${keep ? `?parts=${parts}` : ''}`, { method: keep ? 'POST' : 'DELETE' }),
       setCover: (id, file) =>
         json(`book/${id}/cover`, file ? { method: 'POST', headers: { 'Content-Type': file.type }, body: file } : { method: 'DELETE' }),
       epub: id => send(`book/${id}.epub`).then(res => res.arrayBuffer()),
@@ -867,15 +869,15 @@
     // the Retry and Edit text buttons. Pages whose text was typed in by hand stay
     // editable (and in the "only low pages" list), but aren't read again. Pages
     // read at or below offerPicture can be kept as a picture instead of their text.
-    function renderCard(n, { confidence, text, manual = false, picture = false }, note) {
+    function renderCard(n, { confidence, text, manual = false, picture = false, pictureParts = 1 }, note) {
       const p = pages.get(n);
-      Object.assign(p, { confidence, text, manual, picture });
+      Object.assign(p, { confidence, text, manual, picture, pictureParts });
       const card = p.card;
       card.classList.toggle('low', !picture && (manual || isLow(confidence)));
       card.classList.toggle('checkable', manual || picture || canBePicture(confidence));
       card.classList.toggle('as-picture', picture);
       const badge =
-        picture ? '<span class="conf kept">kept as picture</span>'
+        picture ? `<span class="conf kept">kept as picture${pictureParts > 1 ? ` · ${pictureParts} parts` : ''}</span>`
         : manual ? '<span class="conf typed">typed by hand</span>'
         : confidence === null ? '<span class="conf none">no text</span>'
         : isPicture(confidence) ? `<span class="conf none">mostly picture (${confidence}%)</span>`
@@ -897,16 +899,18 @@
         if (isLow(confidence) && !manual) addButton('retry', 'Retry', 'Read this page again with other settings', () => retryPage(n));
         if (manual || isLow(confidence)) addButton('edit', 'Edit text', 'Type or correct the text of this page', () => editPage(n));
         if (manual || canBePicture(confidence)) {
-          addButton('keep-picture', 'Keep as picture', 'Put the whole page in the book as a picture instead of its text', () => keepAsPicture(n, true));
+          addButton('keep-picture', 'Keep as picture', 'Put the whole page in the book as a picture instead of its text', () => choosePicture(n));
         }
       }
+      // close an open text box or picture choice first: each has a note of its own
+      card.querySelector('.scan-edit')?.remove();
+      card.querySelector('.picture-choice')?.remove();
       const noteEl = card.querySelector('.scan-note');
       noteEl.hidden = !note;
       if (note) {
         noteEl.textContent = note.text;
         noteEl.className = 'scan-note' + (note.good ? ' good' : '');
       }
-      card.querySelector('.scan-edit')?.remove();
       const pre = card.querySelector('.scan-text');
       pre.hidden = false;
       pre.textContent = text || 'No text found on this page.';
@@ -956,21 +960,50 @@
     }
 
     // Put the page in the book as a picture (keep = true), or its text again.
-    async function keepAsPicture(n, keep) {
+    // Ask how to keep the page as a picture: whole and upright, or turned on its
+    // side and cut into 2 or 3 parts that each fill the screen, as in an XTC book.
+    function choosePicture(n) {
+      const card = pages.get(n).card;
+      if (card.querySelector('.picture-choice')) return;
+      for (const b of card.querySelectorAll('.page-action')) b.hidden = true;
+      const box = document.createElement('div');
+      box.className = 'picture-choice';
+      box.innerHTML = `<p class="scan-note">Keep the page as a picture, whole, or turned on its side and cut into parts that each fill the screen, so the text is bigger. Turn the e-reader on its side to read the parts.</p>
+        <div class="edit-buttons">
+          <button type="button" class="btn primary" data-parts="1">Whole page</button>
+          <button type="button" class="btn" data-parts="2">2 parts</button>
+          <button type="button" class="btn" data-parts="3">3 parts</button>
+          <button type="button" class="btn cancel">Cancel</button>
+        </div>`;
+      card.querySelector('.scan-head').after(box);
+      for (const b of box.querySelectorAll('[data-parts]')) {
+        b.addEventListener('click', () => keepAsPicture(n, true, Number(b.dataset.parts), b));
+      }
+      box.querySelector('.cancel').addEventListener('click', () => {
+        renderCard(n, pages.get(n));
+        updateCounts();
+      });
+      box.querySelector('[data-parts="1"]').focus();
+    }
+
+    // Put the page in the book as a picture (keep = true), in `parts` parts, or its text again.
+    async function keepAsPicture(n, keep, parts = 1, button = null) {
       const p = pages.get(n);
-      const button = p.card.querySelector(keep ? '.keep-picture' : '.as-text');
+      button = button || p.card.querySelector(keep ? '.keep-picture' : '.as-text');
       busy = true;
       updateCounts();
       button.innerHTML = '<span class="spinner" aria-hidden="true"></span>Saving…';
       try {
-        const r = await api.setPicture(sessionId, n, keep);
+        const r = await api.setPicture(sessionId, n, keep, parts);
         pending = r.pendingPages;
         busy = false;
-        renderCard(n, { ...p, picture: r.picture }, {
+        renderCard(n, { ...p, picture: r.picture, pictureParts: r.parts || 1 }, {
           good: true,
-          text: r.picture
-            ? 'The whole page will be a picture in the book. Update the book to use it.'
-            : "The page's text will be used again. Update the book to use it.",
+          text: !r.picture
+            ? "The page's text will be used again. Update the book to use it."
+            : r.parts > 1
+              ? `The page will be ${r.parts} sideways pictures in the book. Update the book to use them.`
+              : 'The whole page will be a picture in the book. Update the book to use it.',
         });
       } catch (err) {
         busy = false;
