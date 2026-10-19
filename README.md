@@ -10,6 +10,7 @@ Convert PDFs into EPUB e-books. It works on normal PDFs and on scanned books, wi
 - shows every picture, the cover and pages kept as a picture on a page of its own that it fills, in the 4 shades of gray of an e-ink screen, like a page of an XTC book (480 x 800, the Xteink format)
 - embeds a font of your choice, or leaves the font to the e-reader
 - reads scanned pages with built-in OCR (English and Indonesian), with nothing extra to install
+- can also make an XTC book for Xteink X3, X4 and X4 Pro readers, with every page drawn for the reader's screen (see [Xteink books](#xteink-books-xtc))
 
 It runs entirely on your computer. Your files are never uploaded anywhere.
 
@@ -56,10 +57,10 @@ npm start
 
 Then open **http://localhost:3000** and:
 
-1. **Choose a PDF**, or drag it onto the page.
+1. **Choose a PDF**, or drag it onto the page, and the **Output**: an EPUB e-book, or an XTC book for an Xteink reader ([Xteink books](#xteink-books-xtc)).
 2. Optionally type a **title** and **author**. If you leave them blank, they're taken from the PDF.
 3. Optionally choose a **cover** picture (JPEG, PNG or WebP, up to 20 MB), or drop it on the Cover box. It replaces the cover taken from the PDF and is shown in the e-reader's 4 shades of gray.
-4. Pick a **font**.
+4. Pick a **font**. For an XTC book, pick the device and how pages are drawn instead.
 5. Click **Convert**. The progress bar shows what's happening, for example "Reading scanned pages: 57 of 244" or "Finding pictures: page 57 of 121", and about how long is left.
 6. **Preview** the book on the right. Turn pages with **‹ Prev / Next ›** or the arrow keys, and jump to a chapter from the contents list.
 7. Change the font or the cover as often as you like. The preview updates in about a second, without converting again. **Remove** goes back to the PDF's own cover.
@@ -122,6 +123,33 @@ node index.js "Homo Deus.pdf"
 node index.js book.pdf book.epub --title "My Book" --author "Jane Doe" --font literata --cover cover.jpg
 ```
 
+For an Xteink reader, add `--format xtc` (black and white) or `--format xtch` (4 shades of gray). The book is saved as `input.xtc` or `input.xtch`.
+
+```
+node index.js input.pdf [output.xtc] --format xtc|xtch [--device x4|x4-pro|x3] [--orientation landscape|portrait]
+  [--split overlap|half|none] [--dither atkinson|floyd|sierra-lite|ordered|none] [--contrast 0-8]
+  [--crop percent[,percent]] [--no-cover-page] [--flip] [--title ...] [--author ...] [--cover image]
+```
+
+Without options it makes a black and white book for the X4, with pages turned sideways in overlapping parts and Atkinson dithering. `--crop 10,5` trims 10% off the left and right of every page and 5% off the top and bottom. `--no-cover-page` treats the first page like any other, and `--flip` turns sideways pages the other way.
+
+```
+node index.js manga.pdf --format xtch --device x3 --orientation portrait
+```
+
+## Xteink books (XTC)
+
+For Xteink readers (X3, X4 and X4 Pro), convertPdf can also make an XTC book: every PDF page drawn ready for the reader's screen, the way [XTC.js](https://xtcjs.app/pdf) does. Choose **Output: XTC for Xteink X3, X4 and X4 Pro** in the web app, or use `--format xtc` on the command line. Pages keep their layout exactly as in the PDF, so this suits manga, comics, scans and PDFs with tables, columns or formulas. The text isn't rebuilt or read with OCR.
+
+| Setting | Choices |
+|---|---|
+| Device | Xteink X4 and X4 Pro (480 x 800), Xteink X3 (528 x 792) |
+| Shades | Black and white (`.xtc`, faster page turns) or 4 shades of gray (`.xtch`, better for photos and shading) |
+| Pages | **Sideways** (the default): each page is turned on its side so its text is bigger, and cut into 3 or more overlapping parts, 2 halves, or not cut. **Upright**: each page whole. |
+| More settings | Dithering (Atkinson, Floyd-Steinberg, Sierra Lite, Ordered or none), contrast, trimming wide margins, whether the first page is the cover (shown whole and upright), and which way sideways pages turn |
+
+The PDF's bookmarks become the book's chapters, and its title and author are kept. A cover picture of your own replaces the first page when that is the cover, or comes before it otherwise. The preview shows each page as the reader will.
+
 ## Fonts
 
 | `--font` id | Font | Style |
@@ -151,6 +179,7 @@ To add a language, install its data (for example `npm install @tesseract.js-data
 - **Normal PDFs:** a few seconds.
 - **Scanned books with a text layer** take longer when they have pictures, because pages that might hold a picture have to be rendered. A 540-page scanned book with 56 pictures takes about 2 minutes.
 - **Scanned books without a text layer** need OCR, about half a second per page on a 12-thread computer, so a 244-page book takes about 2 minutes. It uses up to 8 CPU cores and about 150 MB of memory per core.
+- **XTC books:** about a fifth of a second per PDF page when pages are cut into sideways parts, less for upright pages, so a 100-page PDF takes about 20 seconds.
 
 ## Limitations
 
@@ -169,7 +198,14 @@ To add a language, install its data (for example `npm install @tesseract.js-data
 | `eink.js` | Turns pictures into full-screen e-ink pages (480 x 800, 4 shades of gray, dithered). |
 | `ocr.js` | Reads scanned pages with OCR (Tesseract). |
 | `fonts.js` | Font list and embedding. |
+| `xtc.js` | Draws PDF pages for an Xteink screen (fit or split, contrast, dithering) and makes the XTC book. |
+| `xtcfile.js` | The XTC/XTCH file format: page encoding (XTG, XTH) and the book file. |
+| `pdf.js` | Opens a PDF with pdf.js. |
 | `server.js` | Local web server for the web app. |
-| `public/index.html` | The web app page (upload, progress, preview, font choice). |
+| `public/index.html` | The web app page (upload, progress, preview, font and XTC settings). |
 | `build/build-exe.js` | Builds `ConvertPdf.exe` (`npm run build:exe`). |
 | `build/launcher.js` | Start-up code inside the exe: unpacks the app and starts the server. |
+
+## Credits
+
+The XTC output follows [XTC.js](https://github.com/varo6/xtcjs) (MIT License) for its image steps and file layout, checked against the XTC reader of the [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) firmware.

@@ -109,4 +109,4 @@ function screenImage(source) {
   return encodePng(dither(gray, width, height), width, height);
 }
 
-module.exports = { screenImage };
+module.exports = { screenImage, encodePng };

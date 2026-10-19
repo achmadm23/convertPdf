@@ -8,6 +8,8 @@ const JSZip = require('jszip');
 const { measureLayout, findGaps, detectFigures, renderCover, imageCover } = require('./figures');
 const { FONTS, findFont, fontFaces, fontFaceCss, fontStack } = require('./fonts');
 const { recognizePages, finishPages, LANGUAGES } = require('./ocr');
+const { openPdf } = require('./pdf');
+const { DEVICES, DITHERING, convertPdfPages, coverPage, bookPages, buildXtc, extensionFor } = require('./xtc');
 
 function parseArgs(argv) {
   const opts = { positional: [] };
@@ -17,6 +19,16 @@ function parseArgs(argv) {
     else if (argv[i] === '--font') opts.font = argv[++i];
     else if (argv[i] === '--cover') opts.cover = argv[++i];
     else if (argv[i] === '--ocr-lang') opts.ocrLanguage = argv[++i];
+    // XTC (Xteink) output
+    else if (argv[i] === '--format') opts.format = argv[++i];
+    else if (argv[i] === '--device') opts.device = argv[++i];
+    else if (argv[i] === '--orientation') opts.orientation = argv[++i];
+    else if (argv[i] === '--split') opts.split = argv[++i];
+    else if (argv[i] === '--dither') opts.dithering = argv[++i];
+    else if (argv[i] === '--contrast') opts.contrast = argv[++i];
+    else if (argv[i] === '--crop') [opts.cropX, opts.cropY = opts.cropX] = argv[++i].split(',');
+    else if (argv[i] === '--no-cover-page') opts.firstPageIsCover = false;
+    else if (argv[i] === '--flip') opts.flip = true;
     else opts.positional.push(argv[i]);
   }
   return opts;
@@ -142,21 +154,6 @@ function linesToBlocks(lines, bodySize) {
   }
   flush();
   return blocks;
-}
-
-// Open PDF bytes as a pdf.js document.
-async function openPdf(buffer) {
-  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  // decoders for scanned images (JBIG2, JPEG 2000) and fonts, needed to render pages
-  const pdfjsRoot = path.dirname(require.resolve('pdfjs-dist/package.json'));
-  return pdfjs.getDocument({
-    data: new Uint8Array(buffer),
-    useSystemFonts: true,
-    verbosity: 0,
-    wasmUrl: path.join(pdfjsRoot, 'wasm') + '/',
-    standardFontDataUrl: path.join(pdfjsRoot, 'standard_fonts') + '/',
-    cMapUrl: path.join(pdfjsRoot, 'cmaps') + '/',
-  }).promise;
 }
 
 // `onProgress({ stage, done, total })` is called as pages are processed.
@@ -611,8 +608,17 @@ async function main() {
       'OCR languages (for scanned pages; detected when not given): ' +
         Object.entries(LANGUAGES).map(([code, name]) => `${code} (${name})`).join(', ')
     );
+    console.error(
+      '\nXteink (XTC) output: node index.js input.pdf [output.xtc] --format xtc|xtch [--device x4|x4-pro|x3]\n' +
+        '  [--orientation landscape|portrait] [--split overlap|half|none] [--dither ' + DITHERING.join('|') + ']\n' +
+        '  [--contrast 0-8] [--crop percent[,percent]] [--no-cover-page] [--flip] [--title ...] [--author ...] [--cover image]'
+    );
     process.exit(1);
   }
+  if (opts.format && !['epub', 'xtc', 'xtch'].includes(opts.format)) {
+    throw new Error(`Unknown format "${opts.format}". Available: epub, xtc, xtch.`);
+  }
+  if (opts.format === 'xtc' || opts.format === 'xtch') return writeXtc(input, output, opts);
   const outFile = output || input.replace(/\.pdf$/i, '') + '.epub';
 
   const { epub, pages, paragraphs, chapters, images } = await convertPdfToEpub(fs.readFileSync(input), {
@@ -629,6 +635,30 @@ async function main() {
   });
   fs.writeFileSync(outFile, epub);
   console.log(`Wrote ${outFile} (${pages} pages, ${chapters} chapters, ${paragraphs} paragraphs, ${images} images)`);
+}
+
+// The PDF's pages as an XTC (black and white) or XTCH (4 grays) book for an Xteink reader.
+async function writeXtc(input, output, opts) {
+  const { title, author, format, cover: coverFile, ...settings } = opts;
+  // read the cover first, so a missing file fails before the slow part
+  const coverData = coverFile && fs.readFileSync(coverFile);
+  const book = await convertPdfPages(fs.readFileSync(input), {
+    ...settings,
+    grays: format === 'xtch',
+    title,
+    author,
+    name: path.basename(input, path.extname(input)),
+    onProgress: ({ done, total }) => {
+      if (process.stderr.isTTY) process.stderr.write(`\rPage ${done} of ${total}${done === total ? '\n' : ''}`);
+    },
+  });
+  const cover = coverData && (await coverPage(coverData, book));
+  const outFile = output || input.replace(/\.pdf$/i, '') + extensionFor(book);
+  fs.writeFileSync(outFile, buildXtc(book, cover));
+  console.log(
+    `Wrote ${outFile} for the ${DEVICES[book.options.device].name} ` +
+      `(${bookPages(book, cover).pages.length} screens from ${book.stats.sourcePages} PDF pages, ${book.chapters.length} chapters)`
+  );
 }
 
 module.exports = { convertPdfToEpub, analyzePdf, buildEpub, extractPdf, openPdf, cleanPages, buildChapters };

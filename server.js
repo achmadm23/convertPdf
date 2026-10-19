@@ -7,6 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { analyzePdf, buildEpub, openPdf } = require('./index');
 const { imageCover } = require('./figures');
+const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('./xtc');
 const { retryPage, manualReading } = require('./ocr');
 const { FONTS, findFont, fontFaces, fontFaceCss } = require('./fonts');
 
@@ -28,12 +29,16 @@ const fontFiles = new Map(FONTS.flatMap(f => fontFaces(f).map(face => [face.file
 
 // One per conversion: the PDF and options (to rebuild the book), previews of its
 // scanned pages, the book once it's converted, and a cover picture if the user
-// chose one. Only the last few are kept.
+// chose one. Only the last few are kept. An XTC conversion (for Xteink readers)
+// keeps its rendered pages in `xtc` and its cover page in `xtcCover` instead.
 const sessions = new Map();
 
 function newSession(pdf, options) {
   const id = crypto.randomUUID();
-  const session = { id, pdf, options, thumbnails: new Map(), book: null, cover: null, busy: false, improved: new Set() };
+  const session = {
+    id, pdf, options, thumbnails: new Map(), book: null, cover: null, xtc: null, xtcCover: null,
+    busy: false, improved: new Set(),
+  };
   sessions.set(id, session);
   while (sessions.size > MAX_BOOKS) sessions.delete(sessions.keys().next().value);
   return session;
@@ -111,6 +116,26 @@ function bookSummary(session) {
   };
 }
 
+function xtcSummary(session) {
+  const book = session.xtc;
+  const { pages, chapters } = bookPages(book, session.xtcCover);
+  const device = DEVICES[book.options.device];
+  return {
+    id: session.id,
+    format: 'xtc',
+    title: book.title,
+    author: book.author,
+    fileName: session.options.name + extensionFor(book),
+    device: device.name,
+    width: device.width,
+    height: device.height,
+    grays: book.options.grays,
+    pages: pages.length,
+    sourcePages: book.stats.sourcePages,
+    chapters: chapters.map(ch => ({ title: ch.title, page: ch.start })),
+  };
+}
+
 // POST /convert: read the PDF (the slow part) and keep the result. The stream
 // starts with {session} (its id, for page previews), then sends {page} for each
 // scanned page as OCR reads it.
@@ -126,6 +151,24 @@ async function handleConvert(req, res) {
   const fileName = header(req, 'x-filename') || 'book.pdf';
   const name = path.basename(fileName, path.extname(fileName));
   const session = newSession(pdf, { title: header(req, 'x-title'), author: header(req, 'x-author'), name });
+  if (header(req, 'x-format') === 'xtc') {
+    let settings;
+    try {
+      settings = JSON.parse(header(req, 'x-xtc') || '{}');
+    } catch {
+      return sendError(res, 400, 'The XTC settings could not be read.');
+    }
+    return streamJob(res, async (send, onProgress) => {
+      send({ session: { id: session.id } });
+      const started = Date.now();
+      session.xtc = await convertPdfPages(pdf, { ...settings, ...session.options, onProgress });
+      console.log(
+        `Converted ${fileName} to XTC: ${session.xtc.stats.pages} screens from ` +
+          `${session.xtc.stats.sourcePages} pages in ${Math.round((Date.now() - started) / 1000)} s`
+      );
+      return xtcSummary(session);
+    });
+  }
   await streamJob(res, async (send, onProgress) => {
     send({
       session: { id: session.id, lowConfidence: LOW_CONFIDENCE, pictureBelow: PICTURE_BELOW, offerPicture: OFFER_PICTURE },
@@ -235,18 +278,41 @@ async function handleRebuild(res, session) {
 // POST /book/<id>/cover: use a picture (the request body) as the book's cover
 // instead of the one found in the PDF. DELETE: go back to the PDF's cover.
 // Kept with the session, so it stays when the book is rebuilt.
+// An XTC book gets the picture as a page drawn for its reader's screen, and the
+// answer has the book's new summary (a cover can add a page).
 async function handleCover(req, res, session, use) {
   if (use) {
     try {
-      session.cover = await imageCover(await readBody(req, MAX_COVER_BYTES));
+      const data = await readBody(req, MAX_COVER_BYTES);
+      if (session.xtc) session.xtcCover = await coverPage(data, session.xtc);
+      else session.cover = await imageCover(data);
     } catch (err) {
       return sendError(res, 400, err.message);
     }
   } else {
-    session.cover = null;
+    session.cover = session.xtcCover = null;
   }
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ cover: use }));
+  res.end(JSON.stringify({ cover: use, book: session.xtc ? xtcSummary(session) : undefined }));
+}
+
+// GET /book/<id>.xtc (or .xtch)[?download=1]: the XTC book for an Xteink reader.
+function handleXtc(res, session) {
+  const file = buildXtc(session.xtc, session.xtcCover);
+  res.writeHead(200, {
+    'Content-Type': 'application/octet-stream',
+    'Content-Length': file.length,
+    'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(xtcSummary(session).fileName)}`,
+  });
+  res.end(file);
+}
+
+// GET /book/<id>/screens/<n>.png: page n of an XTC book as the reader shows it.
+function handleScreen(res, session, n) {
+  const png = pagePng(session.xtc, n, session.xtcCover);
+  if (!png) return sendError(res, 404, 'No such page.');
+  res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache' });
+  res.end(png);
 }
 
 // GET /book/<id>.epub?font=<id>[&download=1]: package the book with a font.
@@ -278,6 +344,16 @@ const server = http.createServer((req, res) => {
       console.error(err);
       sendError(res, 500, 'Could not build the EPUB.');
     });
+  } else if (req.method === 'GET' && (match = route.match(/^\/book\/([\w-]+)(?:\.xtch?|\/screens\/(\d+)\.png)$/))) {
+    const session = sessions.get(match[1]);
+    if (!session?.xtc) return sendError(res, 404, 'This book has expired. Please convert the PDF again.');
+    try {
+      if (match[2]) handleScreen(res, session, Number(match[2]));
+      else handleXtc(res, session);
+    } catch (err) {
+      console.error(err);
+      sendError(res, 500, err.message || 'Could not build the XTC file.');
+    }
   } else if ((req.method === 'POST' || req.method === 'DELETE') && (match = route.match(/^\/book\/([\w-]+)\/cover$/))) {
     const session = sessions.get(match[1]);
     if (!session) return sendError(res, 404, 'This book has expired. Please convert the PDF again.');

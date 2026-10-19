@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PDF to EPUB</title>
+<title>PDF to EPUB or XTC</title>
 <link rel="stylesheet" href="/fonts.css">
 <style>
   :root {
@@ -64,6 +64,15 @@
     width: auto; margin: 0; padding: 5px 10px; font-weight: 500; font-size: 0.82rem;
     background: var(--card); color: var(--text); border: 1px solid var(--border);
   }
+  .field-note { display: block; margin-top: 4px; font-size: 0.8rem; color: var(--muted); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .xtc-more summary { margin-top: 14px; font-size: 0.88rem; color: var(--muted); cursor: pointer; }
+  .xtc-more summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  label.check { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; font-size: 0.88rem; cursor: pointer; }
+  label.check input { margin: 3px 0 0; accent-color: var(--accent); }
+  #screenView { position: absolute; inset: 12px 16px; display: flex; align-items: center; justify-content: center; }
+  #screenView img { max-width: 100%; max-height: 100%; box-sizing: border-box; background: #fff; border: 1px solid #cfc8bc; }
+  .toolbar .page-number { font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .font-sample {
     margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--tint);
     font-size: 1.05rem; line-height: 1.4; color: var(--text);
@@ -179,14 +188,21 @@
 <body>
 <div class="wrap">
   <aside class="card">
-    <h1>PDF to EPUB</h1>
-    <p class="sub">Upload a PDF (scanned books too), preview it, and download it as an e-book.</p>
+    <h1>PDF to EPUB or XTC</h1>
+    <p class="sub">Upload a PDF (scanned books too), preview it, and download it as an e-book, or as an XTC book for Xteink readers.</p>
 
     <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a PDF file">
       <strong>Choose a PDF or drop it here</strong>
       <span id="fileName">No file selected</span>
     </div>
     <input type="file" id="file" accept="application/pdf,.pdf">
+
+    <label class="field">Output
+      <select id="format">
+        <option value="epub">EPUB e-book (any e-reader)</option>
+        <option value="xtc">XTC for Xteink X3, X4 and X4 Pro</option>
+      </select>
+    </label>
 
     <label class="field">Title (optional)
       <input id="title" placeholder="Taken from the PDF if left blank">
@@ -209,10 +225,75 @@
     </div>
     <input type="file" id="coverFile" accept="image/jpeg,image/png,image/webp,image/gif">
 
-    <label class="field">Font
-      <select id="fonts"></select>
-    </label>
-    <div class="font-sample" id="fontSample" aria-hidden="true"></div>
+    <div id="epubSettings">
+      <label class="field">Font
+        <select id="fonts"></select>
+      </label>
+      <div class="font-sample" id="fontSample" aria-hidden="true"></div>
+    </div>
+
+    <!-- XTC: every PDF page drawn as a picture for the reader's screen -->
+    <div id="xtcSettings" hidden>
+      <label class="field">Device
+        <select id="xtcDevice">
+          <option value="x4">Xteink X4 (480 × 800)</option>
+          <option value="x4-pro">Xteink X4 Pro (480 × 800)</option>
+          <option value="x3">Xteink X3 (528 × 792)</option>
+        </select>
+      </label>
+      <label class="field">Shades
+        <select id="xtcGrays">
+          <option value="0">Black and white (.xtc)</option>
+          <option value="1">4 shades of gray (.xtch)</option>
+        </select>
+        <span class="field-note">4 grays shows photos and shading better. Black and white turns pages faster.</span>
+      </label>
+      <label class="field">Pages
+        <select id="xtcOrientation">
+          <option value="landscape">Sideways: bigger text, each page in parts</option>
+          <option value="portrait">Upright: each page whole</option>
+        </select>
+      </label>
+      <label class="field" id="xtcSplitField">Cut each page into
+        <select id="xtcSplit">
+          <option value="overlap">3 or more overlapping parts</option>
+          <option value="half">2 halves</option>
+          <option value="none">Don't cut: the whole page sideways</option>
+        </select>
+      </label>
+      <details class="xtc-more">
+        <summary>More settings</summary>
+        <label class="field">Dithering
+          <select id="xtcDithering">
+            <option value="atkinson">Atkinson (lighter, good for text)</option>
+            <option value="floyd">Floyd-Steinberg</option>
+            <option value="sierra-lite">Sierra Lite</option>
+            <option value="ordered">Ordered (patterned)</option>
+            <option value="none">None</option>
+          </select>
+        </label>
+        <label class="field">Contrast
+          <select id="xtcContrast">
+            <option value="0">None</option>
+            <option value="2">Light</option>
+            <option value="4">Medium</option>
+            <option value="6">Strong</option>
+            <option value="8">Maximum</option>
+          </select>
+        </label>
+        <div class="field-row">
+          <label class="field">Trim left and right
+            <select id="xtcCropX"><option>0</option><option>5</option><option>10</option><option>15</option><option>20</option></select>
+          </label>
+          <label class="field">Trim top and bottom
+            <select id="xtcCropY"><option>0</option><option>5</option><option>10</option><option>15</option><option>20</option></select>
+          </label>
+        </div>
+        <span class="field-note">Percent of the page cut off each side, for wide margins.</span>
+        <label class="check"><input type="checkbox" id="xtcCoverPage" checked><span>First page is the cover: show it whole and upright</span></label>
+        <label class="check"><input type="checkbox" id="xtcFlip"><span>Turn sideways pages the other way</span></label>
+      </details>
+    </div>
 
     <button id="convert" disabled>Convert</button>
     <div class="progress" id="progress" hidden>
@@ -236,6 +317,7 @@
     <div class="toolbar" id="bookToolbar">
       <select id="toc" disabled aria-label="Go to chapter"><option>Contents</option></select>
       <button id="prev" disabled aria-label="Previous page">‹ Prev</button>
+      <span class="page-number" id="pageNumber" hidden></span>
       <button id="next" disabled aria-label="Next page">Next ›</button>
     </div>
     <div class="stage">
@@ -244,6 +326,7 @@
           <div><b>Preview</b>Convert a PDF and the book will appear here.</div>
         </div>
         <div id="viewer"></div>
+        <div id="screenView" hidden><img id="screenImage" alt=""></div>
       </div>
       <div class="scans" id="scans" role="tabpanel" aria-labelledby="tabScans" hidden>
         <div class="scans-head">
@@ -315,11 +398,60 @@
     font = id;
     try { localStorage.setItem('font', id); } catch {}
     showFontSample();
-    if (bookId) {
+    if (bookId && !isXtc()) {
       updateDownload();
       openPreview(true);
     }
   }
+
+  // ---------- output: EPUB, or XTC for Xteink readers ----------
+  // The choice and the XTC settings are remembered for next time. They're used
+  // by the next conversion; the book already converted keeps its own.
+  const XTC_FIELDS = {
+    device: 'xtcDevice', grays: 'xtcGrays', orientation: 'xtcOrientation', split: 'xtcSplit',
+    dithering: 'xtcDithering', contrast: 'xtcContrast', cropX: 'xtcCropX', cropY: 'xtcCropY',
+    firstPageIsCover: 'xtcCoverPage', flip: 'xtcFlip',
+  };
+  const isXtc = () => bookMeta && bookMeta.format === 'xtc'; // the converted book
+
+  function xtcSettings() {
+    const settings = {};
+    for (const [key, id] of Object.entries(XTC_FIELDS)) {
+      const el = $(id);
+      settings[key] = el.type === 'checkbox' ? el.checked : el.value;
+    }
+    settings.grays = settings.grays === '1';
+    return settings;
+  }
+
+  function showOutput() {
+    const xtc = $('format').value === 'xtc';
+    $('epubSettings').hidden = xtc;
+    $('xtcSettings').hidden = !xtc;
+    $('xtcSplitField').hidden = $('xtcOrientation').value !== 'landscape';
+  }
+
+  function saveOutput() {
+    showOutput();
+    try {
+      localStorage.setItem('format', $('format').value);
+      localStorage.setItem('xtc', JSON.stringify({ ...xtcSettings(), grays: $('xtcGrays').value }));
+    } catch {}
+  }
+
+  try {
+    $('format').value = localStorage.getItem('format') === 'xtc' ? 'xtc' : 'epub';
+    const saved = JSON.parse(localStorage.getItem('xtc') || '{}');
+    for (const [key, id] of Object.entries(XTC_FIELDS)) {
+      const el = $(id);
+      if (!(key in saved)) continue;
+      if (el.type === 'checkbox') el.checked = !!saved[key];
+      else if ([...el.options].some(o => o.value === String(saved[key]))) el.value = String(saved[key]);
+    }
+  } catch {}
+  showOutput();
+  $('format').addEventListener('change', saveOutput);
+  $('xtcSettings').addEventListener('change', saveOutput);
 
   // ---------- file choice ----------
   function setFile(f) {
@@ -383,12 +515,19 @@
     else if (f) showStatus('The cover will be used when the book is converted.');
   }
 
-  // Give the converted book the chosen cover, or its own cover again.
+  // Give the converted book the chosen cover, or its own cover again. An XTC
+  // book answers with its new summary, as a cover can add a page.
   async function sendCover() {
     const res = await fetch(`/book/${bookId}/cover`, coverFile
       ? { method: 'POST', headers: { 'Content-Type': coverFile.type }, body: coverFile }
       : { method: 'DELETE' });
     if (!res.ok) throw new Error(await res.text());
+    const r = await res.json();
+    if (r.book) {
+      bookMeta = r.book;
+      showBookInfo();
+    }
+    screenVersion++;
   }
 
   async function applyCover() {
@@ -436,6 +575,10 @@
     const author = $('author').value.trim();
     if (title) headers['X-Title'] = encodeURIComponent(title);
     if (author) headers['X-Author'] = encodeURIComponent(author);
+    if ($('format').value === 'xtc') {
+      headers['X-Format'] = 'xtc';
+      headers['X-Xtc'] = encodeURIComponent(JSON.stringify(xtcSettings()));
+    }
 
     scans.reset();
     try {
@@ -533,6 +676,14 @@
   }
 
   function showBookInfo() {
+    if (isXtc()) {
+      const m = bookMeta;
+      bookInfo.textContent =
+        `${m.title}${m.author ? ` · ${m.author}` : ''} · ${m.device}, ${m.grays ? '4 grays' : 'black and white'} · ` +
+        `${m.pages} pages from ${m.sourcePages} PDF pages, ${m.chapters.length} chapters`;
+      bookInfo.hidden = false;
+      return;
+    }
     const scanned = bookMeta.scannedPages ? ` · ${bookMeta.scannedPages} scanned pages read with OCR` : '';
     bookInfo.textContent =
       `${bookMeta.title} · ${bookMeta.author} · ${bookMeta.pages} pages, ` +
@@ -838,6 +989,7 @@
         text: (d, t) => (t ? `Finding pictures: page ${d} of ${t}` : 'Finding pictures…'),
       },
       finishing: { from: 98, to: 99, text: () => 'Building chapters…' },
+      xtc: { from: 3, to: 99, text: (d, t) => (t ? `Drawing pages for the reader: ${d} of ${t}` : 'Reading the PDF…') },
       done: { from: 100, to: 100, text: () => 'Done' },
     };
     let percent = 0;
@@ -857,7 +1009,7 @@
       return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
     };
     const estimate = (stage, done, total) => {
-      if (stage !== 'ocr' && stage !== 'pictures') return;
+      if (stage !== 'ocr' && stage !== 'pictures' && stage !== 'xtc') return;
       const now = Date.now();
       if (!rate || rate.stage !== stage || done < rate.done) {
         if (done > 0) rate = { stage, at: now, done };
@@ -897,7 +1049,7 @@
         if (stage === 'ocr') stages.pictures.from = stages.ocr.to;
         const s = stages[stage];
         if (!s) return;
-        const counted = ['upload', 'text', 'ocr', 'pictures'];
+        const counted = ['upload', 'text', 'ocr', 'pictures', 'xtc'];
         const share = counted.includes(stage) ? (total ? done / total : 0) : 0;
         percent = Math.max(percent, s.from + (s.to - s.from) * share); // never moves backwards
         label.textContent = s.text(done, total);
@@ -914,7 +1066,9 @@
   function updateDownload() {
     const ready = bookId && !converting;
     if (ready) {
-      download.href = `/book/${bookId}.epub?font=${encodeURIComponent(font)}&download=1`;
+      download.href = isXtc()
+        ? `/book/${bookId}.xtc?download=1`
+        : `/book/${bookId}.epub?font=${encodeURIComponent(font)}&download=1`;
       download.textContent = `Download ${bookMeta.fileName}`;
     } else {
       download.removeAttribute('href');
@@ -936,6 +1090,10 @@
     }
     previewStale = false;
     const token = ++previewToken;
+    if (isXtc()) return showScreens(keepPlace);
+    $('screenView').hidden = true;
+    $('pageNumber').hidden = true;
+    viewer.hidden = false;
     const loc = keepPlace && rendition && rendition.currentLocation();
     const place = loc && loc.start ? { cfi: loc.start.cfi, href: loc.start.href } : null;
     if (keepPlace) showStatus('Updating preview…', { busy: true });
@@ -964,6 +1122,39 @@
     fillToc(await epub.loaded.navigation);
     prevBtn.disabled = nextBtn.disabled = toc.disabled = false;
     if (keepPlace) showStatus('Preview updated.');
+  }
+
+  // An XTC book is shown a page at a time, as pictures of the reader's screen.
+  let screen = 1;
+  let screenVersion = 0; // changes with the cover, so pages aren't taken from the browser's cache
+
+  function showScreens(keepPlace) {
+    if (epub) epub.destroy();
+    epub = rendition = null;
+    viewer.innerHTML = '';
+    viewer.hidden = true;
+    placeholder.hidden = true;
+    $('screenView').hidden = false;
+    $('pageNumber').hidden = false;
+    if (!keepPlace) screen = 1;
+    toc.innerHTML = '';
+    for (const ch of bookMeta.chapters) toc.append(new Option(ch.title, ch.page));
+    if (!bookMeta.chapters.length) toc.append(new Option('No chapters in this PDF'));
+    toc.disabled = !bookMeta.chapters.length;
+    goToScreen(screen);
+    if (keepPlace) showStatus('Preview updated.');
+  }
+
+  function goToScreen(n) {
+    screen = Math.min(Math.max(1, n), bookMeta.pages);
+    const img = $('screenImage');
+    img.src = `/book/${bookId}/screens/${screen}.png?v=${screenVersion}`;
+    img.alt = `Page ${screen} of ${bookMeta.pages}, as the ${bookMeta.device} shows it`;
+    $('pageNumber').textContent = `${screen} / ${bookMeta.pages}`;
+    prevBtn.disabled = screen <= 1;
+    nextBtn.disabled = screen >= bookMeta.pages;
+    const chapter = bookMeta.chapters.filter(ch => ch.page <= screen).pop();
+    if (chapter) toc.value = String(chapter.page);
   }
 
   function fillToc(nav) {
@@ -995,15 +1186,21 @@
     nextBtn.disabled = loc.atEnd;
   }
 
+  const showingScreens = () => !$('screenView').hidden;
+  const prevPage = () => (showingScreens() ? goToScreen(screen - 1) : rendition && rendition.prev());
+  const nextPage = () => (showingScreens() ? goToScreen(screen + 1) : rendition && rendition.next());
+
   function onKey(e) {
-    if (!rendition) return;
-    if (e.key === 'ArrowLeft') rendition.prev();
-    if (e.key === 'ArrowRight') rendition.next();
+    if (e.key === 'ArrowLeft') prevPage();
+    if (e.key === 'ArrowRight') nextPage();
   }
 
-  toc.addEventListener('change', () => rendition && rendition.display(toc.value));
-  prevBtn.addEventListener('click', () => rendition && rendition.prev());
-  nextBtn.addEventListener('click', () => rendition && rendition.next());
+  toc.addEventListener('change', () => {
+    if (showingScreens()) goToScreen(Number(toc.value));
+    else if (rendition) rendition.display(toc.value);
+  });
+  prevBtn.addEventListener('click', prevPage);
+  nextBtn.addEventListener('click', nextPage);
   document.addEventListener('keyup', e => {
     if (e.target.closest('input, select, textarea')) return;
     onKey(e);
