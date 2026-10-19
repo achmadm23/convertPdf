@@ -30,7 +30,7 @@ The product succeeds when a non-technical reader can turn a PDF into an e-book t
 
 ## 3. Scope
 
-Version 1.1.1 covers one-way conversion of a single PDF into a single EPUB or XTC book, on the user's own machine.
+Version 1.1.2 covers one-way conversion of a single PDF into a single EPUB or XTC book, on the user's own machine.
 
 **In scope**
 
@@ -102,7 +102,7 @@ flowchart LR
 
 ## 6. Functional requirements
 
-35 requirements, 15 of them Must, define what version 1.1.1 delivers; priorities use MoSCoW.
+36 requirements, 15 of them Must, define what version 1.1.2 delivers; priorities use MoSCoW.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
@@ -141,6 +141,7 @@ flowchart LR
 | FR-34 | Command line | Make XTC books with `--format xtc` or `xtch`, plus device, orientation, split, dithering, contrast, crop, cover-page and flip options | Should |
 | FR-35 | Text | Read pages whose text layer lists its blocks out of order (machine-translated PDFs, for example) top to bottom, so paragraphs and pictures keep their place; pages already in order and pages with columns are left as they are | Should |
 | FR-36 | Pictures | Keep text out of picture crops when body text comes in mixed sizes (0.7 to 1.3 times the main size), including the short last line of a paragraph | Should |
+| FR-37 | Web app | Show the app's version beside its name in the header, read from `package.json` | Could |
 
 ## 7. Non-functional requirements
 
@@ -243,7 +244,7 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 
 | Version | Date | What changed |
 | --- | --- | --- |
-| v1.1.2 | 2026-10-19 | The app shows its version beside its name |
+| v1.1.2 | 2026-10-19 | The app shows its version beside its name (FR-37) |
 | v1.1.1 | 2026-10-19 | Machine-translated PDFs: pages read top to bottom, pictures in the right place, and text kept out of pictures (FR-35, FR-36) |
 | v1.1.0 | 2026-10-19 | Built-in OCR for scanned pages with live review (retry, edit text, keep as picture); pictures as full e-ink pages; XTC output for Xteink X3, X4 and X4 Pro; custom cover; redesigned web app; font choice removed (EPUBs use the e-reader's font) |
 | v1.0.0 | 2026-09-25 | First release: EPUB from PDFs with a text layer (paragraphs, chapters, pictures, embedded fonts), web app, command line and Windows exe |
