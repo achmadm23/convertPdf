@@ -7,7 +7,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "convert": "node index.js",
     "start": "node server.js",
-    "build:exe": "node build/build-exe.js"
+    "build:exe": "node build/build-exe.js",
+    "build:web": "node web/build.js"
   },
   "private": true,
   "dependencies": {
@@ -22,6 +23,9 @@
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
+    "buffer": "^6.0.3",
+    "esbuild": "^0.28.2",
+    "fflate": "^0.8.3",
     "postject": "^1.0.0-alpha.6"
   }
 }

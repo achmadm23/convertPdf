@@ -39,7 +39,7 @@ for (const family of ['sans', 'mono']) {
 }
 
 const APP_FILES = [
-  'index.js', 'pdf.js', 'figures.js', 'eink.js', 'ocr.js', 'xtc.js', 'xtcfile.js', 'server.js',
+  'index.js', 'pdf.js', 'figures.js', 'eink.js', 'ocr.js', 'ocr-platform.js', 'xtc.js', 'xtcfile.js', 'server.js',
   'package.json', 'public/index.html',
 ];
 

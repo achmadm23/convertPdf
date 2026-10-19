@@ -7,9 +7,8 @@
 //   recognizePages / retryPage  → each page's raw reading
 //   finishPages                 → the lines to use, judged across the whole book
 
-const os = require('os');
-const path = require('path');
 const { createCanvas } = require('@napi-rs/canvas');
+const { workerOptions, cpuCount, MAX_WORKERS } = require('./ocr-platform');
 const { renderPage } = require('./figures');
 
 const DPI = 300;
@@ -39,15 +38,10 @@ const RETRY_SETTINGS = [
 // and listing it here; build/build-exe.js bundles the data of every language listed.
 const LANGUAGES = { eng: 'English', ind: 'Indonesian' };
 
-function langPath(code) {
-  return path.join(path.dirname(require.resolve(`@tesseract.js-data/${code}/package.json`)), '4.0.0_best_int');
-}
-
 async function createWorker(code) {
   const { createWorker } = require('tesseract.js');
   return createWorker(code, 1, {
-    langPath: langPath(code),
-    cacheMethod: 'none', // read the bundled data, never write a copy into the working folder
+    ...workerOptions(code),
     // without a handler, tesseract.js rethrows worker errors where nothing can catch
     // them, stopping the whole app; the failed job still rejects its own promise
     errorHandler: () => {},
@@ -298,9 +292,7 @@ async function recognizePages(doc, pageNumbers, { language, onProgress = () => {
 
   const { createScheduler } = require('tesseract.js');
   const scheduler = createScheduler(); // terminating it also terminates its workers
-  const cpus = os.availableParallelism ? os.availableParallelism() : os.cpus().length;
-  // each worker reads one page at a time on its own CPU core, using up to ~150 MB
-  const workerCount = Math.max(1, Math.min(8, cpus - 1, total - samples.length));
+  const workerCount = Math.max(1, Math.min(MAX_WORKERS, cpuCount() - 1, total - samples.length));
   let code = language;
   try {
     if (samples.length) {

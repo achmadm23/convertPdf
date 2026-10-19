@@ -6,12 +6,12 @@
 <title>convertPdf: PDF to EPUB or XTC</title>
 <style>
   /* IBM Plex for the page itself, served by the converter (it works offline) */
-  @font-face { font-family: 'IBM Plex Sans'; font-weight: 400; src: url(/uifonts/ibm-plex-sans-latin-400-normal.woff2) format('woff2'); }
-  @font-face { font-family: 'IBM Plex Sans'; font-weight: 500; src: url(/uifonts/ibm-plex-sans-latin-500-normal.woff2) format('woff2'); }
-  @font-face { font-family: 'IBM Plex Sans'; font-weight: 600; src: url(/uifonts/ibm-plex-sans-latin-600-normal.woff2) format('woff2'); }
-  @font-face { font-family: 'IBM Plex Mono'; font-weight: 400; src: url(/uifonts/ibm-plex-mono-latin-400-normal.woff2) format('woff2'); }
-  @font-face { font-family: 'IBM Plex Mono'; font-weight: 500; src: url(/uifonts/ibm-plex-mono-latin-500-normal.woff2) format('woff2'); }
-  @font-face { font-family: 'IBM Plex Mono'; font-weight: 600; src: url(/uifonts/ibm-plex-mono-latin-600-normal.woff2) format('woff2'); }
+  @font-face { font-family: 'IBM Plex Sans'; font-weight: 400; src: url(uifonts/ibm-plex-sans-latin-400-normal.woff2) format('woff2'); }
+  @font-face { font-family: 'IBM Plex Sans'; font-weight: 500; src: url(uifonts/ibm-plex-sans-latin-500-normal.woff2) format('woff2'); }
+  @font-face { font-family: 'IBM Plex Sans'; font-weight: 600; src: url(uifonts/ibm-plex-sans-latin-600-normal.woff2) format('woff2'); }
+  @font-face { font-family: 'IBM Plex Mono'; font-weight: 400; src: url(uifonts/ibm-plex-mono-latin-400-normal.woff2) format('woff2'); }
+  @font-face { font-family: 'IBM Plex Mono'; font-weight: 500; src: url(uifonts/ibm-plex-mono-latin-500-normal.woff2) format('woff2'); }
+  @font-face { font-family: 'IBM Plex Mono'; font-weight: 600; src: url(uifonts/ibm-plex-mono-latin-600-normal.woff2) format('woff2'); }
 
   :root {
     --bg: #E9EBE8; --card: #F7F8F6; --field: #FFFFFF; --text: #15171A; --muted: #555B60;
@@ -445,14 +445,53 @@
   </aside>
 </main>
 
-<script src="/vendor/jszip.min.js"></script>
-<script src="/vendor/epub.min.js"></script>
+<script src="vendor/jszip.min.js"></script>
+<script src="vendor/epub.min.js"></script>
 <script>
   const $ = id => document.getElementById(id);
   const drop = $('drop'), input = $('file'), convertBtn = $('convert'), status = $('status');
   const download = $('download'), slider = $('slider');
   const viewer = $('viewer'), placeholder = $('placeholder'), bookInfo = $('bookInfo');
   const radio = name => document.querySelector(`input[name="${name}"]:checked`).value;
+
+  // ---------- the converter ----------
+  // In the app it's the local server (npm start, ConvertPdf.exe). On the website
+  // it runs in this page: web/api.js, loaded before this script, sets convertPdfApi.
+  const api = window.convertPdfApi || serverApi();
+
+  function serverApi() {
+    const send = async (url, options) => {
+      const res = await fetch(url, options);
+      if (!res.ok) throw new Error(await res.text());
+      return res;
+    };
+    const json = (url, options) => send(url, options).then(res => res.json());
+    return {
+      // upload the PDF and follow the server's stream of progress (see streamRequest)
+      convert(pdf, { title, author, xtc }, handlers) {
+        const headers = { 'Content-Type': 'application/pdf', 'X-Filename': encodeURIComponent(pdf.name) };
+        if (title) headers['X-Title'] = encodeURIComponent(title);
+        if (author) headers['X-Author'] = encodeURIComponent(author);
+        if (xtc) {
+          headers['X-Format'] = 'xtc';
+          headers['X-Xtc'] = encodeURIComponent(JSON.stringify(xtc));
+        }
+        return streamRequest('convert', pdf, headers, handlers, true);
+      },
+      rebuild: (id, handlers) => streamRequest(`book/${id}/rebuild`, null, {}, handlers),
+      retry: (id, n) => json(`book/${id}/pages/${n}/retry`, { method: 'POST' }),
+      setText: (id, n, text) =>
+        json(`book/${id}/pages/${n}/text`, { method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: text }),
+      setPicture: (id, n, keep) => json(`book/${id}/pages/${n}/picture`, { method: keep ? 'POST' : 'DELETE' }),
+      setCover: (id, file) =>
+        json(`book/${id}/cover`, file ? { method: 'POST', headers: { 'Content-Type': file.type }, body: file } : { method: 'DELETE' }),
+      epub: id => send(`book/${id}.epub`).then(res => res.arrayBuffer()),
+      scanUrl: (id, n) => `book/${id}/pages/${n}.jpg`,
+      screenUrl: async (id, n, version) => `book/${id}/screens/${n}.png?v=${version}`,
+      downloadUrl: (id, xtc) => (xtc ? `book/${id}.xtc?download=1` : `book/${id}.epub?download=1`),
+      version: () => json('about.json').then(about => about.version),
+    };
+  }
 
   let file = null;
   let bookId = null;
@@ -605,11 +644,7 @@
   // Give the converted book the chosen cover, or its own cover again. An XTC
   // book answers with its new summary, as a cover can add a page.
   async function sendCover() {
-    const res = await fetch(`/book/${bookId}/cover`, coverFile
-      ? { method: 'POST', headers: { 'Content-Type': coverFile.type }, body: coverFile }
-      : { method: 'DELETE' });
-    if (!res.ok) throw new Error(await res.text());
-    const r = await res.json();
+    const r = await api.setCover(bookId, coverFile);
     if (r.book) {
       bookMeta = r.book;
       showBookInfo();
@@ -665,20 +700,12 @@
     showStatus('');
     progress.start('Uploading…', xtc ? 'xtc' : 'epub');
 
-    const headers = { 'Content-Type': 'application/pdf', 'X-Filename': encodeURIComponent(file.name) };
-    const title = $('title').value.trim();
-    const author = $('author').value.trim();
-    if (title) headers['X-Title'] = encodeURIComponent(title);
-    if (author) headers['X-Author'] = encodeURIComponent(author);
-    if (xtc) {
-      headers['X-Format'] = 'xtc';
-      headers['X-Xtc'] = encodeURIComponent(JSON.stringify(xtcSettings()));
-    }
+    const options = { title: $('title').value.trim(), author: $('author').value.trim(), xtc: xtc ? xtcSettings() : null };
 
     scans.reset();
     let failed = false;
     try {
-      bookMeta = await sendForConversion(file, headers, {
+      bookMeta = await api.convert(file, options, {
         onProgress: update => {
           progress.update(update);
           if (update.stage === 'ocr') scans.setTotal(update.total);
@@ -725,14 +752,9 @@
     }
   });
 
-  // Upload the PDF and follow the server's stream of JSON lines. XHR rather than
+  // POST to the server's URL that answers with JSON lines: {progress}, {session},
+  // {page}, then {result} or {error}. Resolves with the result. XHR rather than
   // fetch, because only XHR reports upload progress.
-  function sendForConversion(pdf, headers, handlers) {
-    return streamRequest('/convert', pdf, headers, handlers, true);
-  }
-
-  // POST to a URL that answers with JSON lines: {progress}, {session}, {page},
-  // then {result} or {error}. Resolves with the result.
   function streamRequest(url, body, headers, { onProgress, onSession, onPage }, uploading = false) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -921,13 +943,7 @@
       save.disabled = true;
       save.innerHTML = '<span class="spinner" aria-hidden="true"></span>Saving…';
       try {
-        const res = await fetch(`/book/${sessionId}/pages/${n}/text`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-          body: text,
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const r = await res.json();
+        const r = await api.setText(sessionId, n, text);
         pending = r.pendingPages;
         renderCard(n, { confidence: pages.get(n).confidence, text: r.text, manual: true },
           { good: true, text: 'Your text will be used for this page. Update the book to use it.' });
@@ -947,9 +963,7 @@
       updateCounts();
       button.innerHTML = '<span class="spinner" aria-hidden="true"></span>Saving…';
       try {
-        const res = await fetch(`/book/${sessionId}/pages/${n}/picture`, { method: keep ? 'POST' : 'DELETE' });
-        if (!res.ok) throw new Error(await res.text());
-        const r = await res.json();
+        const r = await api.setPicture(sessionId, n, keep);
         pending = r.pendingPages;
         busy = false;
         renderCard(n, { ...p, picture: r.picture }, {
@@ -972,9 +986,7 @@
       updateCounts();
       button.innerHTML = '<span class="spinner" aria-hidden="true"></span>Reading again…';
       try {
-        const res = await fetch(`/book/${sessionId}/pages/${n}/retry`, { method: 'POST' });
-        if (!res.ok) throw new Error(await res.text());
-        const r = await res.json();
+        const r = await api.retry(sessionId, n);
         pending = r.pendingPages;
         const note = r.improved
           ? { good: true, text: `Read again (${r.setting}): ${r.before}% → ${r.confidence}%. Update the book to use it.` }
@@ -996,7 +1008,7 @@
       convertBtn.disabled = true;
       progress.start('Updating the book…', 'epub');
       try {
-        bookMeta = await streamRequest(`/book/${sessionId}/rebuild`, null, {}, { onProgress: u => progress.update(u) });
+        bookMeta = await api.rebuild(sessionId, { onProgress: u => progress.update(u) });
         progress.update({ stage: 'done' });
         pending = 0;
         showBookInfo();
@@ -1052,7 +1064,7 @@
         const card = document.createElement('article');
         card.className = 'scan';
         card.innerHTML = `<img alt="" loading="lazy"><div><div class="scan-head"></div><p class="scan-note" hidden></p><pre class="scan-text"></pre></div>`;
-        card.querySelector('img').src = `/book/${sessionId}/pages/${page.n}.jpg`;
+        card.querySelector('img').src = api.scanUrl(sessionId, page.n);
         card.querySelector('img').alt = `Scan of page ${page.n}`;
         pages.set(page.n, { confidence: page.confidence, card });
         renderCard(page.n, page);
@@ -1209,9 +1221,8 @@
     const ready = bookId && !converting;
     download.hidden = !bookId;
     if (ready) {
-      download.href = isXtc()
-        ? `/book/${bookId}.xtc?download=1`
-        : `/book/${bookId}.epub?download=1`;
+      // the website makes the file when Download is clicked (see its click handler)
+      download.href = api.downloadUrl ? api.downloadUrl(bookId, isXtc()) : '#';
       download.textContent = `Download ${bookMeta.fileName}`;
     } else {
       download.removeAttribute('href');
@@ -1238,6 +1249,15 @@
     }
     previewStale = false;
     const token = ++previewToken;
+    try {
+      await drawPreview(keepPlace, token);
+    } catch (err) {
+      // a preview replaced by a newer one (another book, a new cover) fails quietly
+      if (token === previewToken) throw err;
+    }
+  }
+
+  async function drawPreview(keepPlace, token) {
     if (isXtc()) return showScreens(keepPlace);
     $('screenView').hidden = true;
     $('screen').style.aspectRatio = '';
@@ -1246,12 +1266,13 @@
     const place = loc && loc.start ? { cfi: loc.start.cfi, href: loc.start.href } : null;
     if (keepPlace) showStatus('Updating preview…', { busy: true });
 
-    const res = await fetch(`/book/${bookId}.epub`);
-    if (!res.ok) {
-      showStatus(await res.text(), { error: true });
+    let data;
+    try {
+      data = await api.epub(bookId);
+    } catch (err) {
+      showStatus(err.message || 'The preview could not be shown.', { error: true });
       return;
     }
-    const data = await res.arrayBuffer();
     if (token !== previewToken) return; // a newer cover was chosen meanwhile
 
     if (epub) epub.destroy();
@@ -1318,7 +1339,10 @@
   function goToScreen(n) {
     screen = Math.min(Math.max(1, n), bookMeta.pages);
     const img = $('screenImage');
-    img.src = `/book/${bookId}/screens/${screen}.png?v=${screenVersion}`;
+    const showing = screen;
+    api.screenUrl(bookId, screen, screenVersion)
+      .then(url => { if (screen === showing) img.src = url; })
+      .catch(err => showStatus(err.message || 'The page could not be shown.', { error: true }));
     img.alt = `Page ${screen} of ${bookMeta.pages}, as the ${bookMeta.device} shows it`;
     slider.value = screen;
     const here = contents.filter(it => it.page <= screen).pop();
@@ -1405,13 +1429,20 @@
   });
 
   // the version, shown beside the name
-  fetch('/about.json')
-    .then(res => res.json())
-    .then(about => {
-      $('version').textContent = `v${about.version}`;
+  api.version()
+    .then(version => {
+      $('version').textContent = `v${version}`;
       $('version').hidden = false;
     })
     .catch(() => {});
+
+  // On the website the finished book is made when Download is clicked.
+  download.addEventListener('click', e => {
+    if (!api.download) return;
+    e.preventDefault();
+    if (download.classList.contains('disabled')) return;
+    api.download(bookId).catch(err => showStatus(err.message || 'Could not save the book.', { error: true }));
+  });
 
   updateDownload();
 </script>

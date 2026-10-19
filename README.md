@@ -14,6 +14,14 @@ Convert PDFs into EPUB e-books. It works on normal PDFs and on scanned books, wi
 
 It runs entirely on your computer. Your files are never uploaded anywhere.
 
+## Use it online
+
+**[Open convertPdf](https://achmadm23.github.io/convertPdf/)** in your browser: nothing to install, on Windows, macOS, Linux, or a tablet.
+
+The website does everything the app does, and the converting happens inside your browser: your PDF is never uploaded. It's slower than the app on big scanned books, because OCR uses your browser instead of all your computer's cores, and the first scanned book downloads the OCR language data (about 4 MB, kept by the browser afterwards).
+
+The site is published from this repository by GitHub Pages: every push to `main` rebuilds it (`.github/workflows/pages.yml`). To build it yourself, run `npm run build:web` and serve the `site/` folder.
+
 ## Download (Windows, no install)
 
 **[Download ConvertPdf.zip](https://github.com/achmadm23/convertPdf/releases/download/v1.1.2/ConvertPdf.zip)** (60 MB)
@@ -170,6 +178,7 @@ To add a language, install its data (for example `npm install @tesseract.js-data
 - **Scanned books with a text layer** take longer when they have pictures, because pages that might hold a picture have to be rendered. A 540-page scanned book with 56 pictures takes about 2 minutes.
 - **Scanned books without a text layer** need OCR, about half a second per page on a 12-thread computer, so a 244-page book takes about 2 minutes. It uses up to 8 CPU cores and about 150 MB of memory per core.
 - **XTC books:** about a fifth of a second per PDF page when pages are cut into sideways parts, less for upright pages, so a 100-page PDF takes about 20 seconds.
+- **On the website** everything takes longer than in the app, often 2 to 4 times as long, depending on your computer and browser.
 
 ## Limitations
 
@@ -187,6 +196,7 @@ To add a language, install its data (for example `npm install @tesseract.js-data
 | `figures.js` | Finds and crops pictures, and renders the cover (from the PDF or a picture you choose). |
 | `eink.js` | Turns pictures into full-screen e-ink pages (480 x 800, 4 shades of gray, dithered). |
 | `ocr.js` | Reads scanned pages with OCR (Tesseract). |
+| `ocr-platform.js` | Where OCR finds its language data and how many pages it reads at once (the app's settings). |
 | `xtc.js` | Draws PDF pages for an Xteink screen (fit or split, contrast, dithering) and makes the XTC book. |
 | `xtcfile.js` | The XTC/XTCH file format: page encoding (XTG, XTH) and the book file. |
 | `pdf.js` | Opens a PDF with pdf.js. |
@@ -194,6 +204,10 @@ To add a language, install its data (for example `npm install @tesseract.js-data
 | `public/index.html` | The web app page: the numbered steps, progress, the e-reader preview with its slider, and contents. |
 | `build/build-exe.js` | Builds `ConvertPdf.exe` (`npm run build:exe`). |
 | `build/launcher.js` | Start-up code inside the exe: unpacks the app and starts the server. |
+| `web/api.js` | The website's converter: the server's work, done in the browser. |
+| `web/build.js` | Builds the website into `site/` (`npm run build:web`). |
+| `web/pdf.js`, `web/ocr-platform.js`, `web/shims/` | Browser versions of the few parts that need Node (opening PDFs, OCR settings, canvas, zlib, crypto). |
+| `.github/workflows/pages.yml` | Publishes the website to GitHub Pages on every push to `main`. |
 
 ## Credits
 
