@@ -10,6 +10,8 @@ PDFs are built for fixed-size printed pages. On a 6-inch e-reader they force zoo
 
 convertPdf solves this by rebuilding real paragraphs and chapters, reading scanned pages with built-in OCR (English and Indonesian), and keeping pictures as full-screen pages tuned for 4-shade e-ink screens (480 x 800, Xteink/XTC format). It ships as a local web app, a command-line tool and a no-install Windows executable (`ConvertPdf.exe`, about 60 MB zipped). No file is ever uploaded to a server.
 
+For Xteink readers (X3, X4 and X4 Pro), it can also make an XTC book: every PDF page drawn ready for the reader's screen, in black and white (`.xtc`) or 4 shades of gray (`.xtch`).
+
 ## 2. Business objectives and success criteria
 
 The product succeeds when a non-technical reader can turn a PDF into an e-book that reads like a commercial EPUB, in minutes, without installing anything or sending the file anywhere.
@@ -24,10 +26,11 @@ The product succeeds when a non-technical reader can turn a PDF into an e-book t
 | BO-6 | Zero-friction access | A Windows user goes from download to first conversion by unzipping and double-clicking, without Node.js |
 | BO-7 | Fast turnaround | A normal PDF converts in a few seconds; a 244-page scanned book with OCR in about 2 minutes on a 12-thread computer |
 | BO-8 | Let users fix what OCR gets wrong | Low-confidence pages can be retried, hand-corrected or kept as a picture, and the book rebuilt in under a minute |
+| BO-9 | Serve Xteink readers in their own format | A PDF becomes an XTC or XTCH book sized for the X3 (528 x 792) or X4 / X4 Pro (480 x 800) that opens on the device with its chapters |
 
 ## 3. Scope
 
-Version 1.0 covers one-way conversion of a single PDF into a single EPUB, on the user's own machine.
+Version 1.0 covers one-way conversion of a single PDF into a single EPUB or XTC book, on the user's own machine.
 
 **In scope**
 
@@ -36,13 +39,16 @@ Version 1.0 covers one-way conversion of a single PDF into a single EPUB, on the
 - OCR for English and Indonesian, with automatic language detection
 - Font choice: the reader's own font or one of 5 embedded open-source fonts
 - Custom cover: the user's own picture can replace the cover found in the PDF
+- XTC output for Xteink X3, X4 and X4 Pro: every page drawn for the screen, in black and white (`.xtc`) or 4 grays (`.xtch`)
 - Three delivery channels: local web app, command-line tool, Windows executable
 - In-app preview, live OCR page review, retry, manual text entry and keep-as-picture
 
 **Out of scope**
 
 - Cloud hosting, user accounts or any server-side storage beyond the running session
-- Output formats other than EPUB (MOBI, AZW3, PDF re-flow, native XTC files)
+- Output formats other than EPUB and XTC (MOBI, AZW3, PDF re-flow)
+- Xteink devices other than the X3, X4 and X4 Pro
+- Reflowed text in XTC books: pages are drawn as they look in the PDF
 - Faithful layout of multi-column pages and tables (they come out as plain paragraphs)
 - OCR languages beyond English and Indonesian in the shipped build
 - Batch conversion of many PDFs at once
@@ -58,6 +64,7 @@ The primary user is an e-ink reader who owns PDFs, often scanned, and wants them
 | Indonesian-language reader | Convert scanned Indonesian books, not only English ones | Web app with OCR |
 | Privacy-conscious user | Convert personal or confidential documents without uploading them | Any; all are local |
 | Power user / developer | Script conversions, choose OCR language, change the code | Command line, source install |
+| Xteink owner | Read PDFs, manga and scans on an X3, X4 or X4 Pro in its own XTC format | Web app with Output: XTC, or command line |
 | Sharer | Hand a working converter to friends who have no Node.js | `ConvertPdf.exe` zip from GitHub Releases |
 | Maintainer / product owner | Keep the converter accurate, small and easy to update | GitHub repository |
 
@@ -83,9 +90,19 @@ flowchart TD
 
 Pages without a text layer go through OCR first; after conversion the user can fix flagged pages and rebuild the book without reading the other pages again.
 
+An XTC book for an Xteink reader skips the text rebuild: each page is drawn as it looks in the PDF.
+
+```mermaid
+flowchart LR
+    pick["Choose a PDF<br/><small>Output: XTC, device, shades</small>"] --> draw["Draw each page<br/><small>upright, or sideways in parts</small>"]
+    draw --> dither["Dither<br/><small>2 or 4 shades</small>"]
+    dither --> look["Preview pages<br/><small>change the cover</small>"]
+    look --> get["Download<br/><small>.xtc or .xtch</small>"]
+```
+
 ## 6. Functional requirements
 
-26 requirements, 13 of them Must, define what version 1.0 delivers; priorities use MoSCoW.
+34 requirements, 16 of them Must, define what version 1.0 delivers; priorities use MoSCoW.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
@@ -115,6 +132,14 @@ Pages without a text layer go through OCR first; after conversion the user can f
 | FR-24 | Distribution | Ship one Windows exe that unpacks itself, starts the server, opens the browser, picks the next free port and reopens the browser if run again | Must |
 | FR-25 | Distribution | Let the port be set with the `PORT` environment variable | Could |
 | FR-26 | Cover | Let the user choose a picture (JPEG, PNG or WebP, up to 20 MB; `--cover` on the command line) to replace the PDF's cover, shown in 4 shades of gray at 480 x 800; change or remove it without converting again | Should |
+| FR-27 | XTC | Offer Output: EPUB or XTC; XTC targets the Xteink X4 and X4 Pro (480 x 800) or X3 (528 x 792) | Must |
+| FR-28 | XTC | Draw each PDF page for the screen: upright and whole, or sideways and cut into overlapping parts, halves, or not cut | Must |
+| FR-29 | XTC | Write black and white XTC files (XTG pages) or 4-gray XTCH files (XTH pages) in the layout the device firmware reads | Must |
+| FR-30 | XTC | Offer dithering (Atkinson, Floyd-Steinberg, Sierra Lite, Ordered, none), 5 contrast levels and margin trimming (0 to 20%) | Should |
+| FR-31 | XTC | Keep the PDF's title and author, and turn its bookmarks into chapters with the right page numbers | Should |
+| FR-32 | XTC | Show the first page whole and upright as the cover; a chosen cover picture replaces it, or comes first when page 1 isn't the cover | Should |
+| FR-33 | XTC | Preview every page as the reader shows it, with Prev / Next and a chapter list; remember the XTC settings for next time | Should |
+| FR-34 | Command line | Make XTC books with `--format xtc` or `xtch`, plus device, orientation, split, dithering, contrast, crop, cover-page and flip options | Should |
 
 ## 7. Non-functional requirements
 
@@ -133,6 +158,8 @@ Privacy and a no-setup install matter as much as conversion quality: the product
 | NFR-09 | Usability | Plain-language progress, for example "Reading scanned pages: 57 of 244", with time left |
 | NFR-10 | Licensing | Bundled fonts are under the SIL Open Font License; dependencies are open source |
 | NFR-11 | Extensibility | A new OCR language is added by installing its Tesseract data and one entry in `LANGUAGES` in `ocr.js` |
+| NFR-12 | Performance | XTC books take about 0.2 s per PDF page when pages are cut sideways, less upright: a 100-page PDF in about 22 s (sideways) or 8 s (upright) |
+| NFR-13 | Compatibility | XTC files follow the layout read by the CrossPoint Reader firmware: 56-byte header, title, author, chapters, page table; at most 65,535 pages |
 
 ## 8. Assumptions, constraints and dependencies
 
@@ -165,6 +192,7 @@ The product assumes a single user on one computer, converting one book at a time
 | `@fontsource/*` | The 5 embeddable fonts |
 | `postject` (dev) | Packing the app into a single Windows exe |
 | GitHub Releases | Hosting the `ConvertPdf.zip` download |
+| XTC.js (reference, MIT License) | Image steps and file layout followed for XTC output |
 
 ## 9. Risks and mitigations
 
@@ -179,13 +207,15 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 | Large scanned books exhaust memory on small machines | Slow or failed conversion | Cap at 8 cores, bound pages waiting for OCR, 300 MB upload limit |
 | Server restart loses converted books | User must convert again | Download promptly; documented in README |
 | Upstream library changes (pdf.js needs Node 22.13+) | Install or build failures | Pinned versions in `package-lock.json`; Node version stated in README |
+| XTC books not yet tried on every device and firmware | A book doesn't open, or its chapters are missing | File layout checked against CrossPoint's reader; test on X3, X4 and X4 Pro devices |
 | No automated tests | Regressions slip into releases | Add a regression suite of sample PDFs (open question) |
 
 ## 10. Open questions and glossary
 
 **Open questions**
 
-- [ ] Should the product also export native XTC/XTCH files for Xteink devices, beyond EPUB with e-ink-ready pages?
+- [ ] Do XTC and XTCH books open and turn pages correctly on real X3, X4 and X4 Pro devices, with stock and CrossPoint firmware?
+- [ ] Should XTC books also be offered as reflowed text (the EPUB's text laid out at a chosen font size), not only as drawn pages?
 - [ ] Which OCR languages come next after English and Indonesian?
 - [ ] Is code signing the Windows exe worth the yearly certificate cost?
 - [ ] Should macOS and Linux builds be published on GitHub Releases?
@@ -203,5 +233,6 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 | Confidence | OCR's own score (0 to 100%) of how sure it is of a reading |
 | E-ink | Paper-like screen showing a few shades of gray, here 4 |
 | Dithering | Mixing dots of the 4 grays to suggest smoother shading |
-| XTC / Xteink | E-reader format and device family with 480 x 800 pages |
+| XTC / Xteink | Xteink's e-book format of ready-drawn pages; the X4 and X4 Pro are 480 x 800, the X3 528 x 792 |
+| XTCH | XTC with pages in 4 shades of gray instead of black and white |
 | MoSCoW | Priority scale: Must, Should, Could, Won't |
