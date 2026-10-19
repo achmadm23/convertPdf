@@ -10,6 +10,8 @@ const { imageCover } = require('./figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('./xtc');
 const { retryPage, manualReading } = require('./ocr');
 
+const { version } = require('./package.json');
+
 const PORT = process.env.PORT || 3000;
 const MAX_BYTES = 300 * 1024 * 1024;
 const MAX_BOOKS = 5; // converted books kept in memory so their cover can be changed quickly
@@ -395,9 +397,10 @@ const server = http.createServer((req, res) => {
       sendError(res, 404, 'Not found');
     }
   } else if (req.method === 'GET' && route === '/about.json') {
-    // tells a second copy of the exe that the converter is already running here
+    // tells a second copy of the exe that the converter is already running here,
+    // and the page which version it is
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ app: 'convertPdf' }));
+    res.end(JSON.stringify({ app: 'convertPdf', version }));
   } else if (req.method === 'GET' && (match = route.match(/^\/uifonts\/([\w.-]+)$/)) && uiFontFiles.has(match[1])) {
     sendFile(res, uiFontFiles.get(match[1]), 'font/woff2');
   } else if (req.method === 'GET' && (match = route.match(/^\/vendor\/([\w.-]+)$/)) && vendor[match[1]]) {
@@ -443,7 +446,7 @@ function listen(port, triesLeft) {
   const onListening = () => {
     server.off('error', onError);
     const url = `http://localhost:${port}`;
-    console.log(`convertPdf running at ${url}`);
+    console.log(`convertPdf v${version} running at ${url}`);
     if (openBrowser) {
       console.log('Keep this window open while you use the converter. Close it to stop.');
       open(url);

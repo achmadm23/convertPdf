@@ -1,6 +1,6 @@
 # convertPdf — Business Requirements Document
 
-Date: 2026-10-19
+Date: 2026-10-19 · Product version: v1.1.2
 
 ## 1. Executive summary
 
@@ -30,7 +30,7 @@ The product succeeds when a non-technical reader can turn a PDF into an e-book t
 
 ## 3. Scope
 
-Version 1.0 covers one-way conversion of a single PDF into a single EPUB or XTC book, on the user's own machine.
+Version 1.1.1 covers one-way conversion of a single PDF into a single EPUB or XTC book, on the user's own machine.
 
 **In scope**
 
@@ -102,7 +102,7 @@ flowchart LR
 
 ## 6. Functional requirements
 
-33 requirements, 15 of them Must, define what version 1.0 delivers; priorities use MoSCoW.
+35 requirements, 15 of them Must, define what version 1.1.1 delivers; priorities use MoSCoW.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
@@ -139,6 +139,8 @@ flowchart LR
 | FR-32 | XTC | Show the first page whole and upright as the cover; a chosen cover picture replaces it, or comes first when page 1 isn't the cover | Should |
 | FR-33 | XTC | Preview every page as the reader shows it, with Prev / Next and a chapter list; remember the XTC settings for next time | Should |
 | FR-34 | Command line | Make XTC books with `--format xtc` or `xtch`, plus device, orientation, split, dithering, contrast, crop, cover-page and flip options | Should |
+| FR-35 | Text | Read pages whose text layer lists its blocks out of order (machine-translated PDFs, for example) top to bottom, so paragraphs and pictures keep their place; pages already in order and pages with columns are left as they are | Should |
+| FR-36 | Pictures | Keep text out of picture crops when body text comes in mixed sizes (0.7 to 1.3 times the main size), including the short last line of a paragraph | Should |
 
 ## 7. Non-functional requirements
 
@@ -207,6 +209,7 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 | Server restart loses converted books | User must convert again | Download promptly; documented in README |
 | Upstream library changes (pdf.js needs Node 22.13+) | Install or build failures | Pinned versions in `package-lock.json`; Node version stated in README |
 | XTC books not yet tried on every device and firmware | A book doesn't open, or its chapters are missing | File layout checked against CrossPoint's reader; test on X3, X4 and X4 Pro devices |
+| Machine-translated PDFs list text out of order and in mixed sizes | Pictures land in the wrong place; text under a picture is cut into it and lost from the book | Fixed in v1.1.1 (FR-35, FR-36); keep such PDFs as test cases |
 | No automated tests | Regressions slip into releases | Add a regression suite of sample PDFs (open question) |
 
 ## 10. Open questions and glossary
@@ -235,3 +238,12 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 | XTC / Xteink | Xteink's e-book format of ready-drawn pages; the X4 and X4 Pro are 480 x 800, the X3 528 x 792 |
 | XTCH | XTC with pages in 4 shades of gray instead of black and white |
 | MoSCoW | Priority scale: Must, Should, Could, Won't |
+
+## 11. Release history
+
+| Version | Date | What changed |
+| --- | --- | --- |
+| v1.1.2 | 2026-10-19 | The app shows its version beside its name |
+| v1.1.1 | 2026-10-19 | Machine-translated PDFs: pages read top to bottom, pictures in the right place, and text kept out of pictures (FR-35, FR-36) |
+| v1.1.0 | 2026-10-19 | Built-in OCR for scanned pages with live review (retry, edit text, keep as picture); pictures as full e-ink pages; XTC output for Xteink X3, X4 and X4 Pro; custom cover; redesigned web app; font choice removed (EPUBs use the e-reader's font) |
+| v1.0.0 | 2026-09-25 | First release: EPUB from PDFs with a text layer (paragraphs, chapters, pictures, embedded fonts), web app, command line and Windows exe |
