@@ -126,7 +126,7 @@ function bookSummary(session) {
 
 function xtcSummary(session) {
   const book = session.xtc;
-  const { pages, chapters } = bookPages(book, session.xtcCover);
+  const { pages, chapters, sources } = bookPages(book, session.xtcCover);
   const device = DEVICES[book.options.device];
   return {
     id: session.id,
@@ -141,6 +141,7 @@ function xtcSummary(session) {
     pages: pages.length,
     sourcePages: book.stats.sourcePages,
     chapters: chapters.map(ch => ({ title: ch.title, page: ch.start })),
+    sources,
   };
 }
 

@@ -23,18 +23,9 @@
     --sans: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
     --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #141618; --card: #1D2023; --field: #262A2E; --text: #E8EAEC; --muted: #A3A9AE;
-      --border: #33383C; --rule: #2B3034; --input: #4A5055; --seg: #121416; --stage: #101214;
-      --accent: #7FA8EB; --accent-hover: #9DBDF0; --accent-text: #0E1622; --tint: #1E2A3D;
-      --warn-bg: #4A3014; --warn-text: #F6C99A; --good-bg: #173322; --good-text: #A6DDB8;
-      --typed-bg: #1C2C44; --typed-text: #B7CDEE; --kept-bg: #2E2340; --kept-text: #D3C1EE;
-      --error: #F2B8B5; --lift: 0 1px 2px rgba(0, 0, 0, .5);
-    }
-  }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
+  html { color-scheme: light; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); }
   a { color: var(--accent); }
   button, input, select, textarea { font: inherit; color: inherit; }
@@ -133,6 +124,9 @@
   .cover-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .cover-info { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
   .cover-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+  .setup.busy #replacePdf, .setup.busy .cover-buttons { display: none; }
+  .cover-when { display: none; font-size: 13px; color: var(--muted); }
+  .setup.busy .cover-when.on { display: block; }
 
   /* actions and progress */
   .actions { display: flex; flex-direction: column; gap: 10px; }
@@ -297,6 +291,7 @@
         <div class="cover-thumb empty" id="coverThumb"><span>PDF</span><img alt="Chosen cover" hidden></div>
         <div class="cover-info">
           <span id="coverName">Taken from the PDF</span>
+          <span class="cover-when" id="coverWhen">Used when the book is ready</span>
           <div class="cover-buttons">
             <button type="button" class="btn" id="coverChoose">Choose image</button>
             <button type="button" class="btn" id="coverRemove" hidden>Remove</button>
@@ -397,7 +392,7 @@
   <section class="card preview" aria-label="Book preview">
     <div class="tabs" id="tabs" role="tablist" hidden>
       <button role="tab" id="tabBook" aria-selected="true" aria-controls="bookView">Book</button>
-      <button role="tab" id="tabScans" aria-selected="false" aria-controls="scans">Scanned pages<span class="pill" id="lowCount" hidden></span></button>
+      <button role="tab" id="tabScans" aria-selected="false" aria-controls="scans" hidden>Scanned pages<span class="pill" id="lowCount" hidden></span></button>
     </div>
     <p class="book-info" id="bookInfo" hidden></p>
     <div class="stage" id="bookView">
@@ -433,7 +428,6 @@
         <li><b>Real paragraphs and chapters</b><span>Headers, footers and page numbers removed.</span></li>
         <li><b>Scanned pages read for you</b><span>Built-in OCR for English and Indonesian.</span></li>
         <li><b>Pictures as full e-ink pages</b><span>480 × 800, in 4 shades of gray.</span></li>
-        <li><b>Xteink books too</b><span>XTC for the X3, X4 and X4 Pro, every page drawn for the screen.</span></li>
         <li><b>Your own cover</b><span>Or the one from the PDF.</span></li>
       </ul>
     </div>
@@ -490,11 +484,10 @@
   function showOutput() {
     const xtc = radio('format') === 'xtc';
     $('xtcSettings').hidden = !xtc;
-    $('formatNote').textContent = xtc
-      ? 'Every page drawn for the reader’s screen, exactly as it looks in the PDF.'
-      : 'Real paragraphs and chapters that reflow on any e-reader.';
+    $('formatNote').hidden = !xtc;
+    $('formatNote').textContent = 'Every page drawn for the reader’s screen, exactly as it looks in the PDF.';
     $('coverNote').textContent = xtc
-      ? 'JPEG, PNG or WebP. Drawn for the reader’s screen as the first page.'
+      ? 'Replaces the first page, drawn for the reader’s screen.'
       : 'JPEG, PNG or WebP. Shown at 480 × 800 in 4 shades of gray.';
     const sideways = radio('xtcOrientation') === 'landscape';
     $('xtcSplitField').hidden = !sideways;
@@ -537,11 +530,22 @@
     }
     file = f;
     $('fileName').textContent = f.name;
-    $('fileSize').textContent = `${(f.size / 1024 / 1024).toFixed(1)} MB`;
+    $('fileSize').textContent = fileSize(f);
     drop.hidden = true;
     $('fileRow').hidden = false;
     convertBtn.disabled = converting;
     showStatus(bookId ? 'Convert again to use this PDF.' : 'Ready. Choose the output, then convert.');
+  }
+
+  const fileSize = f => `${(f.size / 1024 / 1024).toFixed(1)} MB`;
+
+  // after converting, the file line also says how many pages the PDF has
+  function showFilePages() {
+    if (!file || !bookMeta) return;
+    const m = bookMeta;
+    const pages = isXtc() ? `${m.sourcePages} pages`
+      : m.scannedPages && m.scannedPages === m.pages ? `${m.pages} scanned pages` : `${m.pages} pages`;
+    $('fileSize').textContent = `${fileSize(file)} · ${pages}`;
   }
 
   const pdfStep = $('pdfStep');
@@ -578,6 +582,7 @@
     $('coverName').textContent = coverFile ? coverFile.name : 'Taken from the PDF';
     $('coverChoose').textContent = coverFile ? 'Change' : 'Choose image';
     $('coverRemove').hidden = !coverFile;
+    $('coverWhen').classList.toggle('on', !!coverFile);
   }
 
   function setCover(f) {
@@ -692,14 +697,17 @@
         }
       }
       showBookInfo();
+      showFilePages();
       converting = false;
       updateDownload();
       scans.finish(bookMeta);
+      $('tabs').hidden = isXtc();
       showTab('book');
+      const took = `Done in ${progress.elapsed()}.`;
       showStatus(
         (bookMeta.lowPages
-          ? `Done. ${bookMeta.lowPages} scanned ${bookMeta.lowPages === 1 ? 'page was' : 'pages were'} read at ${scans.limit}% or lower. Check them in Scanned pages: you can retry or type the text.`
-          : 'Done. Check the preview, then download.') + coverNote
+          ? `${took} ${bookMeta.lowPages} scanned ${bookMeta.lowPages === 1 ? 'page was' : 'pages were'} read at ${scans.limit}% or lower. Check them in Scanned pages: you can retry or type the text.`
+          : isXtc() ? `${took} Check the pages, then download.` : `${took} Check the preview, then download.`) + coverNote
       );
       openPreview(false).catch(() => showStatus('Converted, but the preview could not be shown.', { error: true }));
     } catch (err) {
@@ -770,7 +778,7 @@
     const m = bookMeta;
     if (isXtc()) {
       bookInfo.textContent =
-        `${m.title}${m.author ? ` · ${m.author}` : ''} · ${m.device}, ${m.grays ? '4 grays' : 'black and white'} · ` +
+        `${m.title} · ${m.device}, ${m.grays ? '4 grays' : 'black and white'} · ` +
         `${m.pages} pages from ${m.sourcePages} PDF pages · ${m.chapters.length} chapters`;
     } else {
       const scanned = m.scannedPages ? ` · ${m.scannedPages} scanned pages read with OCR` : '';
@@ -1022,6 +1030,7 @@
         list.innerHTML = '';
         userPickedTab = false;
         $('tabs').hidden = true;
+        tabScans.hidden = true;
         showTab('book');
         updateCounts();
       },
@@ -1048,8 +1057,9 @@
         const after = [...list.children].find(c => Number(c.dataset.n) > page.n);
         card.dataset.n = page.n;
         list.insertBefore(card, after || null);
-        if ($('tabs').hidden) {
+        if (tabScans.hidden) {
           $('tabs').hidden = false;
+          tabScans.hidden = false;
           if (!userPickedTab) showTab('scans');
         }
         if (following && !box.hidden) box.scrollTop = box.scrollHeight;
@@ -1184,6 +1194,7 @@
         showSteps(stage === 'text' && steps.every(st => st.key !== 'text') ? 'upload' : stage, done, total);
         render();
       },
+      elapsed: () => time(Date.now() - started),
       stop() {
         clearInterval(timer);
         setTimeout(() => { box.hidden = true; }, percent >= 100 ? 1200 : 0);
@@ -1208,6 +1219,7 @@
     download.setAttribute('aria-disabled', String(!ready));
     download.tabIndex = ready ? 0 : -1;
     convertBtn.textContent = converting ? 'Converting…' : bookId ? 'Convert again' : 'Convert';
+    document.querySelector('.setup').classList.toggle('busy', converting);
     convertBtn.classList.toggle('primary', !bookId || converting);
     convertBtn.classList.toggle('quiet', !!bookId && !converting);
   }
@@ -1309,7 +1321,10 @@
     slider.value = screen;
     const here = contents.filter(it => it.page <= screen).pop();
     markContents(here);
-    $('where').textContent = here ? here.label : `Page ${screen}`;
+    const from = bookMeta.sources[screen - 1] || {};
+    const chapter = here && !from.cover ? `${here.label} · ` : '';
+    $('where').textContent = from.cover ? 'Cover'
+      : `${chapter}PDF page ${from.page}${from.of > 1 ? `, part ${from.part} of ${from.of}` : ''}`;
     $('position').textContent = `${screen} / ${bookMeta.pages}`;
     slider.setAttribute('aria-valuetext', `Page ${screen} of ${bookMeta.pages}`);
   }

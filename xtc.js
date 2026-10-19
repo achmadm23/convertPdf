@@ -270,6 +270,7 @@ async function convertPdfPages(pdfBuffer, { title, author, name = 'Untitled', on
   } catch {}
 
   const pages = [];
+  const sources = []; // for each book page: the PDF page it shows, and which part of it
   const firstPart = [];
   onProgress({ stage: 'xtc', done: 0, total: doc.numPages });
   for (let n = 1; n <= doc.numPages; n++) {
@@ -281,10 +282,12 @@ async function convertPdfPages(pdfBuffer, { title, author, name = 'Untitled', on
     const crop = { x: cropX, y: cropY, w: canvas.width - 2 * cropX, h: canvas.height - 2 * cropY };
     const stretch = contrastStretch(canvas, crop, opts.contrast);
     firstPart[n] = pages.length + 1;
-    for (const part of pageParts(crop, opts, n === 1 && opts.firstPageIsCover)) {
+    const parts = pageParts(crop, opts, n === 1 && opts.firstPageIsCover);
+    parts.forEach((part, i) => {
       const screenCanvas = fitOnScreen(canvas, crop.x, crop.y + part.y, crop.w, part.h, part.turn, screen);
       pages.push(encodeScreen(screenCanvas, opts, stretch));
-    }
+      sources.push({ page: n, part: i + 1, of: parts.length });
+    });
     onProgress({ stage: 'xtc', done: n, total: doc.numPages });
   }
 
@@ -293,6 +296,7 @@ async function convertPdfPages(pdfBuffer, { title, author, name = 'Untitled', on
     author: author || meta.Author || '',
     options: opts,
     pages,
+    sources,
     chapters: chaptersFor(await bookmarks(doc), firstPart, pages.length),
     stats: { sourcePages: doc.numPages, pages: pages.length },
   };
@@ -311,12 +315,17 @@ async function coverPage(data, book) {
 }
 
 // The book's pages, with `cover` (from coverPage) in place of the PDF's first
-// page when that is the cover, or before it otherwise.
+// page when that is the cover, or before it otherwise. `sources` says where each
+// page comes from: { cover: true }, or { page, part, of } in the PDF.
 function bookPages(book, cover) {
-  if (!cover) return { pages: book.pages, chapters: book.chapters };
-  if (book.options.firstPageIsCover) return { pages: [cover, ...book.pages.slice(1)], chapters: book.chapters };
+  const coverSource = { cover: true };
+  if (book.options.firstPageIsCover) {
+    const sources = [coverSource, ...book.sources.slice(1)];
+    return { pages: cover ? [cover, ...book.pages.slice(1)] : book.pages, chapters: book.chapters, sources };
+  }
+  if (!cover) return { pages: book.pages, chapters: book.chapters, sources: book.sources };
   const chapters = book.chapters.map(ch => ({ ...ch, start: ch.start + 1, end: ch.end + 1 }));
-  return { pages: [cover, ...book.pages], chapters };
+  return { pages: [cover, ...book.pages], chapters, sources: [coverSource, ...book.sources] };
 }
 
 // The XTC (or XTCH, for 4 grays) file.
