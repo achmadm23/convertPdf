@@ -30,7 +30,7 @@ The product succeeds when a non-technical reader can turn a PDF into an e-book t
 
 ## 3. Scope
 
-Version 1.2.0 covers one-way conversion of a single PDF into a single EPUB or XTC book, on the user's own machine.
+Version 1.2.1 covers one-way conversion of a single PDF into a single EPUB or XTC book, on the user's own machine.
 
 **In scope**
 
@@ -40,7 +40,7 @@ Version 1.2.0 covers one-way conversion of a single PDF into a single EPUB or XT
 - Custom cover: the user's own picture can replace the cover found in the PDF
 - XTC output for Xteink X3, X4 and X4 Pro: every page drawn for the screen, in black and white (`.xtc`) or 4 grays (`.xtch`)
 - Four delivery channels: website on GitHub Pages (converting in the browser), local web app, command-line tool, Windows executable
-- In-app preview, live OCR page review, retry, manual text entry and keep-as-picture
+- In-app preview, live OCR page review, retry, manual text entry and keep-as-picture (whole, or in 2 or 3 sideways parts)
 
 **Out of scope**
 
@@ -103,7 +103,7 @@ flowchart LR
 
 ## 6. Functional requirements
 
-38 requirements, 15 of them Must, define what version 1.2.0 delivers; priorities use MoSCoW.
+39 requirements, 15 of them Must, define what version 1.2.1 delivers; priorities use MoSCoW.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
@@ -145,6 +145,7 @@ flowchart LR
 | FR-37 | Web app | Show the app's version beside its name in the header, read from `package.json` | Could |
 | FR-38 | Website | Offer the whole converter as a website on GitHub Pages, converting in the visitor's browser (EPUB, XTC, OCR, cover, review of scanned pages) without uploading the PDF | Should |
 | FR-39 | Website | Publish the website automatically on every push to `main` | Could |
+| FR-40 | OCR review | Let a page kept as a picture be whole and upright, or turned on its side and cut into 2 parts (halves) or 3 parts (thirds that overlap a little) that each fill the screen; a first page cut into parts stays in the book instead of becoming the cover | Should |
 
 ## 7. Non-functional requirements
 
@@ -253,7 +254,7 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 
 | Version | Date | What changed |
 | --- | --- | --- |
-| v1.2.1 | 2026-10-19 | A scanned page kept as a picture can be turned sideways and cut into 2 or 3 parts, each filling the screen |
+| v1.2.1 | 2026-10-19 | A scanned page kept as a picture can be turned sideways and cut into 2 or 3 parts, each filling the screen (FR-40) |
 | v1.2.0 | 2026-10-19 | Website at achmadm23.github.io/convertPdf, converting in the browser and published by GitHub Actions (FR-38, FR-39) |
 | v1.1.2 | 2026-10-19 | The app shows its version beside its name (FR-37) |
 | v1.1.1 | 2026-10-19 | Machine-translated PDFs: pages read top to bottom, pictures in the right place, and text kept out of pictures (FR-35, FR-36) |
