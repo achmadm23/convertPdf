@@ -1,6 +1,6 @@
 # convertPdf — Business Requirements Document
 
-Date: 2026-10-19 · Product version: v1.2.1
+Date: 2026-10-19 · Product version: v1.2.2
 
 ## 1. Executive summary
 
@@ -8,7 +8,7 @@ convertPdf turns any PDF, including scanned books with no text layer, into a cle
 
 PDFs are built for fixed-size printed pages. On a 6-inch e-reader they force zooming and panning, keep running headers and page numbers in the text, and break sentences across pages. Scanned books are worse: they are only pictures of text, so they cannot be reflowed, searched or resized at all.
 
-convertPdf solves this by rebuilding real paragraphs and chapters, reading scanned pages with built-in OCR (English and Indonesian), and keeping pictures as full-screen pages tuned for 4-shade e-ink screens (480 x 800, Xteink/XTC format). It ships as a website (https://achmadm23.github.io/convertPdf/), a local web app, a command-line tool and a no-install Windows executable (`ConvertPdf.exe`, about 60 MB zipped). No file is ever uploaded to a server: the website converts inside the visitor's browser.
+convertPdf solves this by rebuilding real paragraphs and chapters, reading scanned pages with built-in OCR (English and Indonesian), and keeping pictures as full-screen pages tuned for 4-shade e-ink screens, sized for the chosen Xteink reader (480 x 800 for the X4 and X4 Pro, 528 x 792 for the X3). It ships as a website (https://achmadm23.github.io/convertPdf/), a local web app, a command-line tool and a no-install Windows executable (`ConvertPdf.exe`, about 60 MB zipped). No file is ever uploaded to a server: the website converts inside the visitor's browser.
 
 For Xteink readers (X3, X4 and X4 Pro), it can also make an XTC book: every PDF page drawn ready for the reader's screen, in black and white (`.xtc`) or 4 shades of gray (`.xtch`).
 
@@ -21,7 +21,7 @@ The product succeeds when a non-technical reader can turn a PDF into an e-book t
 | BO-1 | Make PDFs readable on e-readers | Output is a reflowable EPUB with real paragraphs, no running headers, footers or page numbers, and sentences joined across pages |
 | BO-2 | Unlock scanned books | Pages with no text layer are read by OCR with no extra install; clean printed text needs only occasional letter fixes |
 | BO-3 | Keep the book's structure | Chapters and section headings appear in the table of contents; pictures stay where they appear in the text |
-| BO-4 | Look right on 4-shade e-ink | Every picture, the cover and pages kept as pictures fill a 480 x 800 page in 4 dithered shades of gray |
+| BO-4 | Look right on 4-shade e-ink | Every picture, the cover and pages kept as pictures fill the reader's screen (480 x 800 on the X4 and X4 Pro, 528 x 792 on the X3) in 4 dithered shades of gray |
 | BO-5 | Protect the user's files | 100% of processing happens locally; no network upload of any file |
 | BO-6 | Zero-friction access | Anyone converts from the website with nothing to install, on any computer or tablet; a Windows user can also unzip and double-click the exe, without Node.js |
 | BO-7 | Fast turnaround | A normal PDF converts in a few seconds; a 244-page scanned book with OCR in about 2 minutes on a 12-thread computer |
@@ -30,7 +30,7 @@ The product succeeds when a non-technical reader can turn a PDF into an e-book t
 
 ## 3. Scope
 
-Version 1.2.1 covers one-way conversion of a single PDF into a single EPUB or XTC book, on the user's own machine.
+Version 1.2.2 covers one-way conversion of a single PDF into a single EPUB or XTC book, on the user's own machine.
 
 **In scope**
 
@@ -41,6 +41,7 @@ Version 1.2.1 covers one-way conversion of a single PDF into a single EPUB or XT
 - XTC output for Xteink X3, X4 and X4 Pro: every page drawn for the screen, in black and white (`.xtc`) or 4 grays (`.xtch`)
 - Four delivery channels: website on GitHub Pages (converting in the browser), local web app, command-line tool, Windows executable
 - In-app preview, live OCR page review, retry, manual text entry and keep-as-picture (whole, or in 2 or 3 sideways parts)
+- Reader choice (Xteink X4 Pro, X4 or X3): pictures and cover sized for its screen, the preview laid out at its size, and full-page pictures whole or in 2 or 3 sideways parts
 
 **Out of scope**
 
@@ -81,7 +82,7 @@ flowchart TD
     layer -- yes --> rebuild["Rebuild paragraphs and chapters<br/><small>no headers, footers or page numbers</small>"]
     layer -- "no, scanned" --> ocr["OCR reads each page<br/><small>shown live, with its confidence</small>"]
     ocr --> rebuild
-    rebuild --> pictures["Place pictures as e-ink pages<br/><small>480 x 800, 4 shades of gray</small>"]
+    rebuild --> pictures["Place pictures as e-ink pages<br/><small>sized for the reader, 4 shades of gray</small>"]
     pictures --> write["Write the EPUB<br/><small>chapters, contents and cover</small>"]
     write --> preview["Preview, change the cover<br/><small>the book updates in about 1 second</small>"]
     preview -- "if scanned" --> fix["Fix flagged scanned pages<br/><small>Retry, Edit text or Keep as picture</small>"]
@@ -103,7 +104,7 @@ flowchart LR
 
 ## 6. Functional requirements
 
-39 requirements, 15 of them Must, define what version 1.2.1 delivers; priorities use MoSCoW.
+42 requirements, 15 of them Must, define what version 1.2.2 delivers; priorities use MoSCoW.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
@@ -115,7 +116,7 @@ flowchart LR
 | FR-06 | Structure | Split the book into chapters by heading size (on scans, by where text starts low under a title); fall back to 10-page chapters; list section headings in the table of contents | Must |
 | FR-07 | Pictures | Find, crop and place photos, charts and diagrams where they appear in the text | Must |
 | FR-08 | Pictures | Use a picture-only first page as the cover | Should |
-| FR-09 | Pictures | Show each picture, the cover and pages kept as pictures on a full 480 x 800 page in 4 dithered shades of gray | Must |
+| FR-09 | Pictures | Show each picture, the cover and pages kept as pictures on a full page sized for the reader (480 x 800, or 528 x 792 for the X3) in 4 dithered shades of gray | Must |
 | FR-10 | OCR | Detect pages that are only pictures of text and read them with built-in OCR, nothing extra to install | Must |
 | FR-11 | OCR | Detect English or Indonesian from 3 sample pages; let the command line set it with `--ocr-lang` | Must |
 | FR-12 | OCR | Leave out lines read below 50% confidence and paragraphs read much worse than the rest of the book; show them as pictures instead | Should |
@@ -131,7 +132,7 @@ flowchart LR
 | FR-23 | Command line | Convert with `node index.js input.pdf [output.epub]` and options for title, author, cover and OCR language | Must |
 | FR-24 | Distribution | Ship one Windows exe that unpacks itself, starts the server, opens the browser, picks the next free port and reopens the browser if run again | Must |
 | FR-25 | Distribution | Let the port be set with the `PORT` environment variable | Could |
-| FR-26 | Cover | Let the user choose a picture (JPEG, PNG or WebP, up to 20 MB; `--cover` on the command line) to replace the PDF's cover, shown in 4 shades of gray at 480 x 800; change or remove it without converting again | Should |
+| FR-26 | Cover | Let the user choose a picture (JPEG, PNG or WebP, up to 20 MB; `--cover` on the command line) to replace the PDF's cover, drawn for the reader's screen in 4 shades of gray; change or remove it without converting again | Should |
 | FR-27 | XTC | Offer Output: EPUB or XTC; XTC targets the Xteink X4 and X4 Pro (480 x 800) or X3 (528 x 792) | Must |
 | FR-28 | XTC | Draw each PDF page for the screen: upright and whole, or sideways and cut into overlapping parts, halves, or not cut | Must |
 | FR-29 | XTC | Write black and white XTC files (XTG pages) or 4-gray XTCH files (XTH pages) in the layout the device firmware reads | Must |
@@ -146,6 +147,9 @@ flowchart LR
 | FR-38 | Website | Offer the whole converter as a website on GitHub Pages, converting in the visitor's browser (EPUB, XTC, OCR, cover, review of scanned pages) without uploading the PDF | Should |
 | FR-39 | Website | Publish the website automatically on every push to `main` | Could |
 | FR-40 | OCR review | Let a page kept as a picture be whole and upright, or turned on its side and cut into 2 parts (halves) or 3 parts (thirds that overlap a little) that each fill the screen; a first page cut into parts stays in the book instead of becoming the cover | Should |
+| FR-41 | Reader | Size an EPUB's pictures and cover for the chosen Xteink reader (480 x 800 for the X4 and X4 Pro, 528 x 792 for the X3), the X4 Pro by default; `--device` on the command line | Should |
+| FR-42 | Preview | Lay the EPUB preview out at the reader's screen size, then shrink it to fit; give every page that is only a picture its own slider stop | Should |
+| FR-43 | Pictures | Let full-page portrait pictures stay whole or turn on their side in 2 or 3 parts that each fill the screen, one setting for the book, switched without converting again; `--picture-parts` on the command line | Should |
 
 ## 7. Non-functional requirements
 
@@ -175,7 +179,7 @@ The product assumes a single user on one computer, converting one book at a time
 
 **Assumptions**
 
-- Users read on e-ink devices that accept EPUB, and many use 480 x 800, 4-shade screens such as Xteink
+- Users read on e-ink devices that accept EPUB, and many use Xteink readers with 4-shade screens (480 x 800 on the X4 and X4 Pro, 528 x 792 on the X3)
 - Most scanned books users convert are printed English or Indonesian text
 - Users can wait about 2 minutes for a scanned book and will review only flagged pages
 - One user per running server; the 5-book cache is enough for changing covers
@@ -254,6 +258,7 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 
 | Version | Date | What changed |
 | --- | --- | --- |
+| v1.2.2 | 2026-10-19 | EPUB pictures and the preview sized for the chosen reader (X4 Pro by default); full-page pictures whole or in 2 or 3 sideways parts; a slider stop for every picture page (FR-41 to FR-43) |
 | v1.2.1 | 2026-10-19 | A scanned page kept as a picture can be turned sideways and cut into 2 or 3 parts, each filling the screen (FR-40) |
 | v1.2.0 | 2026-10-19 | Website at achmadm23.github.io/convertPdf, converting in the browser and published by GitHub Actions (FR-38, FR-39) |
 | v1.1.2 | 2026-10-19 | The app shows its version beside its name (FR-37) |
