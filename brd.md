@@ -1,6 +1,6 @@
 # convertPdf — Business Requirements Document
 
-Date: 2026-10-19 · Product version: v1.1.2
+Date: 2026-10-19 · Product version: v1.2.0
 
 ## 1. Executive summary
 
@@ -8,7 +8,7 @@ convertPdf turns any PDF, including scanned books with no text layer, into a cle
 
 PDFs are built for fixed-size printed pages. On a 6-inch e-reader they force zooming and panning, keep running headers and page numbers in the text, and break sentences across pages. Scanned books are worse: they are only pictures of text, so they cannot be reflowed, searched or resized at all.
 
-convertPdf solves this by rebuilding real paragraphs and chapters, reading scanned pages with built-in OCR (English and Indonesian), and keeping pictures as full-screen pages tuned for 4-shade e-ink screens (480 x 800, Xteink/XTC format). It ships as a local web app, a command-line tool and a no-install Windows executable (`ConvertPdf.exe`, about 60 MB zipped). No file is ever uploaded to a server.
+convertPdf solves this by rebuilding real paragraphs and chapters, reading scanned pages with built-in OCR (English and Indonesian), and keeping pictures as full-screen pages tuned for 4-shade e-ink screens (480 x 800, Xteink/XTC format). It ships as a website (https://achmadm23.github.io/convertPdf/), a local web app, a command-line tool and a no-install Windows executable (`ConvertPdf.exe`, about 60 MB zipped). No file is ever uploaded to a server: the website converts inside the visitor's browser.
 
 For Xteink readers (X3, X4 and X4 Pro), it can also make an XTC book: every PDF page drawn ready for the reader's screen, in black and white (`.xtc`) or 4 shades of gray (`.xtch`).
 
@@ -23,14 +23,14 @@ The product succeeds when a non-technical reader can turn a PDF into an e-book t
 | BO-3 | Keep the book's structure | Chapters and section headings appear in the table of contents; pictures stay where they appear in the text |
 | BO-4 | Look right on 4-shade e-ink | Every picture, the cover and pages kept as pictures fill a 480 x 800 page in 4 dithered shades of gray |
 | BO-5 | Protect the user's files | 100% of processing happens locally; no network upload of any file |
-| BO-6 | Zero-friction access | A Windows user goes from download to first conversion by unzipping and double-clicking, without Node.js |
+| BO-6 | Zero-friction access | Anyone converts from the website with nothing to install, on any computer or tablet; a Windows user can also unzip and double-click the exe, without Node.js |
 | BO-7 | Fast turnaround | A normal PDF converts in a few seconds; a 244-page scanned book with OCR in about 2 minutes on a 12-thread computer |
 | BO-8 | Let users fix what OCR gets wrong | Low-confidence pages can be retried, hand-corrected or kept as a picture, and the book rebuilt in under a minute |
 | BO-9 | Serve Xteink readers in their own format | A PDF becomes an XTC or XTCH book sized for the X3 (528 x 792) or X4 / X4 Pro (480 x 800) that opens on the device with its chapters |
 
 ## 3. Scope
 
-Version 1.1.2 covers one-way conversion of a single PDF into a single EPUB or XTC book, on the user's own machine.
+Version 1.2.0 covers one-way conversion of a single PDF into a single EPUB or XTC book, on the user's own machine.
 
 **In scope**
 
@@ -39,12 +39,12 @@ Version 1.1.2 covers one-way conversion of a single PDF into a single EPUB or XT
 - OCR for English and Indonesian, with automatic language detection
 - Custom cover: the user's own picture can replace the cover found in the PDF
 - XTC output for Xteink X3, X4 and X4 Pro: every page drawn for the screen, in black and white (`.xtc`) or 4 grays (`.xtch`)
-- Three delivery channels: local web app, command-line tool, Windows executable
+- Four delivery channels: website on GitHub Pages (converting in the browser), local web app, command-line tool, Windows executable
 - In-app preview, live OCR page review, retry, manual text entry and keep-as-picture
 
 **Out of scope**
 
-- Cloud hosting, user accounts or any server-side storage beyond the running session
+- Converting on a server, user accounts or any server-side storage (the website only serves the page; the browser does the work)
 - Output formats other than EPUB and XTC (MOBI, AZW3, PDF re-flow)
 - Xteink devices other than the X3, X4 and X4 Pro
 - Reflowed text in XTC books: pages are drawn as they look in the PDF
@@ -62,7 +62,8 @@ The primary user is an e-ink reader who owns PDFs, often scanned, and wants them
 | --- | --- | --- |
 | E-ink reader (primary) | Read PDFs and scanned books comfortably on a small 4-shade screen | Windows exe or web app |
 | Indonesian-language reader | Convert scanned Indonesian books, not only English ones | Web app with OCR |
-| Privacy-conscious user | Convert personal or confidential documents without uploading them | Any; all are local |
+| Privacy-conscious user | Convert personal or confidential documents without uploading them | Any; all convert on the user's own device |
+| Visitor without the app | Convert a PDF on any computer, Mac, Linux or tablet without installing anything | Website |
 | Power user / developer | Script conversions, choose OCR language, change the code | Command line, source install |
 | Xteink owner | Read PDFs, manga and scans on an X3, X4 or X4 Pro in its own XTC format | Web app with Output: XTC, or command line |
 | Sharer | Hand a working converter to friends who have no Node.js | `ConvertPdf.exe` zip from GitHub Releases |
@@ -102,7 +103,7 @@ flowchart LR
 
 ## 6. Functional requirements
 
-36 requirements, 15 of them Must, define what version 1.1.2 delivers; priorities use MoSCoW.
+38 requirements, 15 of them Must, define what version 1.2.0 delivers; priorities use MoSCoW.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
@@ -142,6 +143,8 @@ flowchart LR
 | FR-35 | Text | Read pages whose text layer lists its blocks out of order (machine-translated PDFs, for example) top to bottom, so paragraphs and pictures keep their place; pages already in order and pages with columns are left as they are | Should |
 | FR-36 | Pictures | Keep text out of picture crops when body text comes in mixed sizes (0.7 to 1.3 times the main size), including the short last line of a paragraph | Should |
 | FR-37 | Web app | Show the app's version beside its name in the header, read from `package.json` | Could |
+| FR-38 | Website | Offer the whole converter as a website on GitHub Pages, converting in the visitor's browser (EPUB, XTC, OCR, cover, review of scanned pages) without uploading the PDF | Should |
+| FR-39 | Website | Publish the website automatically on every push to `main` | Could |
 
 ## 7. Non-functional requirements
 
@@ -149,7 +152,7 @@ Privacy and a no-setup install matter as much as conversion quality: the product
 
 | ID | Category | Requirement |
 | --- | --- | --- |
-| NFR-01 | Privacy | All conversion, OCR and preview run locally; the server listens on localhost only and stores no file on disk |
+| NFR-01 | Privacy | All conversion, OCR and preview run on the user's device: the app's server listens on localhost only and stores no file on disk, and the website converts in the browser |
 | NFR-02 | Performance | Normal PDFs convert in a few seconds; a 540-page scanned book with 56 pictures in about 2 minutes |
 | NFR-03 | Performance | OCR runs at about 0.5 s per page on a 12-thread computer, using up to 8 CPU cores |
 | NFR-04 | Resources | OCR uses about 150 MB of memory per core; rendered pages waiting for OCR are capped so memory stays bounded on long books |
@@ -162,6 +165,8 @@ Privacy and a no-setup install matter as much as conversion quality: the product
 | NFR-11 | Extensibility | A new OCR language is added by installing its Tesseract data and one entry in `LANGUAGES` in `ocr.js` |
 | NFR-12 | Performance | XTC books take about 0.2 s per PDF page when pages are cut sideways, less upright: a 100-page PDF in about 22 s (sideways) or 8 s (upright) |
 | NFR-13 | Compatibility | XTC files follow the layout read by the CrossPoint Reader firmware: 56-byte header, title, author, chapters, page table; at most 65,535 pages |
+| NFR-14 | Performance | The website converts 2 to 4 times slower than the app; OCR reads up to 4 pages at once, and its language data (about 4 MB) downloads once and stays in the browser |
+| NFR-15 | Platform | The website runs in current Chrome, Edge, Firefox and Safari, served as static files from GitHub Pages (about 30 MB, most of it loaded only for OCR) |
 
 ## 8. Assumptions, constraints and dependencies
 
@@ -177,6 +182,7 @@ The product assumes a single user on one computer, converting one book at a time
 **Constraints**
 
 - Web app only: converted books live in memory and are lost when the server restarts
+- Website: converted books live in the browser tab and are lost when it's closed; big scanned books are limited by the device's memory
 - The exe is not code-signed, so Windows SmartScreen and some antivirus tools warn on first run
 - The exe runs only on the platform it was built on (Windows x64); other platforms need a source install
 - If ports 3000 to 3010 are all busy, the app cannot start
@@ -194,6 +200,8 @@ The product assumes a single user on one computer, converting one book at a time
 | `@fontsource/ibm-plex-sans`, `@fontsource/ibm-plex-mono` | The web app's typeface, served locally so it works offline |
 | `postject` (dev) | Packing the app into a single Windows exe |
 | GitHub Releases | Hosting the `ConvertPdf.zip` download |
+| GitHub Pages and GitHub Actions | Hosting the website and publishing it on every push |
+| `esbuild`, `buffer`, `fflate` (dev) | Bundling the converter for the browser, with browser versions of Node's Buffer and zlib |
 | XTC.js (reference, MIT License) | Image steps and file layout followed for XTC output |
 
 ## 9. Risks and mitigations
@@ -210,6 +218,7 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 | Server restart loses converted books | User must convert again | Download promptly; documented in README |
 | Upstream library changes (pdf.js needs Node 22.13+) | Install or build failures | Pinned versions in `package-lock.json`; Node version stated in README |
 | XTC books not yet tried on every device and firmware | A book doesn't open, or its chapters are missing | File layout checked against CrossPoint's reader; test on X3, X4 and X4 Pro devices |
+| Big scanned books on the website are slow, or run out of memory on phones | A conversion takes many minutes or fails | Suggest the app for big scanned books; OCR reads at most 4 pages at once |
 | Machine-translated PDFs list text out of order and in mixed sizes | Pictures land in the wrong place; text under a picture is cut into it and lost from the book | Fixed in v1.1.1 (FR-35, FR-36); keep such PDFs as test cases |
 | No automated tests | Regressions slip into releases | Add a regression suite of sample PDFs (open question) |
 
@@ -244,6 +253,7 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 
 | Version | Date | What changed |
 | --- | --- | --- |
+| v1.2.0 | 2026-10-19 | Website at achmadm23.github.io/convertPdf, converting in the browser and published by GitHub Actions (FR-38, FR-39) |
 | v1.1.2 | 2026-10-19 | The app shows its version beside its name (FR-37) |
 | v1.1.1 | 2026-10-19 | Machine-translated PDFs: pages read top to bottom, pictures in the right place, and text kept out of pictures (FR-35, FR-36) |
 | v1.1.0 | 2026-10-19 | Built-in OCR for scanned pages with live review (retry, edit text, keep as picture); pictures as full e-ink pages; XTC output for Xteink X3, X4 and X4 Pro; custom cover; redesigned web app; font choice removed (EPUBs use the e-reader's font) |
