@@ -76,9 +76,25 @@ function pageToLines(items) {
   }
   flush();
 
-  return lines
+  const cleaned = lines
     .map(l => ({ ...l, text: l.text.replace(/\s+/g, ' ').trim() }))
     .filter(l => l.text);
+  return readingOrder(cleaned);
+}
+
+// Lines in reading order, top to bottom. Most PDFs list their text that way
+// already, but some (machine-translated ones, for example) list blocks in any
+// order: a line that jumps back up the page in the same column gives that away,
+// and then the page is sorted by position. A jump up into a column further
+// right is just the next column, so pages with columns keep their own order.
+function readingOrder(lines) {
+  const jumbled = lines.some((l, i) => {
+    const prev = lines[i - 1];
+    return prev && l.y > prev.y + Math.max(l.size, prev.size, 6) && l.x < prev.x + 40;
+  });
+  if (!jumbled) return lines;
+  // lines at the same height read left to right
+  return [...lines].sort((a, b) => (Math.abs(a.y - b.y) <= 2 ? a.x - b.x : b.y - a.y));
 }
 
 // Group a page's lines into blocks: headings (text noticeably larger than the

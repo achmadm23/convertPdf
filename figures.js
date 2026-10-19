@@ -16,8 +16,11 @@ const median = arr => {
 
 // Text block edges and line spacing shared by all pages of the book.
 function measureLayout(pageLines, bodySize) {
-  // body text, plus the slightly smaller text used for notes and captions
-  const isText = l => l.size >= bodySize - 2.5 && l.size <= bodySize + 1;
+  // body text, plus the smaller text used for notes and captions. Some PDFs
+  // (machine-translated ones) set each block of text in its own size, so text up
+  // to 30% smaller or larger counts too; headings start at 40% larger.
+  const isText = l =>
+    l.size >= Math.min(bodySize - 2.5, bodySize * 0.7) && l.size <= Math.max(bodySize + 1, bodySize * 1.3);
   const fullWidth = median(pageLines.flat().filter(l => Math.abs(l.size - bodySize) <= 1).map(l => l.xEnd - l.x));
   const isLong = l => isText(l) && l.xEnd - l.x >= fullWidth * 0.6;
 
@@ -34,6 +37,7 @@ function measureLayout(pageLines, bodySize) {
   // a line of real sentences, as opposed to a short label inside a picture
   const isProse = l => isText(l) && (l.text.match(/\p{L}/gu) || []).length >= 15;
   return {
+    isText,
     isLong,
     isProse,
     blockTop: median(tops),
@@ -71,6 +75,20 @@ async function renderPage(page, scale) {
   return canvas;
 }
 
+// The lines that are prose: real sentences, plus the short last line of a
+// paragraph ("ini sendiri?'") right under one, which is no label of a picture.
+function proseLines(lines, layout) {
+  const prose = new Set(lines.filter(layout.isProse));
+  const byHeight = lines.filter(l => !l.image).sort((a, b) => b.y - a.y);
+  for (let i = 1; i < byHeight.length; i++) {
+    const l = byHeight[i], above = byHeight[i - 1];
+    if (prose.has(above) && layout.isText(l) && above.y - l.y <= layout.lineGap * 1.6 && Math.abs(l.x - above.x) <= 30) {
+      prose.add(l);
+    }
+  }
+  return prose;
+}
+
 // Render the page and crop the pictures that sit in its text gaps. Prose lines
 // never count as part of a picture, so a caption or the end of a paragraph next
 // to the picture stays text instead of being cropped into the image.
@@ -85,17 +103,18 @@ async function detectFigures(page, lines, gaps, layout) {
   }
 
   // mark text lines: 1 = any text, 2 = prose, which is ignored entirely
+  const prose = proseLines(lines, layout);
   const text = new Uint8Array(width * height);
   for (const l of lines) {
     const size = l.size || 10;
-    const prose = layout.isProse(l);
+    const isProse = prose.has(l);
     const x0 = Math.max(0, Math.floor((l.x - 2) * SCALE));
     const x1 = Math.min(width, Math.ceil((l.xEnd + 2) * SCALE));
-    const top = l.top !== undefined ? l.top + 1 : l.y + size * (prose ? 1.1 : 1);
+    const top = l.top !== undefined ? l.top + 1 : l.y + size * (isProse ? 1.1 : 1);
     const y0 = Math.max(0, Math.floor((pageHeight - top) * SCALE));
-    const y1 = Math.min(height, Math.ceil((pageHeight - l.y + size * (prose ? 0.5 : 0.35)) * SCALE));
+    const y1 = Math.min(height, Math.ceil((pageHeight - l.y + size * (isProse ? 0.5 : 0.35)) * SCALE));
     for (let y = y0; y < y1; y++) {
-      for (let p = y * width + x0; p < y * width + x1; p++) text[p] = Math.max(text[p], prose ? 2 : 1);
+      for (let p = y * width + x0; p < y * width + x1; p++) text[p] = Math.max(text[p], isProse ? 2 : 1);
     }
   }
 
