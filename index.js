@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const JSZip = require('jszip');
-const { measureLayout, findGaps, detectFigures, sidewaysParts, renderCover, imageCover } = require('./figures');
+const { measureLayout, findGaps, detectFigures, findPictures, sidewaysParts, renderCover, imageCover } = require('./figures');
 const { recognizePages, finishPages, LANGUAGES } = require('./ocr');
 const { openPdf } = require('./pdf');
 const { DEVICES, DITHERING, convertPdfPages, coverPage, bookPages, buildXtc, extensionFor } = require('./xtc');
@@ -100,6 +100,30 @@ function readingOrder(lines) {
   return [...lines].sort((a, b) => (Math.abs(a.y - b.y) <= 2 ? a.x - b.x : b.y - a.y));
 }
 
+// An OCR line without the words read inside a picture (a sign, a speech bubble,
+// or marks of the picture read as letters), or null when none of it is left.
+function wordsOutside(l, fig) {
+  const inside = (x, y) => x >= fig.left - 2 && x <= fig.right + 2 && y >= fig.bottom - 2 && y <= fig.top + 2;
+  if (l.image || !l.words) return l.image || !inside((l.x + l.xEnd) / 2, l.y + l.size / 2) ? l : null;
+  const words = l.words.filter(w => !inside((w.x + w.xEnd) / 2, (w.top + w.bottom) / 2));
+  if (words.length === l.words.length) return l;
+  if (!words.some(w => /[\p{L}\d]/u.test(w.text))) return null;
+  return { ...l, words, text: words.map(w => w.text).join(' '), x: words[0].x, xEnd: words[words.length - 1].xEnd };
+}
+
+// Lines in a column beside a picture: their own left (or right) edge is the
+// column's, so they read as one paragraph instead of each looking indented (or short).
+function besidePicture(lines, fig) {
+  const beside = l => !l.image && l.y < fig.top && (l.top ?? l.y + l.size) > fig.bottom;
+  const right = lines.filter(l => beside(l) && l.x >= fig.right - 2);
+  const left = lines.filter(l => beside(l) && l.xEnd <= fig.left + 2);
+  const colLeft = right.length ? Math.min(...right.map(l => l.x)) : null;
+  const colRight = left.length ? Math.max(...left.map(l => l.xEnd)) : null;
+  return lines.map(l =>
+    right.includes(l) ? { ...l, colLeft } : left.includes(l) ? { ...l, colRight } : l
+  );
+}
+
 // Group a page's lines into blocks: headings (text noticeably larger than the
 // body font) and paragraphs.
 function linesToBlocks(lines, bodySize) {
@@ -160,8 +184,8 @@ function linesToBlocks(lines, bodySize) {
       }
     } else {
       const bigGap = !afterImage && prev && normalGap && Math.abs(prev.y - l.y) > normalGap * 1.5;
-      const indented = l.x > leftEdge + 6;
-      const prevShort = prev && prev.xEnd < rightEdge - 25 && /[.!?:"”’)]$/.test(prev.text);
+      const indented = l.x > (l.colLeft ?? leftEdge) + 6;
+      const prevShort = prev && prev.xEnd < (prev.colRight ?? rightEdge) - 25 && /[.!?:"”’)]$/.test(prev.text);
       if (block && (block.heading || bigGap || indented || prevShort)) flush();
       afterImage = false;
       if (!block) block = { heading: false, text: l.text, size: l.size };
@@ -238,11 +262,17 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   const bodySize = [...sizeChars.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 10;
 
   const layout = measureLayout(pageLines, bodySize);
+  // pages read with OCR word by word are searched for pictures anywhere on them,
+  // beside the text too; other pages only between paragraphs (findGaps)
+  const readWords = new Set(
+    scanned.filter(n => !picturePages.has(n) && !ocr.pages.get(n)?.manual && layoutLines[n - 1].some(l => l.words))
+  );
+  const mayHavePictures = n => readWords.has(n) || findGaps(pageLines[n - 1], layout, bodySize).length > 0;
   const hasCoverCandidate = pageLines.length > 0 && pageLines[0].filter(layout.isLong).length < 5;
   const firstChecked = hasCoverCandidate ? 2 : 1;
   const candidates = [];
   for (let n = firstChecked; n <= doc.numPages; n++) {
-    if (!picturePages.has(n) && findGaps(pageLines[n - 1], layout, bodySize).length) candidates.push(n);
+    if (!picturePages.has(n) && mayHavePictures(n)) candidates.push(n);
   }
   const renders = candidates.length + picturePages.size + (hasCoverCandidate ? 1 : 0);
   let rendered = 0;
@@ -263,7 +293,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
     onProgress({ stage: 'pictures', done: ++rendered, total: renders });
   }
   // page 1 wasn't the cover after all, so check it for pictures like any other page
-  if (hasCoverCandidate && !cover && !picturePages.has(1) && findGaps(pageLines[0], layout, bodySize).length) {
+  if (hasCoverCandidate && !cover && !picturePages.has(1) && mayHavePictures(1)) {
     candidates.unshift(1);
   }
 
@@ -271,9 +301,10 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   // text flow in place of the labels it contains
   const images = [];
   for (const n of candidates) {
-    const gaps = findGaps(pageLines[n - 1], layout, bodySize);
     const page = await doc.getPage(n);
-    const figures = await detectFigures(page, pageLines[n - 1], gaps, layout, screen);
+    const figures = readWords.has(n)
+      ? await findPictures(page, layoutLines[n - 1], layout, screen)
+      : await detectFigures(page, pageLines[n - 1], findGaps(pageLines[n - 1], layout, bodySize), layout, screen);
     const pageHeight = page.view[3] - page.view[1];
     page.cleanup();
     onProgress({ stage: 'pictures', done: Math.min(++rendered, renders), total: renders });
@@ -287,9 +318,9 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
       const split = fullPage && { 2: sidewaysParts(fig.crop, 2, screen), 3: sidewaysParts(fig.crop, 3, screen) };
       images.push({ name, data: fig.data, ...(split && { split }) });
       // text shown inside the cropped picture is dropped; anything outside it stays
-      const inside = l =>
-        l.y <= fig.top + 2 && l.y >= fig.bottom - 2 && l.x >= fig.left - 2 && l.xEnd <= fig.right + 2;
-      const lines = pageLines[n - 1].filter(l => !inside(l));
+      const lines = readWords.has(n)
+        ? besidePicture(pageLines[n - 1].map(l => wordsOutside(l, fig)).filter(Boolean), fig)
+        : pageLines[n - 1].filter(l => !(l.y <= fig.top + 2 && l.y >= fig.bottom - 2 && l.x >= fig.left - 2 && l.xEnd <= fig.right + 2));
       const at = lines.findIndex(l => l.y < fig.top);
       lines.splice(at < 0 ? lines.length : at, 0, { image: name, y: fig.top });
       pageLines[n - 1] = lines;

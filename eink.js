@@ -22,9 +22,11 @@ function toneRange(gray) {
   // a line drawing has almost no dark pixels, so its darkest 5% may still be paper
   const black = Math.min(at(0.05), 80);
   // paper is the commonest light tone, filling much of the picture in a narrow band;
-  // a photo has no such band, so only its lightest specks become white
-  let paper = 128;
-  for (let v = 128; v < 256; v++) if (counts[v] > counts[paper]) paper = v;
+  // a photo has no such band, so only its lightest specks become white. Even a
+  // yellowed scan's paper is lighter than 160, so a flat mid-gray (a field in a
+  // drawing) isn't taken for paper.
+  let paper = 160;
+  for (let v = 160; v < 256; v++) if (counts[v] > counts[paper]) paper = v;
   let band = 0;
   for (let v = Math.max(0, paper - 6); v <= Math.min(255, paper + 6); v++) band += counts[v];
   const white = band >= gray.length * 0.2 ? paper - 10 : at(0.99);

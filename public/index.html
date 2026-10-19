@@ -439,9 +439,9 @@
         <input type="range" id="slider" min="0" max="1" step="1" value="0" disabled aria-label="Page">
       </div>
       <div class="seg turn" role="group" aria-label="Hold the reader">
-        <input type="radio" name="view" id="viewPortrait" value="portrait" checked disabled>
+        <input type="radio" name="view" id="viewPortrait" value="portrait" checked>
         <label for="viewPortrait">Portrait</label>
-        <input type="radio" name="view" id="viewLandscape" value="landscape" disabled>
+        <input type="radio" name="view" id="viewLandscape" value="landscape">
         <label for="viewLandscape">Landscape</label>
       </div>
     </div>
@@ -1373,6 +1373,7 @@
   async function drawPreview(keepPlace, token) {
     if (isXtc()) return showScreens(keepPlace);
     $('screenView').hidden = true;
+    laidOut = ''; // a new rendition is laid out at the size set here
     fitViewer();
     viewer.hidden = false;
     const loc = keepPlace && rendition && rendition.currentLocation();
@@ -1396,7 +1397,16 @@
     sidewaysSections = new Map();
     // a section loaded is the one about to be shown, so it's turned at once
     rendition.hooks.content.register(shown => {
-      const sideways = shown.document.body.classList.contains('sideways');
+      const doc = shown.document;
+      const sideways = doc.body.classList.contains('sideways');
+      // laid out in landscape, a picture turned sideways is turned back to fill the wide screen
+      // (overriding the size limit epub.js puts on every picture)
+      const style = doc.createElement('style');
+      style.textContent = `html.landscape body.sideways img { position: absolute; top: 0; left: 0; ` +
+        `width: ${bookMeta.width}px; height: ${bookMeta.height}px; max-width: none !important; max-height: none !important; object-fit: contain; ` +
+        `transform: translate(0, ${bookMeta.width}px) rotate(-90deg); transform-origin: 0 0; }`;
+      doc.head.append(style);
+      doc.documentElement.classList.toggle('landscape', landscape);
       sidewaysSections.set(shown.sectionIndex, sideways);
       holdFor(sideways);
     });
@@ -1468,49 +1478,66 @@
   // so lines and picture pages fall as they will on the device, then shrunk to
   // fit the drawn e-reader. An XTC page is a picture of that screen.
   //
-  // The reader can be shown held upright (portrait) or on its side (landscape).
-  // A page turned sideways (picture parts, sideways XTC pages) is shown in
-  // landscape so it reads upright, and other pages in portrait; Portrait and
-  // Landscape turn the page shown, until the next one.
-  let landscape = false;
+  // The reader is held upright (Portrait) or on its side (Landscape), as chosen
+  // under the preview. In Landscape an EPUB is laid out for the wide screen
+  // (800 x 480), so its text reads across it and pictures turned sideways fill it
+  // upright; an XTC book's pages turn with the reader. In Portrait a page turned
+  // sideways (picture parts, sideways XTC pages) is still shown on its side, so
+  // it reads upright.
+  let landscape = false; // as chosen
+  let sidewaysPage = false; // the page shown is turned sideways
+  let turnLeft = true; // it reads upright turned to the left (anticlockwise)
   let sidewaysSections = new Map(); // EPUB section (spine index) → a page turned sideways, as each is loaded
-  let turnLeft = true; // turned to the left (anticlockwise), as for a page turned 90° to the right
+  let laidOut = ''; // the size the EPUB is laid out at
 
   function fitViewer() {
     const m = bookMeta;
     const reader = $('reader');
-    const el = m && isXtc() ? $('screenImage') : viewer;
-    for (const r of document.querySelectorAll('input[name="view"]')) r.disabled = !m || !m.width;
+    (landscape ? $('viewLandscape') : $('viewPortrait')).checked = true;
     if (!m || !m.width) {
-      landscape = false;
-      $('viewPortrait').checked = true;
-      reader.classList.remove('landscape', 'left');
-      $('screen').style.aspectRatio = '';
+      reader.classList.toggle('landscape', landscape);
+      reader.classList.remove('left');
+      $('screen').style.aspectRatio = landscape ? '5 / 3' : '';
       Object.assign(viewer.style, { width: '', height: '', transform: '' });
+      laidOut = '';
       return;
     }
-    (landscape ? $('viewLandscape') : $('viewPortrait')).checked = true;
-    reader.classList.toggle('landscape', landscape);
-    reader.classList.toggle('left', landscape && !turnLeft);
-    $('screen').style.aspectRatio = landscape ? `${m.height} / ${m.width}` : `${m.width} / ${m.height}`;
-    const scale = $('screen').clientWidth / (landscape ? m.height : m.width);
-    const turn = !landscape ? '' : turnLeft
-      ? `translate(0, ${scale * m.width}px) rotate(-90deg) `
-      : `translate(${scale * m.height}px, 0) rotate(90deg) `;
-    Object.assign(el.style, { width: `${m.width}px`, height: `${m.height}px`, transform: `${turn}scale(${scale})` });
+    const xtc = isXtc();
+    const el = xtc ? $('screenImage') : viewer;
+    // the page as laid out, then turned or not to show it
+    const [w, h] = !xtc && landscape ? [m.height, m.width] : [m.width, m.height];
+    const turned = xtc ? landscape || sidewaysPage : !landscape && sidewaysPage;
+    const left = !sidewaysPage || turnLeft;
+    const [boxW, boxH] = turned ? [h, w] : [w, h];
+    reader.classList.toggle('landscape', boxW > boxH);
+    reader.classList.toggle('left', turned && !left);
+    $('screen').style.aspectRatio = `${boxW} / ${boxH}`;
+    const scale = $('screen').clientWidth / boxW;
+    const turn = !turned ? '' : left
+      ? `translate(0, ${scale * w}px) rotate(-90deg) `
+      : `translate(${scale * h}px, 0) rotate(90deg) `;
+    Object.assign(el.style, { width: `${w}px`, height: `${h}px`, transform: `${turn}scale(${scale})` });
+    if (!xtc && rendition && laidOut && laidOut !== `${w}x${h}`) {
+      for (const shown of rendition.getContents()) shown.document.documentElement.classList.toggle('landscape', landscape);
+      rendition.resize(w, h);
+    }
+    if (!xtc) laidOut = `${w}x${h}`;
   }
-  new ResizeObserver(() => { if (bookMeta) fitViewer(); }).observe($('screen'));
+  new ResizeObserver(() => fitViewer()).observe($('screen'));
 
-  // each page in its own way: sideways ones in landscape
+  // the page shown: turned sideways or not
   function holdFor(sideways, left = true) {
-    landscape = sideways;
+    sidewaysPage = sideways;
     turnLeft = left;
     fitViewer();
   }
 
+  try { landscape = localStorage.getItem('view') === 'landscape'; } catch {}
+  fitViewer();
   document.querySelectorAll('input[name="view"]').forEach(r =>
     r.addEventListener('change', () => {
       landscape = radio('view') === 'landscape';
+      try { localStorage.setItem('view', radio('view')); } catch {}
       fitViewer();
     })
   );

@@ -140,6 +140,15 @@ function toLines(data, pageHeight, scale) {
           // large type (a letter in a handwriting font, say) is body text
           mayBeHeading: para.lines.length <= 2 && text.length <= 60 && line.confidence >= 80,
           para: paraInfo, // shared by the paragraph's lines
+          // each word's box, so words read inside a picture can be told from the text beside it
+          words: words.map(w => ({
+            text: w.text,
+            x: w.bbox.x0 / scale,
+            xEnd: w.bbox.x1 / scale,
+            top: pageHeight - w.bbox.y0 / scale,
+            bottom: pageHeight - w.bbox.y1 / scale,
+            confidence: w.confidence,
+          })),
         });
       }
     }

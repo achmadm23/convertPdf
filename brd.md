@@ -42,7 +42,8 @@ Version 1.2.3 covers one-way conversion of a single PDF into a single EPUB or XT
 - Four delivery channels: website on GitHub Pages (converting in the browser), local web app, command-line tool, Windows executable
 - In-app preview, live OCR page review, retry, manual text entry and keep-as-picture (whole, or in 2 or 3 sideways parts)
 - Reader choice (Xteink X4 Pro, X4 or X3): pictures and cover sized for its screen, the preview laid out at its size, and full-page pictures upright, or sideways in 2 or 3 parts
-- Preview held in portrait or landscape, with pages turned sideways shown in landscape
+- Preview held in portrait or landscape: landscape lays the book out for the wide screen, and in portrait pages turned sideways show in landscape
+- Pictures on scanned pages found anywhere on the page, beside the text too, with the text around them kept as text
 
 **Out of scope**
 
@@ -105,7 +106,7 @@ flowchart LR
 
 ## 6. Functional requirements
 
-43 requirements, 15 of them Must, define what version 1.2.3 delivers; priorities use MoSCoW.
+44 requirements, 15 of them Must, define what version 1.2.3 delivers; priorities use MoSCoW.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
@@ -151,7 +152,8 @@ flowchart LR
 | FR-41 | Reader | Size an EPUB's pictures and cover for the chosen Xteink reader (480 x 800 for the X4 and X4 Pro, 528 x 792 for the X3), the X4 Pro by default; `--device` on the command line | Should |
 | FR-42 | Preview | Lay the EPUB preview out at the reader's screen size, then shrink it to fit; give every page that is only a picture its own slider stop | Should |
 | FR-43 | Pictures | Let full-page portrait pictures stay upright, or go sideways as XTC pages do, cut into 2 halves or 3 overlapping parts that each fill the screen (the cut is offered only for Sideways); one setting for the book, switched without converting again; `--picture-parts` on the command line | Should |
-| FR-44 | Preview | Show the preview held in portrait or landscape: pages turned sideways (EPUB picture parts, sideways XTC pages) show in landscape so they read upright, other pages in portrait, and Portrait and Landscape buttons turn the page shown | Should |
+| FR-44 | Preview | Let the preview be held in portrait or landscape, the choice kept from page to page and for next time: in landscape an EPUB is laid out for the wide screen (800 x 480) with picture parts filling it upright, and XTC pages turn with the reader; in portrait pages turned sideways (EPUB picture parts, sideways XTC pages) show in landscape so they read upright | Should |
+| FR-45 | Pictures | Find pictures anywhere on a scanned page, beside the text as well as between paragraphs: words read inside a picture (a sign, a speech bubble) go with the picture, and text beside it stays one paragraph; a framed box of text, a rule or the scanner's shadow is not a picture | Should |
 
 ## 7. Non-functional requirements
 
@@ -219,7 +221,7 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 | --- | --- | --- |
 | OCR misreads handwriting, decorative lettering or poor scans | Wrong or garbled text in the book | Drop low-confidence lines and paragraphs; show them as pictures; Retry, Edit text and Keep as picture |
 | Chapter titles cannot be read or found | Poor table of contents | Detect chapter starts by page layout; fall back to 10-page chapters |
-| Multi-column pages and tables lose their layout | Hard-to-read passages | Documented limitation; Keep as picture for scanned pages |
+| Multi-column pages and tables lose their layout | Hard-to-read passages | Documented limitation; Keep as picture for scanned pages; pictures beside the text are found on scanned pages (FR-45) |
 | SmartScreen or antivirus blocks the unsigned exe | Users give up before first run | README steps (More info, Run anyway); code signing as a future option |
 | Large scanned books exhaust memory on small machines | Slow or failed conversion | Cap at 8 cores, bound pages waiting for OCR, 300 MB upload limit |
 | Server restart loses converted books | User must convert again | Download promptly; documented in README |
