@@ -37,7 +37,6 @@ Version 1.0 covers one-way conversion of a single PDF into a single EPUB or XTC 
 - Input: digital PDFs, scanned PDFs with a text layer, and scanned PDFs without one (up to 300 MB per upload in the web app)
 - Output: EPUB with chapters, table of contents, title, author, cover and embedded pictures
 - OCR for English and Indonesian, with automatic language detection
-- Font choice: the reader's own font or one of 5 embedded open-source fonts
 - Custom cover: the user's own picture can replace the cover found in the PDF
 - XTC output for Xteink X3, X4 and X4 Pro: every page drawn for the screen, in black and white (`.xtc`) or 4 grays (`.xtch`)
 - Three delivery channels: local web app, command-line tool, Windows executable
@@ -52,6 +51,7 @@ Version 1.0 covers one-way conversion of a single PDF into a single EPUB or XTC 
 - Faithful layout of multi-column pages and tables (they come out as plain paragraphs)
 - OCR languages beyond English and Indonesian in the shipped build
 - Batch conversion of many PDFs at once
+- Choosing or embedding fonts: EPUBs use the e-reader's own font
 - Signed or prebuilt executables for macOS and Linux
 
 ## 4. Stakeholders and users
@@ -76,13 +76,13 @@ With convertPdf, one local flow handles both kinds of PDF and ends in a previewe
 
 ```mermaid
 flowchart TD
-    choose["Choose a PDF<br/><small>title, author, cover and font are optional</small>"] --> layer{"Text layer?"}
+    choose["Choose a PDF<br/><small>title, author and cover are optional</small>"] --> layer{"Text layer?"}
     layer -- yes --> rebuild["Rebuild paragraphs and chapters<br/><small>no headers, footers or page numbers</small>"]
     layer -- "no, scanned" --> ocr["OCR reads each page<br/><small>shown live, with its confidence</small>"]
     ocr --> rebuild
     rebuild --> pictures["Place pictures as e-ink pages<br/><small>480 x 800, 4 shades of gray</small>"]
-    pictures --> write["Write the EPUB<br/><small>chapters, contents, cover and font</small>"]
-    write --> preview["Preview, change font or cover<br/><small>the book updates in about 1 second</small>"]
+    pictures --> write["Write the EPUB<br/><small>chapters, contents and cover</small>"]
+    write --> preview["Preview, change the cover<br/><small>the book updates in about 1 second</small>"]
     preview -- "if scanned" --> fix["Fix flagged scanned pages<br/><small>Retry, Edit text or Keep as picture</small>"]
     fix -- "Update the book" --> write
     preview --> download["Download the EPUB<br/><small>enabled once conversion finishes</small>"]
@@ -102,7 +102,7 @@ flowchart LR
 
 ## 6. Functional requirements
 
-34 requirements, 16 of them Must, define what version 1.0 delivers; priorities use MoSCoW.
+33 requirements, 15 of them Must, define what version 1.0 delivers; priorities use MoSCoW.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
@@ -123,12 +123,11 @@ flowchart LR
 | FR-15 | OCR review | Let the user correct or type a page's text beside the scan (up to 1 MB per page) | Should |
 | FR-16 | OCR review | Let pages read at 90% or lower be kept as a picture, with Use text to undo; filter to only those pages | Should |
 | FR-17 | OCR review | Rebuild the book with the changed pages only, in under a minute | Should |
-| FR-18 | Fonts | Offer the e-reader's font or 5 embedded fonts; switching font updates the book in about 1 second without converting again | Must |
 | FR-19 | Preview | Preview the book in the browser with Prev / Next, arrow keys and a chapter list | Should |
 | FR-20 | Progress | Show a progress bar with the current step, page count and time left | Should |
 | FR-21 | Download | Enable Download only once conversion has finished | Must |
-| FR-22 | Session | Keep the last 5 converted books in memory for quick font changes | Could |
-| FR-23 | Command line | Convert with `node index.js input.pdf [output.epub]` and options for title, author, font and OCR language | Must |
+| FR-22 | Session | Keep the last 5 converted books in memory for quick cover changes | Could |
+| FR-23 | Command line | Convert with `node index.js input.pdf [output.epub]` and options for title, author, cover and OCR language | Must |
 | FR-24 | Distribution | Ship one Windows exe that unpacks itself, starts the server, opens the browser, picks the next free port and reopens the browser if run again | Must |
 | FR-25 | Distribution | Let the port be set with the `PORT` environment variable | Could |
 | FR-26 | Cover | Let the user choose a picture (JPEG, PNG or WebP, up to 20 MB; `--cover` on the command line) to replace the PDF's cover, shown in 4 shades of gray at 480 x 800; change or remove it without converting again | Should |
@@ -152,11 +151,11 @@ Privacy and a no-setup install matter as much as conversion quality: the product
 | NFR-03 | Performance | OCR runs at about 0.5 s per page on a 12-thread computer, using up to 8 CPU cores |
 | NFR-04 | Resources | OCR uses about 150 MB of memory per core; rendered pages waiting for OCR are capped so memory stays bounded on long books |
 | NFR-05 | Startup | The exe unpacks about 64 MB to `%LOCALAPPDATA%\ConvertPdf` in about 2 s on first run, starts in under 1 s after that, and replaces old files when a newer exe runs |
-| NFR-06 | Size | Download stays near 60 MB zipped (about 120 MB unzipped); each embedded font adds about 100 KB to a book |
+| NFR-06 | Size | Download stays near 60 MB zipped (about 120 MB unzipped) |
 | NFR-07 | Platform | Source install runs on Windows, macOS and Linux (x64, arm64) with Node.js 22.13 or newer; the exe targets Windows x64 |
-| NFR-08 | Compatibility | Output is a standard EPUB that opens in common e-readers; embedded fonts look the same in each |
+| NFR-08 | Compatibility | Output is a standard EPUB that opens in common e-readers and uses each reader's own font |
 | NFR-09 | Usability | Plain-language progress, for example "Reading scanned pages: 57 of 244", with time left |
-| NFR-10 | Licensing | Bundled fonts are under the SIL Open Font License; dependencies are open source |
+| NFR-10 | Licensing | The web app's font, IBM Plex, is under the SIL Open Font License; dependencies are open source |
 | NFR-11 | Extensibility | A new OCR language is added by installing its Tesseract data and one entry in `LANGUAGES` in `ocr.js` |
 | NFR-12 | Performance | XTC books take about 0.2 s per PDF page when pages are cut sideways, less upright: a 100-page PDF in about 22 s (sideways) or 8 s (upright) |
 | NFR-13 | Compatibility | XTC files follow the layout read by the CrossPoint Reader firmware: 56-byte header, title, author, chapters, page table; at most 65,535 pages |
@@ -170,7 +169,7 @@ The product assumes a single user on one computer, converting one book at a time
 - Users read on e-ink devices that accept EPUB, and many use 480 x 800, 4-shade screens such as Xteink
 - Most scanned books users convert are printed English or Indonesian text
 - Users can wait about 2 minutes for a scanned book and will review only flagged pages
-- One user per running server; the 5-book cache is enough for font switching
+- One user per running server; the 5-book cache is enough for changing covers
 
 **Constraints**
 
@@ -189,7 +188,7 @@ The product assumes a single user on one computer, converting one book at a time
 | `tesseract.js` 7.x + `@tesseract.js-data/eng`, `/ind` | Built-in OCR |
 | `jszip` | Writing the EPUB container |
 | `epubjs` | In-browser book preview |
-| `@fontsource/*` | The 5 embeddable fonts |
+| `@fontsource/ibm-plex-sans`, `@fontsource/ibm-plex-mono` | The web app's typeface, served locally so it works offline |
 | `postject` (dev) | Packing the app into a single Windows exe |
 | GitHub Releases | Hosting the `ConvertPdf.zip` download |
 | XTC.js (reference, MIT License) | Image steps and file layout followed for XTC output |

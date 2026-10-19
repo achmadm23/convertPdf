@@ -3,361 +3,468 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PDF to EPUB or XTC</title>
-<link rel="stylesheet" href="/fonts.css">
+<title>convertPdf: PDF to EPUB or XTC</title>
 <style>
+  /* IBM Plex for the page itself, served by the converter (it works offline) */
+  @font-face { font-family: 'IBM Plex Sans'; font-weight: 400; src: url(/uifonts/ibm-plex-sans-latin-400-normal.woff2) format('woff2'); }
+  @font-face { font-family: 'IBM Plex Sans'; font-weight: 500; src: url(/uifonts/ibm-plex-sans-latin-500-normal.woff2) format('woff2'); }
+  @font-face { font-family: 'IBM Plex Sans'; font-weight: 600; src: url(/uifonts/ibm-plex-sans-latin-600-normal.woff2) format('woff2'); }
+  @font-face { font-family: 'IBM Plex Mono'; font-weight: 400; src: url(/uifonts/ibm-plex-mono-latin-400-normal.woff2) format('woff2'); }
+  @font-face { font-family: 'IBM Plex Mono'; font-weight: 500; src: url(/uifonts/ibm-plex-mono-latin-500-normal.woff2) format('woff2'); }
+  @font-face { font-family: 'IBM Plex Mono'; font-weight: 600; src: url(/uifonts/ibm-plex-mono-latin-600-normal.woff2) format('woff2'); }
+
   :root {
-    --bg: #f5f3ef; --card: #ffffff; --text: #1f1d1a; --muted: #6b665e;
-    --border: #d9d4cb; --accent: #2f6f5e; --accent-text: #ffffff;
-    --tint: #eef5f2; --error: #b3261e; --paper: #fffdf8; --shadow: 0 1px 3px rgba(0,0,0,.08);
+    --bg: #E9EBE8; --card: #F7F8F6; --field: #FFFFFF; --text: #15171A; --muted: #555B60;
+    --border: #CDD1CF; --rule: #DDE0DE; --input: #B9BEBC; --seg: #E4E7E5; --stage: #DADDD9;
+    --accent: #1F5FBF; --accent-hover: #174A96; --accent-text: #FFFFFF; --tint: #E3ECF8;
+    --warn-bg: #FBE6CF; --warn-text: #7A3A00; --good-bg: #DCEFE2; --good-text: #1D4F2F;
+    --typed-bg: #DBE7F7; --typed-text: #1D3F6E; --kept-bg: #E6DCF2; --kept-text: #4A2F6E;
+    --error: #B3261E; --paper: #EAE8E1; --ink: #1A1A1A; --lift: 0 1px 2px rgba(21, 23, 26, .18);
+    --sans: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #1a1917; --card: #24221f; --text: #ece8e1; --muted: #a39e95;
-      --border: #3d3a35; --accent: #5fb39b; --accent-text: #0f1a17;
-      --tint: #1f2b27; --error: #f2b8b5; --paper: #f4f1ea; --shadow: none;
+      --bg: #141618; --card: #1D2023; --field: #262A2E; --text: #E8EAEC; --muted: #A3A9AE;
+      --border: #33383C; --rule: #2B3034; --input: #4A5055; --seg: #121416; --stage: #101214;
+      --accent: #7FA8EB; --accent-hover: #9DBDF0; --accent-text: #0E1622; --tint: #1E2A3D;
+      --warn-bg: #4A3014; --warn-text: #F6C99A; --good-bg: #173322; --good-text: #A6DDB8;
+      --typed-bg: #1C2C44; --typed-text: #B7CDEE; --kept-bg: #2E2340; --kept-text: #D3C1EE;
+      --error: #F2B8B5; --lift: 0 1px 2px rgba(0, 0, 0, .5);
     }
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); }
+  a { color: var(--accent); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .mono { font-family: var(--mono); }
+
+  /* header */
+  .top {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px;
+    padding: 16px 32px; background: var(--card); border-bottom: 1px solid var(--border);
   }
-  .wrap {
-    max-width: 1180px; margin: 0 auto; padding: 24px 16px;
-    display: grid; grid-template-columns: 340px 1fr; gap: 20px; align-items: start;
+  .brand { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+  .brand h1 { margin: 0; font: 600 19px/1.2 var(--mono); letter-spacing: -0.01em; }
+  .brand h1 span { color: var(--accent); }
+  .brand p, .private { margin: 0; font-size: 14px; color: var(--muted); }
+  .private { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  @media (max-width: 600px) { .top { padding: 14px 16px; } }
+
+  /* three panels: setup, preview, side */
+  .layout {
+    display: flex; flex-wrap: wrap; align-items: flex-start; gap: 24px;
+    max-width: 1440px; margin: 0 auto; padding: 24px 32px 40px;
   }
-  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
-  aside.card { padding: 22px; }
-  h1 { margin: 0 0 2px; font-size: 1.35rem; }
-  p.sub { margin: 0 0 18px; color: var(--muted); font-size: 0.93rem; }
-  .drop {
-    border: 2px dashed var(--border); border-radius: 10px; padding: 24px 14px;
-    text-align: center; cursor: pointer; transition: background .15s, border-color .15s;
+  @media (max-width: 600px) { .layout { padding: 16px; gap: 16px; } }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; min-width: 0; }
+  .setup { flex: 1 1 320px; }
+  .preview { flex: 999 1 560px; overflow: hidden; }
+  .side { flex: 1 1 240px; }
+
+  /* setup steps */
+  .step { display: flex; flex-direction: column; gap: 12px; padding: 20px; border: 0; margin: 0; }
+  .step + .step { border-top: 1px solid var(--rule); }
+  .step-title {
+    display: flex; align-items: baseline; gap: 10px; margin: 0;
+    font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
   }
-  .drop:hover, .drop.over, .drop:focus-visible { background: var(--tint); border-color: var(--accent); outline: none; }
-  .drop strong { display: block; margin-bottom: 2px; }
-  .drop span { color: var(--muted); font-size: 0.88rem; word-break: break-all; }
-  input[type=file] { display: none; }
-  label.field { display: block; margin-top: 14px; font-size: 0.88rem; color: var(--muted); }
-  label.field input, label.field select {
-    display: block; width: 100%; margin-top: 4px; padding: 8px 10px; font: inherit; font-size: 0.95rem;
-    color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  .step-title span { font-family: var(--mono); color: var(--accent); }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  .field input:not([type=checkbox]), .field select {
+    width: 100%; height: 44px; padding: 0 12px; font-size: 15px; color: var(--text);
+    background: var(--field); border: 1px solid var(--input); border-radius: 8px;
   }
-  label.field select { cursor: pointer; }
-  label.field select:focus-visible, label.field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .cover-field { margin-top: 14px; font-size: 0.88rem; color: var(--muted); }
-  .cover-pick {
-    display: flex; align-items: center; gap: 12px; margin-top: 4px; padding: 8px;
-    background: var(--bg); border: 1px solid var(--border); border-radius: 8px; transition: background .15s, border-color .15s;
+  .field select { cursor: pointer; }
+  .note { margin: 0; font-size: 13px; color: var(--muted); }
+  .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .check { display: flex; align-items: flex-start; gap: 10px; min-height: 32px; font-size: 14px; cursor: pointer; }
+  .check input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--accent); flex: none; }
+  .more summary { min-height: 32px; font-size: 14px; font-weight: 500; color: var(--accent); cursor: pointer; }
+  .more > div { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 14px;
+    font-size: 14px; font-weight: 500; color: var(--text); text-decoration: none;
+    background: var(--field); border: 1px solid var(--input); border-radius: 8px; cursor: pointer;
   }
-  .cover-pick.over { background: var(--tint); border-color: var(--accent); }
-  /* the e-reader's 480 x 800 screen */
-  .cover-thumb { flex: none; width: 48px; height: 80px; overflow: hidden; border: 1px solid var(--border); border-radius: 3px; background: #fff; }
-  .cover-thumb.empty { display: grid; place-items: center; border-style: dashed; background: transparent; font-size: 0.7rem; }
-  .cover-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
-  .cover-info { flex: 1; min-width: 0; }
-  #coverName { display: block; color: var(--text); font-size: 0.85rem; overflow-wrap: anywhere; }
-  .cover-buttons { display: flex; gap: 6px; margin-top: 6px; }
-  .cover-buttons button {
-    width: auto; margin: 0; padding: 5px 10px; font-weight: 500; font-size: 0.82rem;
-    background: var(--card); color: var(--text); border: 1px solid var(--border);
-  }
-  .field-note { display: block; margin-top: 4px; font-size: 0.8rem; color: var(--muted); }
-  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .xtc-more summary { margin-top: 14px; font-size: 0.88rem; color: var(--muted); cursor: pointer; }
-  .xtc-more summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  label.check { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; font-size: 0.88rem; cursor: pointer; }
-  label.check input { margin: 3px 0 0; accent-color: var(--accent); }
-  #screenView { position: absolute; inset: 12px 16px; display: flex; align-items: center; justify-content: center; }
-  #screenView img { max-width: 100%; max-height: 100%; box-sizing: border-box; background: #fff; border: 1px solid #cfc8bc; }
-  .toolbar .page-number { font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .font-sample {
-    margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--tint);
-    font-size: 1.05rem; line-height: 1.4; color: var(--text);
-  }
-  .font-sample .note { display: block; font-size: 0.78rem; color: var(--muted); font-family: system-ui, sans-serif; }
-  button, a.btn {
-    display: block; width: 100%; margin-top: 18px; padding: 11px; font: inherit; font-weight: 600;
-    text-align: center; text-decoration: none; border: 0; border-radius: 8px; cursor: pointer;
-    background: var(--accent); color: var(--accent-text);
-  }
-  a.btn { margin-top: 10px; }
-  button:disabled, a.btn.disabled { opacity: .5; cursor: not-allowed; }
+  .btn:disabled, .btn.disabled { opacity: .45; cursor: not-allowed; }
   a.btn.disabled { pointer-events: none; }
-  #status { margin-top: 12px; min-height: 1.5em; font-size: 0.92rem; }
-  .progress { margin-top: 14px; }
-  .progress .bar { height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
-  .progress .fill { height: 100%; width: 0; background: var(--accent); border-radius: 4px; transition: width .3s ease; }
-  .progress-text {
-    display: flex; justify-content: space-between; gap: 8px; margin-top: 6px;
-    font-size: 0.85rem; color: var(--muted);
+  .btn.big { height: 48px; padding: 0 16px; font-size: 15px; font-weight: 600; width: 100%; }
+  .btn.primary { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
+  .btn.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn.quiet { height: 44px; background: transparent; }
+  .btn.soft { height: 40px; font-weight: 600; color: var(--accent); background: var(--tint); border-color: transparent; }
+
+  /* 01 PDF */
+  .drop {
+    display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 28px 16px; text-align: center;
+    background: var(--field); border: 2px dashed var(--input); border-radius: 10px; transition: background .15s, border-color .15s;
   }
-  #progressNumbers { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  @media (prefers-reduced-motion: reduce) { .progress .fill { transition: none; } }
+  .drop.over { background: var(--tint); border-color: var(--accent); }
+  .file-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .file-row > div { display: flex; flex-direction: column; min-width: 0; }
+  .file-name { font-weight: 500; overflow-wrap: anywhere; }
+  .small { font-size: 12px; color: var(--muted); }
+  input[type=file] { display: none; }
+
+  /* segmented choices (radio buttons) */
+  .seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; background: var(--seg); border-radius: 10px; }
+  .seg input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+  .seg label {
+    display: flex; flex-direction: column; justify-content: center; min-height: 44px; padding: 6px 12px;
+    font-size: 14px; font-weight: 500; color: var(--text); border-radius: 7px; cursor: pointer;
+  }
+  .seg label small { font-size: 12px; font-weight: 400; color: var(--muted); }
+  .seg label.tall { min-height: 52px; }
+  .seg label.tall b { font-size: 15px; font-weight: 600; }
+  .seg input:checked + label { background: var(--field); box-shadow: var(--lift); }
+  .seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
+  legend { padding: 0; margin-bottom: 4px; font-size: 13px; color: var(--muted); }
+  fieldset.group { border: 0; margin: 0; padding: 0; min-width: 0; }
+
+  /* 04 Cover */
+  .cover-pick { display: flex; align-items: center; gap: 14px; border-radius: 10px; transition: background .15s; }
+  .cover-pick.over { background: var(--tint); }
+  .cover-thumb { flex: none; width: 54px; height: 90px; overflow: hidden; background: #fff; border: 1px solid var(--input); border-radius: 3px; }
+  .cover-thumb.empty { display: grid; place-items: center; background: transparent; border-style: dashed; font: 11px var(--mono); color: var(--muted); }
+  .cover-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .cover-info { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .cover-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* actions and progress */
+  .actions { display: flex; flex-direction: column; gap: 10px; }
+  #status { margin: 0; min-height: 1.5em; font: 12px/1.5 var(--mono); color: var(--muted); }
   #status.error { color: var(--error); }
+  .bar { height: 6px; overflow: hidden; background: var(--rule); border-radius: 3px; }
+  .bar div { width: 0; height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s ease; }
+  .progress-text { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin-top: 6px; font-size: 13px; }
+  #progressNumbers { font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
   .spinner {
     display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px;
-    border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    border: 2px solid var(--rule); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } .bar div { transition: none; } }
 
-  section.preview { display: flex; flex-direction: column; height: calc(100vh - 48px); min-height: 520px; overflow: hidden; }
-  @media (max-width: 860px) { section.preview { height: 80vh; } }
-  .toolbar {
-    display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border);
-  }
-  .toolbar select {
-    flex: 1; min-width: 0; padding: 7px 8px; font: inherit; font-size: 0.9rem;
-    color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-  }
-  .toolbar button {
-    width: auto; margin: 0; padding: 7px 12px; font-weight: 500; font-size: 0.9rem;
-    background: var(--bg); color: var(--text); border: 1px solid var(--border);
-  }
-  .stage { flex: 1; position: relative; background: var(--paper); border-radius: 0 0 12px 12px; }
-  #viewer { position: absolute; inset: 12px 16px; }
-  .placeholder {
-    position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
-    color: #6b665e; padding: 24px; font-size: 0.95rem;
-  }
-  [hidden] { display: none !important; }
-  .placeholder b { display: block; color: #1f1d1a; font-size: 1.05rem; margin-bottom: 4px; }
-  .book-info { padding: 8px 12px; font-size: 0.85rem; color: var(--muted); border-bottom: 1px solid var(--border); }
-
-  /* Book / Scanned pages tabs */
-  .tabs { display: flex; gap: 4px; padding: 10px 12px 0; border-bottom: 1px solid var(--border); }
+  /* preview */
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 16px 0; border-bottom: 1px solid var(--border); }
   .tabs button {
-    width: auto; margin: 0 0 -1px; padding: 7px 14px; font-weight: 500; font-size: 0.9rem;
-    background: transparent; color: var(--muted); border: 1px solid transparent; border-radius: 8px 8px 0 0;
+    display: flex; align-items: center; gap: 8px; height: 40px; margin-bottom: -1px; padding: 0 16px;
+    font-size: 14px; font-weight: 500; color: var(--muted); background: transparent;
+    border: 1px solid transparent; border-radius: 8px 8px 0 0; cursor: pointer;
   }
-  .tabs button[aria-selected="true"] { color: var(--text); background: var(--card); border-color: var(--border); border-bottom-color: var(--card); }
-  .tabs .count { margin-left: 6px; padding: 1px 7px; border-radius: 10px; font-size: 0.75rem; background: #f3d9a4; color: #5b3d00; }
+  .tabs button[aria-selected="true"] { font-weight: 600; color: var(--text); background: var(--field); border-color: var(--border); border-bottom-color: var(--field); }
+  .pill { padding: 1px 8px; font: 11px var(--mono); border-radius: 10px; color: var(--warn-text); background: var(--warn-bg); }
+  .book-info { margin: 0; padding: 10px 20px; font: 12px/1.5 var(--mono); color: var(--muted); background: var(--field); border-bottom: 1px solid var(--rule); }
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 40px 20px 32px; background: var(--stage); }
+  .device {
+    width: min(100%, 380px); padding: 18px 18px 44px; background: #26282B; border-radius: 28px;
+    box-shadow: 0 28px 48px -28px rgba(21, 23, 26, .55);
+  }
+  .screen { position: relative; aspect-ratio: 3 / 5; overflow: hidden; background: var(--paper); border-radius: 3px; }
+  #viewer { position: absolute; inset: 0; }
+  .placeholder {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; padding: 32px; text-align: center; color: #55554F; font-size: 13px;
+  }
+  .placeholder b { font: italic 400 18px Georgia, 'Times New Roman', serif; color: #3D3D3A; }
+  #screenView { position: absolute; inset: 0; background: #fff; }
+  #screenView img { display: block; width: 100%; height: 100%; }
+  .pager { display: flex; flex-direction: column; gap: 4px; width: min(100%, 380px); }
+  .pager-text { display: flex; justify-content: space-between; gap: 12px; font: 12px var(--mono); color: var(--muted); }
+  .pager-text b { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #slider { width: 100%; height: 44px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+  #slider:disabled { opacity: .45; cursor: not-allowed; }
 
-  /* scanned pages, shown as OCR reads them (on the light paper background in both themes) */
-  .scans { position: absolute; inset: 0; overflow: auto; padding: 0 16px 16px; color: #1f1d1a; }
+  /* scanned pages, shown as OCR reads them */
+  .scans { max-height: 80vh; overflow: auto; background: var(--field); }
   .scans-head {
-    position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
-    padding: 10px 0; background: var(--paper); border-bottom: 1px solid #e3ddd2; font-size: 0.85rem; color: #6b665e;
+    position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px;
+    padding: 12px 20px; background: var(--field); border-bottom: 1px solid var(--rule); font: 12px var(--mono); color: var(--muted);
   }
-  .scans-head label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-  .scans-head input { accent-color: #2f6f5e; }
-  .scans-head .rebuild { width: auto; margin: 0 0 0 auto; padding: 6px 12px; font-size: 0.85rem; background: #2f6f5e; color: #fff; }
+  .scans-head label { display: flex; align-items: center; gap: 8px; font: 14px var(--sans); color: var(--text); cursor: pointer; }
+  .scans-head input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+  .scans-head .rebuild { margin-left: auto; }
   .scans.only-low .scan:not(.checkable) { display: none; }
   .scan {
-    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 16px;
-    padding: 14px 0; border-bottom: 1px solid #e3ddd2;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 20px;
+    padding: 20px; border-bottom: 1px solid var(--rule);
   }
+  .scan.low { background: color-mix(in srgb, var(--warn-bg) 25%, var(--field)); }
   @media (max-width: 700px) { .scan { grid-template-columns: 1fr; } }
-  .scan img { width: 100%; height: auto; border: 1px solid #e3ddd2; border-radius: 4px; background: #fff; position: sticky; top: 56px; }
-  .scan-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 0.9rem; }
+  .scan img { width: 100%; max-width: 220px; height: auto; background: #fff; border: 1px solid var(--rule); border-radius: 4px; position: sticky; top: 64px; }
+  .scan-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 8px; }
   .scan-head b { font-weight: 600; }
-  .conf { padding: 1px 8px; border-radius: 10px; font-size: 0.78rem; font-variant-numeric: tabular-nums; background: #e2efe9; color: #1d5445; }
-  .scan.low .conf { background: #f3d9a4; color: #5b3d00; }
-  .conf.none { background: #ece8e1; color: #6b665e; }
-  .scan-head button {
-    width: auto; margin: 0 0 0 auto; padding: 4px 12px; font-size: 0.82rem; font-weight: 500;
-    background: #fff; color: #1f1d1a; border: 1px solid #cfc8bc;
-  }
-  .scan-head .page-action + .page-action { margin-left: 6px; }
-  .conf.typed { background: #dbe7f7; color: #1d3f6e; }
-  .conf.kept { background: #e6dcf2; color: #4a2f6e; }
+  .scan-head .page-action:first-of-type { margin-left: auto; }
+  .conf { padding: 1px 8px; font: 12px var(--mono); border-radius: 10px; color: var(--good-text); background: var(--good-bg); }
+  .scan.low .conf { color: var(--warn-text); background: var(--warn-bg); }
+  .conf.none { color: var(--muted); background: var(--seg); }
+  .conf.typed { color: var(--typed-text); background: var(--typed-bg); }
+  .conf.kept { color: var(--kept-text); background: var(--kept-bg); }
   .scan.as-picture .scan-text { opacity: .45; }
+  .scan-note { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+  .scan-note.good { color: var(--good-text); }
+  .scan-text { margin: 0; white-space: pre-wrap; word-break: break-word; font: 14px/1.55 Georgia, 'Times New Roman', serif; }
+  .scan-text.empty { font: italic 13px var(--sans); color: var(--muted); }
   .scan-edit textarea {
     display: block; width: 100%; min-height: 240px; padding: 10px; resize: vertical;
-    font: 14px/1.5 Georgia, "Times New Roman", serif; color: #1f1d1a; background: #fff;
-    border: 1px solid #cfc8bc; border-radius: 6px;
+    font: 14px/1.55 Georgia, 'Times New Roman', serif; background: var(--field); border: 1px solid var(--input); border-radius: 8px;
   }
-  .scan-edit textarea:focus-visible { outline: 2px solid #2f6f5e; outline-offset: 1px; }
   .edit-buttons { display: flex; gap: 8px; margin-top: 8px; }
-  .edit-buttons button { width: auto; margin: 0; padding: 6px 16px; font-size: 0.85rem; }
-  .edit-buttons .save { background: #2f6f5e; color: #fff; }
-  .edit-buttons .cancel { background: #fff; color: #1f1d1a; border: 1px solid #cfc8bc; }
-  .scan-note { margin: 0 0 8px; font-size: 0.82rem; color: #6b665e; }
-  .scan-note.good { color: #1d5445; }
-  .scan-text {
-    margin: 0; white-space: pre-wrap; word-break: break-word;
-    font: 13px/1.5 Georgia, "Times New Roman", serif; color: #1f1d1a;
+
+  /* side panel */
+  .side h2 { margin: 0; padding: 20px 20px 4px; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+  .side .note { padding: 0 20px 8px; }
+  .facts { margin: 0; padding: 0 20px 8px; list-style: none; }
+  .facts li { display: flex; flex-direction: column; gap: 2px; padding: 14px 0; }
+  .facts li + li { border-top: 1px solid var(--rule); }
+  .facts b { font-weight: 600; }
+  .facts span { font-size: 14px; color: var(--muted); }
+  .steps { margin: 0; padding: 4px 20px 14px; list-style: none; }
+  .steps li { display: flex; align-items: center; gap: 12px; min-height: 44px; color: var(--muted); }
+  .steps li.active { margin: 0 -10px; padding: 0 10px; font-weight: 600; color: var(--text); background: var(--tint); border-radius: 8px; }
+  .steps li .count { margin-left: auto; font: 500 12px var(--mono); }
+  .steps svg { flex: none; }
+  #contents { display: flex; flex-direction: column; gap: 2px; padding: 0 10px 14px; }
+  #contents button {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 0 12px;
+    font-size: 14px; text-align: left; background: transparent; border: 0; border-radius: 8px; cursor: pointer;
   }
-  .scan-text.empty { font-family: system-ui, sans-serif; color: #6b665e; font-style: italic; }
+  #contents button:hover { background: var(--seg); }
+  #contents button[aria-current="true"] { font-weight: 600; background: var(--tint); }
+  #contents button span + span { flex: none; font: 12px var(--mono); color: var(--muted); }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <aside class="card">
-    <h1>PDF to EPUB or XTC</h1>
-    <p class="sub">Upload a PDF (scanned books too), preview it, and download it as an e-book, or as an XTC book for Xteink readers.</p>
+<header class="top">
+  <div class="brand">
+    <h1>convert<span>Pdf</span></h1>
+    <p>PDF to EPUB or XTC for e-ink readers</p>
+  </div>
+  <p class="private">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+    Your files never leave this computer
+  </p>
+</header>
 
-    <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a PDF file">
-      <strong>Choose a PDF or drop it here</strong>
-      <span id="fileName">No file selected</span>
+<main class="layout">
+  <section class="card setup" aria-label="Book setup">
+    <div class="step" id="pdfStep">
+      <h2 class="step-title"><span>01</span>PDF</h2>
+      <div class="drop" id="drop">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--muted)"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 17v-6"/><path d="M9.5 13.5 12 11l2.5 2.5"/></svg>
+        <b>Drop a PDF here</b>
+        <button type="button" class="btn soft" id="choosePdf">Choose a file</button>
+        <span class="note">Scanned books too · up to 300 MB</span>
+      </div>
+      <div class="file-row" id="fileRow" hidden>
+        <div>
+          <span class="file-name" id="fileName"></span>
+          <span class="small mono" id="fileSize"></span>
+        </div>
+        <button type="button" class="btn" id="replacePdf">Replace</button>
+      </div>
+      <input type="file" id="file" accept="application/pdf,.pdf">
     </div>
-    <input type="file" id="file" accept="application/pdf,.pdf">
 
-    <label class="field">Output
-      <select id="format">
-        <option value="epub">EPUB e-book (any e-reader)</option>
-        <option value="xtc">XTC for Xteink X3, X4 and X4 Pro</option>
-      </select>
-    </label>
+    <div class="step">
+      <h2 class="step-title" id="outputLabel"><span>02</span>Output</h2>
+      <div class="seg" role="radiogroup" aria-labelledby="outputLabel">
+        <input type="radio" name="format" id="formatEpub" value="epub" checked>
+        <label for="formatEpub" class="tall"><b>EPUB</b><small>Any e-reader</small></label>
+        <input type="radio" name="format" id="formatXtc" value="xtc">
+        <label for="formatXtc" class="tall"><b>XTC</b><small>Xteink X3, X4, X4 Pro</small></label>
+      </div>
+      <p class="note" id="formatNote"></p>
+    </div>
 
-    <label class="field">Title (optional)
-      <input id="title" placeholder="Taken from the PDF if left blank">
-    </label>
-    <label class="field">Author (optional)
-      <input id="author" placeholder="Taken from the PDF if left blank">
-    </label>
-    <div class="cover-field">
-      <span id="coverLabel">Cover (optional)</span>
+    <div class="step">
+      <h2 class="step-title"><span>03</span>Details</h2>
+      <label class="field">Title
+        <input id="title" placeholder="Taken from the PDF">
+      </label>
+      <label class="field">Author
+        <input id="author" placeholder="Taken from the PDF">
+      </label>
+    </div>
+
+    <div class="step">
+      <h2 class="step-title" id="coverLabel"><span>04</span>Cover</h2>
       <div class="cover-pick" id="coverPick" role="group" aria-labelledby="coverLabel">
         <div class="cover-thumb empty" id="coverThumb"><span>PDF</span><img alt="Chosen cover" hidden></div>
         <div class="cover-info">
           <span id="coverName">Taken from the PDF</span>
           <div class="cover-buttons">
-            <button type="button" id="coverChoose">Choose image</button>
-            <button type="button" id="coverRemove" hidden>Remove</button>
+            <button type="button" class="btn" id="coverChoose">Choose image</button>
+            <button type="button" class="btn" id="coverRemove" hidden>Remove</button>
           </div>
         </div>
       </div>
-    </div>
-    <input type="file" id="coverFile" accept="image/jpeg,image/png,image/webp,image/gif">
-
-    <div id="epubSettings">
-      <label class="field">Font
-        <select id="fonts"></select>
-      </label>
-      <div class="font-sample" id="fontSample" aria-hidden="true"></div>
+      <p class="note" id="coverNote">JPEG, PNG or WebP. Shown at 480 × 800 in 4 shades of gray.</p>
+      <input type="file" id="coverFile" accept="image/jpeg,image/png,image/webp,image/gif">
     </div>
 
     <!-- XTC: every PDF page drawn as a picture for the reader's screen -->
-    <div id="xtcSettings" hidden>
+    <div class="step" id="xtcSettings" hidden>
+      <h2 class="step-title"><span>05</span>Reader</h2>
       <label class="field">Device
         <select id="xtcDevice">
-          <option value="x4">Xteink X4 (480 × 800)</option>
-          <option value="x4-pro">Xteink X4 Pro (480 × 800)</option>
-          <option value="x3">Xteink X3 (528 × 792)</option>
+          <option value="x4">Xteink X4 · 480 × 800</option>
+          <option value="x4-pro">Xteink X4 Pro · 480 × 800</option>
+          <option value="x3">Xteink X3 · 528 × 792</option>
         </select>
       </label>
-      <label class="field">Shades
-        <select id="xtcGrays">
-          <option value="0">Black and white (.xtc)</option>
-          <option value="1">4 shades of gray (.xtch)</option>
-        </select>
-        <span class="field-note">4 grays shows photos and shading better. Black and white turns pages faster.</span>
-      </label>
-      <label class="field">Pages
-        <select id="xtcOrientation">
-          <option value="landscape">Sideways: bigger text, each page in parts</option>
-          <option value="portrait">Upright: each page whole</option>
-        </select>
-      </label>
+      <fieldset class="group">
+        <legend>Shades</legend>
+        <div class="seg">
+          <input type="radio" name="xtcGrays" id="grays0" value="0" checked>
+          <label for="grays0">Black and white</label>
+          <input type="radio" name="xtcGrays" id="grays1" value="1">
+          <label for="grays1">4 grays</label>
+        </div>
+        <p class="note" id="graysNote" style="margin-top: 4px"></p>
+      </fieldset>
+      <fieldset class="group">
+        <legend>Pages</legend>
+        <div class="seg">
+          <input type="radio" name="xtcOrientation" id="sideways" value="landscape" checked>
+          <label for="sideways">Sideways</label>
+          <input type="radio" name="xtcOrientation" id="upright" value="portrait">
+          <label for="upright">Upright</label>
+        </div>
+        <p class="note" id="pagesNote" style="margin-top: 4px"></p>
+      </fieldset>
       <label class="field" id="xtcSplitField">Cut each page into
         <select id="xtcSplit">
           <option value="overlap">3 or more overlapping parts</option>
           <option value="half">2 halves</option>
-          <option value="none">Don't cut: the whole page sideways</option>
+          <option value="none">Don't cut</option>
         </select>
       </label>
-      <details class="xtc-more">
+      <details class="more">
         <summary>More settings</summary>
-        <label class="field">Dithering
-          <select id="xtcDithering">
-            <option value="atkinson">Atkinson (lighter, good for text)</option>
-            <option value="floyd">Floyd-Steinberg</option>
-            <option value="sierra-lite">Sierra Lite</option>
-            <option value="ordered">Ordered (patterned)</option>
-            <option value="none">None</option>
-          </select>
-        </label>
-        <label class="field">Contrast
-          <select id="xtcContrast">
-            <option value="0">None</option>
-            <option value="2">Light</option>
-            <option value="4">Medium</option>
-            <option value="6">Strong</option>
-            <option value="8">Maximum</option>
-          </select>
-        </label>
-        <div class="field-row">
-          <label class="field">Trim left and right
-            <select id="xtcCropX"><option>0</option><option>5</option><option>10</option><option>15</option><option>20</option></select>
+        <div>
+          <label class="field">Dithering
+            <select id="xtcDithering">
+              <option value="atkinson">Atkinson (lighter, good for text)</option>
+              <option value="floyd">Floyd-Steinberg</option>
+              <option value="sierra-lite">Sierra Lite</option>
+              <option value="ordered">Ordered (patterned)</option>
+              <option value="none">None</option>
+            </select>
           </label>
-          <label class="field">Trim top and bottom
-            <select id="xtcCropY"><option>0</option><option>5</option><option>10</option><option>15</option><option>20</option></select>
+          <label class="field">Contrast
+            <select id="xtcContrast">
+              <option value="0">None</option>
+              <option value="2">Light</option>
+              <option value="4">Medium</option>
+              <option value="6">Strong</option>
+              <option value="8">Maximum</option>
+            </select>
           </label>
+          <div class="two">
+            <label class="field">Trim sides
+              <select id="xtcCropX"><option value="0">0%</option><option value="5">5%</option><option value="10">10%</option><option value="15">15%</option><option value="20">20%</option></select>
+            </label>
+            <label class="field">Trim top, bottom
+              <select id="xtcCropY"><option value="0">0%</option><option value="5">5%</option><option value="10">10%</option><option value="15">15%</option><option value="20">20%</option></select>
+            </label>
+          </div>
+          <label class="check"><input type="checkbox" id="xtcCoverPage" checked>First page is the cover: whole and upright</label>
+          <label class="check"><input type="checkbox" id="xtcFlip">Turn sideways pages the other way</label>
         </div>
-        <span class="field-note">Percent of the page cut off each side, for wide margins.</span>
-        <label class="check"><input type="checkbox" id="xtcCoverPage" checked><span>First page is the cover: show it whole and upright</span></label>
-        <label class="check"><input type="checkbox" id="xtcFlip"><span>Turn sideways pages the other way</span></label>
       </details>
     </div>
 
-    <button id="convert" disabled>Convert</button>
-    <div class="progress" id="progress" hidden>
-      <div class="bar" id="progressBar" role="progressbar" aria-label="Conversion progress"
-           aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="fill" id="progressFill"></div></div>
-      <div class="progress-text">
-        <span id="progressLabel">Starting…</span>
-        <span id="progressNumbers"></span>
+    <div class="step actions">
+      <div id="progress" hidden>
+        <div class="bar" id="progressBar" role="progressbar" aria-label="Conversion progress"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressFill"></div></div>
+        <div class="progress-text">
+          <span id="progressLabel">Starting…</span>
+          <span id="progressNumbers"></span>
+        </div>
       </div>
+      <a class="btn big primary disabled" id="download" aria-disabled="true" tabindex="-1" hidden>Download</a>
+      <button type="button" class="btn big primary" id="convert" disabled>Convert</button>
+      <p id="status" role="status">Choose a PDF to start.</p>
     </div>
-    <div id="status" role="status"></div>
-    <a class="btn disabled" id="download" aria-disabled="true" tabindex="-1">Download EPUB</a>
-  </aside>
+  </section>
 
   <section class="card preview" aria-label="Book preview">
     <div class="tabs" id="tabs" role="tablist" hidden>
       <button role="tab" id="tabBook" aria-selected="true" aria-controls="bookView">Book</button>
-      <button role="tab" id="tabScans" aria-selected="false" aria-controls="scans">Scanned pages<span class="count" id="lowCount" hidden></span></button>
+      <button role="tab" id="tabScans" aria-selected="false" aria-controls="scans">Scanned pages<span class="pill" id="lowCount" hidden></span></button>
     </div>
-    <div class="book-info" id="bookInfo" hidden></div>
-    <div class="toolbar" id="bookToolbar">
-      <select id="toc" disabled aria-label="Go to chapter"><option>Contents</option></select>
-      <button id="prev" disabled aria-label="Previous page">‹ Prev</button>
-      <span class="page-number" id="pageNumber" hidden></span>
-      <button id="next" disabled aria-label="Next page">Next ›</button>
+    <p class="book-info" id="bookInfo" hidden></p>
+    <div class="stage" id="bookView">
+      <div class="device">
+        <div class="screen" id="screen">
+          <div class="placeholder" id="placeholder">
+            <b>Your book appears here</b>
+            <span>Preview it page by page before you download.</span>
+          </div>
+          <div id="viewer"></div>
+          <div id="screenView" hidden><img id="screenImage" alt=""></div>
+        </div>
+      </div>
+      <div class="pager">
+        <div class="pager-text"><b id="where">No book yet</b><span id="position">– / –</span></div>
+        <input type="range" id="slider" min="0" max="1" step="1" value="0" disabled aria-label="Page">
+      </div>
     </div>
-    <div class="stage">
-      <div id="bookView">
-        <div class="placeholder" id="placeholder">
-          <div><b>Preview</b>Convert a PDF and the book will appear here.</div>
-        </div>
-        <div id="viewer"></div>
-        <div id="screenView" hidden><img id="screenImage" alt=""></div>
+    <div class="scans" id="scans" role="tabpanel" aria-labelledby="tabScans" hidden>
+      <div class="scans-head">
+        <span id="scanSummary"></span>
+        <label><input type="checkbox" id="onlyLow"><span>Only pages at <span class="offer-limit">90</span>% or lower</span></label>
+        <button type="button" class="btn primary rebuild" id="rebuild" hidden></button>
       </div>
-      <div class="scans" id="scans" role="tabpanel" aria-labelledby="tabScans" hidden>
-        <div class="scans-head">
-          <span id="scanSummary"></span>
-          <label><input type="checkbox" id="onlyLow"><span>Only pages at <span class="offer-limit">90</span>% or lower</span></label>
-          <button class="rebuild" id="rebuild" hidden></button>
-        </div>
-        <div id="scanList"></div>
-      </div>
+      <div id="scanList"></div>
     </div>
   </section>
-</div>
+
+  <aside class="card side" aria-label="Book">
+    <div id="sideIntro">
+      <h2>What you get</h2>
+      <ul class="facts">
+        <li><b>Real paragraphs and chapters</b><span>Headers, footers and page numbers removed.</span></li>
+        <li><b>Scanned pages read for you</b><span>Built-in OCR for English and Indonesian.</span></li>
+        <li><b>Pictures as full e-ink pages</b><span>480 × 800, in 4 shades of gray.</span></li>
+        <li><b>Xteink books too</b><span>XTC for the X3, X4 and X4 Pro, every page drawn for the screen.</span></li>
+        <li><b>Your own cover</b><span>Or the one from the PDF.</span></li>
+      </ul>
+    </div>
+    <div id="sideProgress" hidden>
+      <h2>Progress</h2>
+      <ol class="steps" id="steps"></ol>
+    </div>
+    <div id="sideContents" hidden>
+      <h2>Contents</h2>
+      <p class="note" id="contentsNote"></p>
+      <nav id="contents" aria-label="Contents"></nav>
+    </div>
+  </aside>
+</main>
 
 <script src="/vendor/jszip.min.js"></script>
 <script src="/vendor/epub.min.js"></script>
 <script>
   const $ = id => document.getElementById(id);
   const drop = $('drop'), input = $('file'), convertBtn = $('convert'), status = $('status');
-  const download = $('download'), toc = $('toc'), prevBtn = $('prev'), nextBtn = $('next');
+  const download = $('download'), slider = $('slider');
   const viewer = $('viewer'), placeholder = $('placeholder'), bookInfo = $('bookInfo');
+  const radio = name => document.querySelector(`input[name="${name}"]:checked`).value;
 
   let file = null;
   let bookId = null;
   let bookMeta = null;
   let converting = false;
-  let font = 'default';
   let epub = null;
   let rendition = null;
   let previewToken = 0;
-
-  try { font = localStorage.getItem('font') || font; } catch {}
 
   function showStatus(msg, { error = false, busy = false } = {}) {
     status.className = error ? 'error' : '';
@@ -366,91 +473,59 @@
     status.append(msg);
   }
 
-  // ---------- fonts ----------
-  let fontList = [];
-  const fontFamily = f => (f.embedded ? `'${f.name}', ${f.fallback}` : f.fallback);
-
-  async function loadFonts() {
-    fontList = await (await fetch('/fonts.json')).json();
-    if (!fontList.some(f => f.id === font)) font = 'default';
-    const select = $('fonts');
-    select.innerHTML = '';
-    for (const f of fontList) {
-      const option = new Option(f.name, f.id, false, f.id === font);
-      option.style.fontFamily = fontFamily(f); // shown in its own typeface where the browser allows
-      select.append(option);
-    }
-    select.addEventListener('change', () => setFont(select.value));
-    showFontSample();
-  }
-
-  // the dropdown can't reliably show each font, so a sample line below it does
-  function showFontSample() {
-    const f = fontList.find(x => x.id === font);
-    const sample = $('fontSample');
-    if (!f) return;
-    sample.style.fontFamily = fontFamily(f);
-    sample.textContent = 'The quick brown fox jumps over the lazy dog.';
-    if (!f.embedded) sample.insertAdjacentHTML('beforeend', '<span class="note">Uses the e-reader\'s own font</span>');
-  }
-
-  function setFont(id) {
-    font = id;
-    try { localStorage.setItem('font', id); } catch {}
-    showFontSample();
-    if (bookId && !isXtc()) {
-      updateDownload();
-      openPreview(true);
-    }
-  }
-
   // ---------- output: EPUB, or XTC for Xteink readers ----------
   // The choice and the XTC settings are remembered for next time. They're used
   // by the next conversion; the book already converted keeps its own.
-  const XTC_FIELDS = {
-    device: 'xtcDevice', grays: 'xtcGrays', orientation: 'xtcOrientation', split: 'xtcSplit',
-    dithering: 'xtcDithering', contrast: 'xtcContrast', cropX: 'xtcCropX', cropY: 'xtcCropY',
-    firstPageIsCover: 'xtcCoverPage', flip: 'xtcFlip',
-  };
   const isXtc = () => bookMeta && bookMeta.format === 'xtc'; // the converted book
+  const XTC_SELECTS = { device: 'xtcDevice', split: 'xtcSplit', dithering: 'xtcDithering', contrast: 'xtcContrast', cropX: 'xtcCropX', cropY: 'xtcCropY' };
+  const XTC_CHECKS = { firstPageIsCover: 'xtcCoverPage', flip: 'xtcFlip' };
 
   function xtcSettings() {
-    const settings = {};
-    for (const [key, id] of Object.entries(XTC_FIELDS)) {
-      const el = $(id);
-      settings[key] = el.type === 'checkbox' ? el.checked : el.value;
-    }
-    settings.grays = settings.grays === '1';
+    const settings = { grays: radio('xtcGrays') === '1', orientation: radio('xtcOrientation') };
+    for (const [key, id] of Object.entries(XTC_SELECTS)) settings[key] = $(id).value;
+    for (const [key, id] of Object.entries(XTC_CHECKS)) settings[key] = $(id).checked;
     return settings;
   }
 
   function showOutput() {
-    const xtc = $('format').value === 'xtc';
-    $('epubSettings').hidden = xtc;
+    const xtc = radio('format') === 'xtc';
     $('xtcSettings').hidden = !xtc;
-    $('xtcSplitField').hidden = $('xtcOrientation').value !== 'landscape';
+    $('formatNote').textContent = xtc
+      ? 'Every page drawn for the reader’s screen, exactly as it looks in the PDF.'
+      : 'Real paragraphs and chapters that reflow on any e-reader.';
+    $('coverNote').textContent = xtc
+      ? 'JPEG, PNG or WebP. Drawn for the reader’s screen as the first page.'
+      : 'JPEG, PNG or WebP. Shown at 480 × 800 in 4 shades of gray.';
+    const sideways = radio('xtcOrientation') === 'landscape';
+    $('xtcSplitField').hidden = !sideways;
+    $('graysNote').textContent = radio('xtcGrays') === '1'
+      ? 'Saved as .xtch. Better for photos and shading.'
+      : 'Saved as .xtc. Turns pages faster.';
+    $('pagesNote').textContent = sideways
+      ? 'Turn the reader on its side. Text is bigger; each page comes in parts.'
+      : 'Each page whole. Text is as small as the page is wide.';
   }
 
   function saveOutput() {
     showOutput();
     try {
-      localStorage.setItem('format', $('format').value);
-      localStorage.setItem('xtc', JSON.stringify({ ...xtcSettings(), grays: $('xtcGrays').value }));
+      localStorage.setItem('format', radio('format'));
+      localStorage.setItem('xtc', JSON.stringify(xtcSettings()));
     } catch {}
   }
 
   try {
-    $('format').value = localStorage.getItem('format') === 'xtc' ? 'xtc' : 'epub';
+    if (localStorage.getItem('format') === 'xtc') $('formatXtc').checked = true;
     const saved = JSON.parse(localStorage.getItem('xtc') || '{}');
-    for (const [key, id] of Object.entries(XTC_FIELDS)) {
-      const el = $(id);
-      if (!(key in saved)) continue;
-      if (el.type === 'checkbox') el.checked = !!saved[key];
-      else if ([...el.options].some(o => o.value === String(saved[key]))) el.value = String(saved[key]);
+    for (const [key, id] of Object.entries(XTC_SELECTS)) {
+      if ([...$(id).options].some(o => o.value === String(saved[key]))) $(id).value = String(saved[key]);
     }
+    for (const [key, id] of Object.entries(XTC_CHECKS)) if (key in saved) $(id).checked = !!saved[key];
+    if (saved.grays === true || saved.grays === '1') $('grays1').checked = true;
+    if (saved.orientation === 'portrait') $('upright').checked = true;
   } catch {}
   showOutput();
-  $('format').addEventListener('change', saveOutput);
+  document.querySelectorAll('input[name="format"]').forEach(r => r.addEventListener('change', saveOutput));
   $('xtcSettings').addEventListener('change', saveOutput);
 
   // ---------- file choice ----------
@@ -461,19 +536,24 @@
       return;
     }
     file = f;
-    $('fileName').textContent = `${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`;
-    convertBtn.disabled = false;
-    showStatus('');
+    $('fileName').textContent = f.name;
+    $('fileSize').textContent = `${(f.size / 1024 / 1024).toFixed(1)} MB`;
+    drop.hidden = true;
+    $('fileRow').hidden = false;
+    convertBtn.disabled = converting;
+    showStatus(bookId ? 'Convert again to use this PDF.' : 'Ready. Choose the output, then convert.');
   }
 
-  drop.addEventListener('click', () => input.click());
-  drop.addEventListener('keydown', e => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+  const pdfStep = $('pdfStep');
+  $('choosePdf').addEventListener('click', () => input.click());
+  $('replacePdf').addEventListener('click', () => input.click());
+  input.addEventListener('change', () => {
+    setFile(input.files[0]);
+    input.value = ''; // so choosing the same file again still counts
   });
-  input.addEventListener('change', () => setFile(input.files[0]));
-  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
-  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-  drop.addEventListener('drop', e => {
+  pdfStep.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  pdfStep.addEventListener('dragleave', () => drop.classList.remove('over'));
+  pdfStep.addEventListener('drop', e => {
     e.preventDefault();
     drop.classList.remove('over');
     setFile(e.dataTransfer.files[0]);
@@ -481,7 +561,7 @@
 
   // ---------- cover ----------
   // A picture chosen to replace the PDF's cover. It's sent to the server once the
-  // book is converted, and can be changed or removed afterwards like the font.
+  // book is converted, and can be changed or removed afterwards.
   const MAX_COVER_MB = 20;
   let coverFile = null;
   let coverUrl = null;
@@ -561,26 +641,35 @@
     if (e.dataTransfer.files[0]) setCover(e.dataTransfer.files[0]);
   });
 
+  // ---------- side panel: what you get, progress, or contents ----------
+  function showSide(which) {
+    $('sideIntro').hidden = which !== 'intro';
+    $('sideProgress').hidden = which !== 'progress';
+    $('sideContents').hidden = which !== 'contents';
+  }
+
   // ---------- convert ----------
   convertBtn.addEventListener('click', async () => {
     if (!file) return;
+    const xtc = radio('format') === 'xtc';
     convertBtn.disabled = true;
     converting = true;
     updateDownload();
     showStatus('');
-    progress.start();
+    progress.start('Uploading…', xtc ? 'xtc' : 'epub');
 
     const headers = { 'Content-Type': 'application/pdf', 'X-Filename': encodeURIComponent(file.name) };
     const title = $('title').value.trim();
     const author = $('author').value.trim();
     if (title) headers['X-Title'] = encodeURIComponent(title);
     if (author) headers['X-Author'] = encodeURIComponent(author);
-    if ($('format').value === 'xtc') {
+    if (xtc) {
       headers['X-Format'] = 'xtc';
       headers['X-Xtc'] = encodeURIComponent(JSON.stringify(xtcSettings()));
     }
 
     scans.reset();
+    let failed = false;
     try {
       bookMeta = await sendForConversion(file, headers, {
         onProgress: update => {
@@ -614,6 +703,7 @@
       );
       openPreview(false).catch(() => showStatus('Converted, but the preview could not be shown.', { error: true }));
     } catch (err) {
+      failed = true;
       showStatus(err.message || 'Conversion failed.', { error: true });
     } finally {
       progress.stop();
@@ -621,6 +711,7 @@
       // after a failed conversion, the previously converted book can still be downloaded
       converting = false;
       updateDownload();
+      if (failed) showSide(bookId ? 'contents' : 'intro');
     }
   });
 
@@ -676,18 +767,16 @@
   }
 
   function showBookInfo() {
+    const m = bookMeta;
     if (isXtc()) {
-      const m = bookMeta;
       bookInfo.textContent =
         `${m.title}${m.author ? ` · ${m.author}` : ''} · ${m.device}, ${m.grays ? '4 grays' : 'black and white'} · ` +
-        `${m.pages} pages from ${m.sourcePages} PDF pages, ${m.chapters.length} chapters`;
-      bookInfo.hidden = false;
-      return;
+        `${m.pages} pages from ${m.sourcePages} PDF pages · ${m.chapters.length} chapters`;
+    } else {
+      const scanned = m.scannedPages ? ` · ${m.scannedPages} scanned pages read with OCR` : '';
+      bookInfo.textContent =
+        `${m.title} · ${m.author} · ${m.pages} pages · ${m.chapters} chapters · ${m.images} pictures${scanned}`;
     }
-    const scanned = bookMeta.scannedPages ? ` · ${bookMeta.scannedPages} scanned pages read with OCR` : '';
-    bookInfo.textContent =
-      `${bookMeta.title} · ${bookMeta.author} · ${bookMeta.pages} pages, ` +
-      `${bookMeta.chapters} chapters, ${bookMeta.images} pictures${scanned}`;
     bookInfo.hidden = false;
   }
 
@@ -700,7 +789,6 @@
     tabBook.setAttribute('aria-selected', String(!scansShown));
     tabScans.setAttribute('aria-selected', String(scansShown));
     $('bookView').hidden = scansShown;
-    $('bookToolbar').hidden = scansShown;
     $('scans').hidden = !scansShown;
     if (!scansShown && previewStale && bookId) {
       openPreview(true).catch(() => showStatus('The preview could not be shown.', { error: true }));
@@ -764,7 +852,8 @@
       head.innerHTML = `<b>Page ${n}</b>${badge}`;
       const addButton = (className, label, title, onClick) => {
         const b = document.createElement('button');
-        b.className = `${className} page-action`;
+        b.type = 'button';
+        b.className = `btn ${className} page-action`;
         b.textContent = label;
         b.title = done ? title : 'Available when the conversion has finished';
         b.addEventListener('click', onClick);
@@ -804,7 +893,7 @@
       box.className = 'scan-edit';
       box.innerHTML = `<p class="scan-note">Correct or type the page's text, looking at the scan. Leave an empty line between paragraphs.</p>
         <textarea spellcheck="true" aria-label="Text of page ${n}"></textarea>
-        <div class="edit-buttons"><button class="save">Save</button><button class="cancel">Cancel</button></div>`;
+        <div class="edit-buttons"><button type="button" class="btn primary save">Save</button><button type="button" class="btn cancel">Cancel</button></div>`;
       const textarea = box.querySelector('textarea');
       textarea.value = p.text || '';
       pre.after(box);
@@ -895,7 +984,7 @@
       updateCounts();
       updateDownload();
       convertBtn.disabled = true;
-      progress.start('Updating the book…');
+      progress.start('Updating the book…', 'epub');
       try {
         bookMeta = await streamRequest(`/book/${sessionId}/rebuild`, null, {}, { onProgress: u => progress.update(u) });
         progress.update({ stage: 'done' });
@@ -909,6 +998,7 @@
           .catch(() => showStatus('Book updated, but the preview could not be shown.', { error: true }));
       } catch (err) {
         showStatus(err.message || 'Could not update the book.', { error: true });
+        showSide('contents');
       } finally {
         progress.stop();
         busy = false;
@@ -937,6 +1027,7 @@
       },
       start(session) {
         sessionId = session.id;
+        if (session.lowConfidence === undefined) return; // an XTC book has no scanned pages to check
         limit = session.lowConfidence;
         pictureBelow = session.pictureBelow;
         offerPicture = session.offerPicture;
@@ -947,7 +1038,7 @@
       add(page) {
         const box = $('scans');
         const following = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
-        const card = document.createElement('div');
+        const card = document.createElement('article');
         card.className = 'scan';
         card.innerHTML = `<img alt="" loading="lazy"><div><div class="scan-head"></div><p class="scan-note" hidden></p><pre class="scan-text"></pre></div>`;
         card.querySelector('img').src = `/book/${sessionId}/pages/${page.n}.jpg`;
@@ -972,14 +1063,15 @@
     };
   })();
 
-  // Progress bar. Each stage fills its own share of the bar. Reading scanned
-  // pages (OCR) is by far the slowest, then finding pictures, so they get the most room.
+  // Progress bar, and the list of steps beside the preview. Each stage fills its
+  // own share of the bar. Reading scanned pages (OCR) is by far the slowest, then
+  // finding pictures, so they get the most room.
   const progress = (() => {
     const box = $('progress'), bar = $('progressBar'), fill = $('progressFill');
     const label = $('progressLabel'), numbers = $('progressNumbers');
     const stages = {
       upload: { from: 0, to: 3, text: () => 'Uploading…' },
-      text: { from: 3, to: 8, text: (d, t) => (t > 1 ? `Reading text: page ${d} of ${t}` : 'Reading text…') },
+      text: { from: 3, to: 8, text: (d, t) => (t > 1 ? `Reading text: page ${d} of ${t}` : 'Reading the PDF…') },
       ocr: {
         from: 8, to: 85,
         text: (d, t) => `Reading scanned pages: ${d} of ${t}`,
@@ -992,11 +1084,21 @@
       xtc: { from: 3, to: 99, text: (d, t) => (t ? `Drawing pages for the reader: ${d} of ${t}` : 'Reading the PDF…') },
       done: { from: 100, to: 100, text: () => 'Done' },
     };
+    const STEPS = {
+      epub: [['upload', 'Upload'], ['text', 'Reading text'], ['ocr', 'Reading scanned pages'], ['pictures', 'Finding pictures'], ['finishing', 'Building chapters']],
+      xtc: [['upload', 'Upload'], ['xtc', 'Drawing pages for the reader']],
+    };
+    const ICONS = {
+      done: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>',
+      active: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="var(--accent)" stroke="none"/></svg>',
+      todo: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--input)" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/></svg>',
+    };
     let percent = 0;
     let started = 0;
     let timer = null;
+    let steps = [];
 
-    // Time left, from how fast the slow stages (OCR, pictures) are actually going.
+    // Time left, from how fast the slow stages (OCR, pictures, XTC pages) are actually going.
     // Timing starts from a stage's first finished page, since OCR spends its first
     // seconds starting up and picking the language.
     const PICTURES_SECONDS_PER_PAGE = 0.1; // rough, for the part of the time estimate still to come after OCR
@@ -1028,8 +1130,21 @@
       numbers.textContent = `${Math.round(percent)}% · ${time(Date.now() - started)}${left}`;
     };
 
+    // the steps beside the preview: done, the one running (with its count), still to come
+    function showSteps(stage, done, total) {
+      const at = stage === 'done' ? steps.length : steps.findIndex(s => s.key === stage);
+      if (at < 0) return;
+      steps.forEach((s, i) => {
+        if (s.key === stage) s.li.hidden = false;
+        const state = i < at ? 'done' : i === at ? 'active' : 'todo';
+        s.li.className = state === 'active' ? 'active' : '';
+        s.li.querySelector('.icon').innerHTML = ICONS[state];
+        s.li.querySelector('.count').textContent = state === 'done' ? 'done' : state === 'active' && total > 1 && stage !== 'upload' ? `${done}/${total}` : '';
+      });
+    }
+
     return {
-      start(text = 'Uploading…') {
+      start(text = 'Uploading…', format = 'epub') {
         percent = 0;
         stages.pictures.from = 8;
         started = Date.now();
@@ -1037,6 +1152,18 @@
         rate = finishAt = null;
         label.textContent = text;
         box.hidden = false;
+        const list = $('steps');
+        list.innerHTML = '';
+        steps = STEPS[format].map(([key, name]) => {
+          const li = document.createElement('li');
+          li.innerHTML = `<span class="icon"></span><span></span><span class="count"></span>`;
+          li.children[1].textContent = name;
+          li.hidden = key === 'ocr'; // only for books with scanned pages
+          list.append(li);
+          return { key, li };
+        });
+        showSteps(format === 'xtc' || text === 'Uploading…' ? 'upload' : 'text', 0, 0);
+        showSide('progress');
         render();
         timer = setInterval(render, 1000);
       },
@@ -1053,6 +1180,8 @@
         const share = counted.includes(stage) ? (total ? done / total : 0) : 0;
         percent = Math.max(percent, s.from + (s.to - s.from) * share); // never moves backwards
         label.textContent = s.text(done, total);
+        // an XTC book reports reading the PDF as 'text' before its own stage starts
+        showSteps(stage === 'text' && steps.every(st => st.key !== 'text') ? 'upload' : stage, done, total);
         render();
       },
       stop() {
@@ -1062,26 +1191,31 @@
     };
   })();
 
-  // The download button only works once a conversion has finished.
+  // Download appears once a book is converted; Convert then becomes "Convert again".
   function updateDownload() {
     const ready = bookId && !converting;
+    download.hidden = !bookId;
     if (ready) {
       download.href = isXtc()
         ? `/book/${bookId}.xtc?download=1`
-        : `/book/${bookId}.epub?font=${encodeURIComponent(font)}&download=1`;
+        : `/book/${bookId}.epub?download=1`;
       download.textContent = `Download ${bookMeta.fileName}`;
     } else {
       download.removeAttribute('href');
-      download.textContent = converting ? 'Download (converting…)' : 'Download EPUB';
+      download.textContent = 'Download (converting…)';
     }
     download.classList.toggle('disabled', !ready);
     download.setAttribute('aria-disabled', String(!ready));
     download.tabIndex = ready ? 0 : -1;
+    convertBtn.textContent = converting ? 'Converting…' : bookId ? 'Convert again' : 'Convert';
+    convertBtn.classList.toggle('primary', !bookId || converting);
+    convertBtn.classList.toggle('quiet', !!bookId && !converting);
   }
 
   // ---------- preview ----------
   // The book can't be laid out while its tab is hidden, so then it's drawn when the tab is shown.
   let previewStale = false;
+  let contents = []; // [{ label, target, page? }]
 
   async function openPreview(keepPlace) {
     if ($('bookView').hidden) {
@@ -1092,19 +1226,19 @@
     const token = ++previewToken;
     if (isXtc()) return showScreens(keepPlace);
     $('screenView').hidden = true;
-    $('pageNumber').hidden = true;
+    $('screen').style.aspectRatio = '';
     viewer.hidden = false;
     const loc = keepPlace && rendition && rendition.currentLocation();
     const place = loc && loc.start ? { cfi: loc.start.cfi, href: loc.start.href } : null;
     if (keepPlace) showStatus('Updating preview…', { busy: true });
 
-    const res = await fetch(`/book/${bookId}.epub?font=${encodeURIComponent(font)}`);
+    const res = await fetch(`/book/${bookId}.epub`);
     if (!res.ok) {
       showStatus(await res.text(), { error: true });
       return;
     }
     const data = await res.arrayBuffer();
-    if (token !== previewToken) return; // a newer font was picked meanwhile
+    if (token !== previewToken) return; // a newer cover was chosen meanwhile
 
     if (epub) epub.destroy();
     viewer.innerHTML = '';
@@ -1113,15 +1247,33 @@
     rendition = epub.renderTo(viewer, { width: '100%', height: '100%', spread: 'none' });
     rendition.on('relocated', onRelocated);
     rendition.on('keyup', onKey);
+    slider.disabled = true;
+    $('position').textContent = 'Counting pages…';
     // go back to the same spot; if that fails, at least the same chapter
     try {
       await rendition.display(place ? place.cfi : undefined);
     } catch {}
     const now = rendition.currentLocation();
     if (place && (!now || !now.start || now.start.href !== place.href)) await rendition.display(place.href);
-    fillToc(await epub.loaded.navigation);
-    prevBtn.disabled = nextBtn.disabled = toc.disabled = false;
+    const nav = await epub.loaded.navigation;
+    const items = [];
+    const add = (list, depth) => {
+      for (const item of list) {
+        items.push({ label: item.label.trim(), target: item.href, depth });
+        if (item.subitems && item.subitems.length) add(item.subitems, depth + 1);
+      }
+    };
+    add(nav.toc, 0);
+    showContents(items, `${bookMeta.chapters} chapters`);
     if (keepPlace) showStatus('Preview updated.');
+    // page positions for the slider: the book cut into screens of about the same length
+    const book = epub;
+    await book.locations.generate(1024);
+    if (book !== epub || token !== previewToken) return;
+    slider.min = 0;
+    slider.max = Math.max(0, book.locations.length() - 1);
+    slider.disabled = false;
+    onRelocated(rendition.currentLocation());
   }
 
   // An XTC book is shown a page at a time, as pictures of the reader's screen.
@@ -1135,12 +1287,16 @@
     viewer.hidden = true;
     placeholder.hidden = true;
     $('screenView').hidden = false;
-    $('pageNumber').hidden = false;
+    $('screen').style.aspectRatio = `${bookMeta.width} / ${bookMeta.height}`;
     if (!keepPlace) screen = 1;
-    toc.innerHTML = '';
-    for (const ch of bookMeta.chapters) toc.append(new Option(ch.title, ch.page));
-    if (!bookMeta.chapters.length) toc.append(new Option('No chapters in this PDF'));
-    toc.disabled = !bookMeta.chapters.length;
+    slider.min = 1;
+    slider.max = bookMeta.pages;
+    slider.disabled = false;
+    showContents(
+      [{ label: 'Cover', target: 1, page: 1 }, ...bookMeta.chapters.map(ch => ({ label: ch.title, target: ch.page, page: ch.page }))]
+        .filter((it, i, all) => i > 0 || !all.slice(1).some(o => o.page === 1)),
+      bookMeta.chapters.length ? 'From the PDF’s bookmarks' : 'This PDF has no bookmarks, so the book has no chapters.'
+    );
     goToScreen(screen);
     if (keepPlace) showStatus('Preview updated.');
   }
@@ -1150,63 +1306,88 @@
     const img = $('screenImage');
     img.src = `/book/${bookId}/screens/${screen}.png?v=${screenVersion}`;
     img.alt = `Page ${screen} of ${bookMeta.pages}, as the ${bookMeta.device} shows it`;
-    $('pageNumber').textContent = `${screen} / ${bookMeta.pages}`;
-    prevBtn.disabled = screen <= 1;
-    nextBtn.disabled = screen >= bookMeta.pages;
-    const chapter = bookMeta.chapters.filter(ch => ch.page <= screen).pop();
-    if (chapter) toc.value = String(chapter.page);
+    slider.value = screen;
+    const here = contents.filter(it => it.page <= screen).pop();
+    markContents(here);
+    $('where').textContent = here ? here.label : `Page ${screen}`;
+    $('position').textContent = `${screen} / ${bookMeta.pages}`;
+    slider.setAttribute('aria-valuetext', `Page ${screen} of ${bookMeta.pages}`);
   }
 
-  function fillToc(nav) {
-    toc.innerHTML = '';
-    const add = (items, depth) => {
-      for (const item of items) {
-        const opt = document.createElement('option');
-        opt.value = item.href;
-        opt.textContent = ' '.repeat(depth) + item.label.trim();
-        toc.append(opt);
-        if (item.subitems && item.subitems.length) add(item.subitems, depth + 1);
-      }
-    };
-    add(nav.toc, 0);
-    syncToc();
+  // ---------- contents ----------
+  function showContents(items, note) {
+    contents = items;
+    const nav = $('contents');
+    nav.innerHTML = '';
+    for (const item of items) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.style.paddingLeft = `${12 + (item.depth || 0) * 14}px`;
+      b.innerHTML = '<span></span><span></span>';
+      b.children[0].textContent = item.label;
+      b.children[1].textContent = item.page ?? '';
+      b.addEventListener('click', () => goTo(item.target));
+      item.button = b;
+      nav.append(b);
+    }
+    $('contentsNote').textContent = note;
+    showSide('contents');
   }
 
-  function syncToc() {
-    const loc = rendition && rendition.currentLocation();
-    if (!loc || !loc.start) return;
-    const file = loc.start.href.split('#')[0];
-    const option = [...toc.options].find(o => o.value.split('#')[0] === file);
-    if (option) toc.value = option.value;
+  function markContents(current) {
+    for (const item of contents) {
+      if (item === current) item.button.setAttribute('aria-current', 'true');
+      else item.button.removeAttribute('aria-current');
+    }
+  }
+
+  function goTo(target) {
+    if (isXtc()) goToScreen(Number(target));
+    else if (rendition) rendition.display(target);
   }
 
   function onRelocated(loc) {
-    syncToc();
-    prevBtn.disabled = loc.atStart;
-    nextBtn.disabled = loc.atEnd;
+    if (!loc || !loc.start) return;
+    // a chapter's section headings share its file, so the chapter itself is the place shown
+    const file = loc.start.href.split('#')[0];
+    const inFile = contents.filter(it => it.target.split('#')[0] === file);
+    const here = inFile.find(it => !it.depth) || inFile[0];
+    markContents(here);
+    $('where').textContent = here ? here.label : bookMeta.title;
+    if (!slider.disabled) {
+      const total = Number(slider.max) + 1;
+      slider.value = loc.start.location;
+      $('position').textContent = `${loc.start.location + 1} / ${total}`;
+      slider.setAttribute('aria-valuetext', `Page ${loc.start.location + 1} of ${total}`);
+    }
   }
 
-  const showingScreens = () => !$('screenView').hidden;
-  const prevPage = () => (showingScreens() ? goToScreen(screen - 1) : rendition && rendition.prev());
-  const nextPage = () => (showingScreens() ? goToScreen(screen + 1) : rendition && rendition.next());
+  // The slider moves through the book: an XTC book a page at a time as it's dragged,
+  // an EPUB when it's let go (laying out a page there takes a moment).
+  slider.addEventListener('input', () => {
+    const v = Number(slider.value);
+    if (isXtc()) goToScreen(v);
+    else $('position').textContent = `${v + 1} / ${Number(slider.max) + 1}`;
+  });
+  slider.addEventListener('change', () => {
+    if (!isXtc() && epub && rendition) rendition.display(epub.locations.cfiFromLocation(Number(slider.value)));
+  });
+
+  const prevPage = () => (isXtc() ? goToScreen(screen - 1) : rendition && rendition.prev());
+  const nextPage = () => (isXtc() ? goToScreen(screen + 1) : rendition && rendition.next());
 
   function onKey(e) {
+    if (!bookId || $('bookView').hidden) return;
     if (e.key === 'ArrowLeft') prevPage();
     if (e.key === 'ArrowRight') nextPage();
   }
 
-  toc.addEventListener('change', () => {
-    if (showingScreens()) goToScreen(Number(toc.value));
-    else if (rendition) rendition.display(toc.value);
-  });
-  prevBtn.addEventListener('click', prevPage);
-  nextBtn.addEventListener('click', nextPage);
   document.addEventListener('keyup', e => {
     if (e.target.closest('input, select, textarea')) return;
     onKey(e);
   });
 
-  loadFonts().catch(() => showStatus('Could not load the font list.', { error: true }));
+  updateDownload();
 </script>
 </body>
 </html>

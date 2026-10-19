@@ -31,12 +31,17 @@ const PACKAGES = {
 for (const code of Object.keys(require('../ocr').LANGUAGES)) {
   PACKAGES[`@tesseract.js-data/${code}`] = { include: [/^package\.json$/, /^4\.0\.0_best_int\//] };
 }
-const FONT_FILES = [/^package\.json$/, /^(400|700)\.css$/, /^files\/.*-latin(-ext)?-(400|700)-normal\.woff$/];
-for (const pkg of Object.keys(require(path.join(root, 'package.json')).dependencies)) {
-  if (pkg.startsWith('@fontsource/')) PACKAGES[pkg] = { include: FONT_FILES };
+// IBM Plex, the web app's own typeface: only the files the page uses
+for (const family of ['sans', 'mono']) {
+  PACKAGES[`@fontsource/ibm-plex-${family}`] = {
+    include: [/^package\.json$/, new RegExp(`^files/ibm-plex-${family}-latin-(400|500|600)-normal\\.woff2$`)],
+  };
 }
 
-const APP_FILES = ['index.js', 'figures.js', 'eink.js', 'fonts.js', 'ocr.js', 'server.js', 'package.json', 'public/index.html'];
+const APP_FILES = [
+  'index.js', 'pdf.js', 'figures.js', 'eink.js', 'ocr.js', 'xtc.js', 'xtcfile.js', 'server.js',
+  'package.json', 'public/index.html',
+];
 
 function walk(dir, base = dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => {

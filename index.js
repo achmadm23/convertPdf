@@ -6,7 +6,6 @@ const path = require('path');
 const crypto = require('crypto');
 const JSZip = require('jszip');
 const { measureLayout, findGaps, detectFigures, renderCover, imageCover } = require('./figures');
-const { FONTS, findFont, fontFaces, fontFaceCss, fontStack } = require('./fonts');
 const { recognizePages, finishPages, LANGUAGES } = require('./ocr');
 const { openPdf } = require('./pdf');
 const { DEVICES, DITHERING, convertPdfPages, coverPage, bookPages, buildXtc, extensionFor } = require('./xtc');
@@ -16,7 +15,6 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--title') opts.title = argv[++i];
     else if (argv[i] === '--author') opts.author = argv[++i];
-    else if (argv[i] === '--font') opts.font = argv[++i];
     else if (argv[i] === '--cover') opts.cover = argv[++i];
     else if (argv[i] === '--ocr-lang') opts.ocrLanguage = argv[++i];
     // XTC (Xteink) output
@@ -29,6 +27,7 @@ function parseArgs(argv) {
     else if (argv[i] === '--crop') [opts.cropX, opts.cropY = opts.cropX] = argv[++i].split(',');
     else if (argv[i] === '--no-cover-page') opts.firstPageIsCover = false;
     else if (argv[i] === '--flip') opts.flip = true;
+    else if (argv[i].startsWith('--')) throw new Error(`Unknown option "${argv[i]}".`);
     else opts.positional.push(argv[i]);
   }
   return opts;
@@ -467,10 +466,10 @@ function chapterFiles(ch, number) {
 }
 
 // Package an analysed book as an EPUB. This is fast, so the same book can be
-// re-packaged with a different font or cover without reading the PDF again.
+// re-packaged with a different cover without reading the PDF again.
 // `cover` (a PNG from imageCover) replaces the cover found in the PDF.
-async function buildEpub({ title, author, chapters, images = [], cover: pdfCover = null }, { font: fontId, cover: customCover } = {}) {
-  const font = findFont(fontId);
+// The text uses the e-reader's own font.
+async function buildEpub({ title, author, chapters, images = [], cover: pdfCover = null }, { cover: customCover } = {}) {
   const cover = customCover || pdfCover;
   const zip = new JSZip();
   const id = 'urn:uuid:' + crypto.randomUUID();
@@ -489,13 +488,7 @@ async function buildEpub({ title, author, chapters, images = [], cover: pdfCover
   const spine = [];
   const navItems = [];
 
-  for (const face of fontFaces(font)) {
-    zip.file(`OEBPS/fonts/${face.file}`, fs.readFileSync(face.path), { compression: 'STORE' });
-    manifest.push(`    <item id="${face.file.replace(/\./g, '-')}" href="fonts/${face.file}" media-type="font/woff"/>`);
-  }
-
-  zip.file('OEBPS/style.css', `${fontFaceCss(font, 'fonts/')}
-body { font-family: ${fontStack(font)}; line-height: 1.5; margin: 0 5%; }
+  zip.file('OEBPS/style.css', `body { font-family: serif; line-height: 1.5; margin: 0 5%; }
 h2 { text-align: center; margin: 1.5em 0; }
 h3 { margin: 1.5em 0 0.75em; }
 h3 + p { text-indent: 0; }
@@ -588,11 +581,11 @@ async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', onProgr
 }
 
 // Convert PDF bytes to EPUB bytes in one go. `cover` is a picture file's bytes.
-async function convertPdfToEpub(pdfBuffer, { font, cover, ...options } = {}) {
+async function convertPdfToEpub(pdfBuffer, { cover, ...options } = {}) {
   // read the cover first, so an unreadable picture fails before the slow part
   const coverImage = cover && (await imageCover(cover));
   const book = await analyzePdf(pdfBuffer, options);
-  const epub = await buildEpub(book, { font, cover: coverImage });
+  const epub = await buildEpub(book, { cover: coverImage });
   return { epub, ...book.stats, chapters: book.chapters.length };
 }
 
@@ -601,9 +594,8 @@ async function main() {
   const [input, output] = opts.positional;
   if (!input) {
     console.error(
-      'Usage: node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--font id] [--cover image] [--ocr-lang code]'
+      'Usage: node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--ocr-lang code]'
     );
-    console.error('Fonts: ' + FONTS.map(f => f.id).join(', '));
     console.error(
       'OCR languages (for scanned pages; detected when not given): ' +
         Object.entries(LANGUAGES).map(([code, name]) => `${code} (${name})`).join(', ')
@@ -624,7 +616,6 @@ async function main() {
   const { epub, pages, paragraphs, chapters, images } = await convertPdfToEpub(fs.readFileSync(input), {
     title: opts.title,
     author: opts.author,
-    font: opts.font,
     cover: opts.cover && fs.readFileSync(opts.cover),
     ocrLanguage: opts.ocrLanguage,
     name: path.basename(input, path.extname(input)),

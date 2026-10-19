@@ -1,4 +1,4 @@
-// Local web UI: upload a PDF, preview the EPUB, pick a font, download.
+// Local web UI: upload a PDF, preview the EPUB or XTC book, download.
 // Usage: node server.js  then open http://localhost:3000
 
 const http = require('http');
@@ -9,11 +9,10 @@ const { analyzePdf, buildEpub, openPdf } = require('./index');
 const { imageCover } = require('./figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('./xtc');
 const { retryPage, manualReading } = require('./ocr');
-const { FONTS, findFont, fontFaces, fontFaceCss } = require('./fonts');
 
 const PORT = process.env.PORT || 3000;
 const MAX_BYTES = 300 * 1024 * 1024;
-const MAX_BOOKS = 5; // converted books kept in memory so fonts can be switched quickly
+const MAX_BOOKS = 5; // converted books kept in memory so their cover can be changed quickly
 const LOW_CONFIDENCE = 75; // scanned pages read this well (%) or worse can be read again or typed in
 const PICTURE_BELOW = 30; // ...unless they're read this badly: then they're pictures, not text
 const OFFER_PICTURE = 90; // scanned pages read this well (%) or worse can be kept as a picture of the page
@@ -25,7 +24,16 @@ const vendor = {
   'epub.min.js': require.resolve('epubjs/dist/epub.min.js'),
   'jszip.min.js': require.resolve('jszip/dist/jszip.min.js'),
 };
-const fontFiles = new Map(FONTS.flatMap(f => fontFaces(f).map(face => [face.file, face.path])));
+// IBM Plex, the web app's own typeface, served from here so the page works offline
+const uiFontFiles = new Map(
+  ['sans', 'mono'].flatMap(family =>
+    [400, 500, 600].map(weight => {
+      const file = `ibm-plex-${family}-latin-${weight}-normal.woff2`;
+      const dir = path.dirname(require.resolve(`@fontsource/ibm-plex-${family}/package.json`));
+      return [file, path.join(dir, 'files', file)];
+    })
+  )
+);
 
 // One per conversion: the PDF and options (to rebuild the book), previews of its
 // scanned pages, the book once it's converted, and a cover picture if the user
@@ -315,13 +323,12 @@ function handleScreen(res, session, n) {
   res.end(png);
 }
 
-// GET /book/<id>.epub?font=<id>[&download=1]: package the book with a font.
+// GET /book/<id>.epub[?download=1]: package the book as an EPUB.
 async function handleBook(req, res, id, query) {
   const session = sessions.get(id);
   const book = session?.book;
   if (!book) return sendError(res, 404, 'This book has expired. Please convert the PDF again.');
-  const font = findFont(query.get('font'));
-  const epub = await buildEpub(book, { font: font.id, cover: session.cover });
+  const epub = await buildEpub(book, { cover: session.cover });
   const headers = { 'Content-Type': 'application/epub+zip', 'Content-Length': epub.length };
   if (query.get('download')) {
     headers['Content-Disposition'] = `attachment; filename*=UTF-8''${encodeURIComponent(book.fileName)}`;
@@ -386,15 +393,12 @@ const server = http.createServer((req, res) => {
     } else {
       sendError(res, 404, 'Not found');
     }
-  } else if (req.method === 'GET' && route === '/fonts.json') {
+  } else if (req.method === 'GET' && route === '/about.json') {
+    // tells a second copy of the exe that the converter is already running here
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(FONTS.map(f => ({ id: f.id, name: f.name, fallback: f.fallback, embedded: !!f.pkg }))));
-  } else if (req.method === 'GET' && route === '/fonts.css') {
-    // lets the upload page show each font option in its own typeface
-    res.writeHead(200, { 'Content-Type': 'text/css' });
-    res.end(FONTS.map(f => fontFaceCss(f, '/fontfiles/')).join('\n'));
-  } else if (req.method === 'GET' && (match = route.match(/^\/fontfiles\/([\w.-]+)$/)) && fontFiles.has(match[1])) {
-    sendFile(res, fontFiles.get(match[1]), 'font/woff');
+    res.end(JSON.stringify({ app: 'convertPdf' }));
+  } else if (req.method === 'GET' && (match = route.match(/^\/uifonts\/([\w.-]+)$/)) && uiFontFiles.has(match[1])) {
+    sendFile(res, uiFontFiles.get(match[1]), 'font/woff2');
   } else if (req.method === 'GET' && (match = route.match(/^\/vendor\/([\w.-]+)$/)) && vendor[match[1]]) {
     sendFile(res, vendor[match[1]], 'text/javascript');
   } else {
@@ -421,9 +425,10 @@ function open(url) {
 function isConverter(port) {
   return new Promise(resolve => {
     http
-      .get({ host: '127.0.0.1', port, path: '/fonts.json', timeout: 1500 }, res => {
-        res.resume();
-        resolve(res.statusCode === 200 && /json/.test(res.headers['content-type'] || ''));
+      .get({ host: '127.0.0.1', port, path: '/about.json', timeout: 1500 }, res => {
+        let body = '';
+        res.on('data', chunk => (body += chunk));
+        res.on('end', () => resolve(res.statusCode === 200 && body.includes('"convertPdf"')));
       })
       .on('error', () => resolve(false))
       .on('timeout', function () {
@@ -437,7 +442,7 @@ function listen(port, triesLeft) {
   const onListening = () => {
     server.off('error', onError);
     const url = `http://localhost:${port}`;
-    console.log(`PDF to EPUB converter running at ${url}`);
+    console.log(`convertPdf running at ${url}`);
     if (openBrowser) {
       console.log('Keep this window open while you use the converter. Close it to stop.');
       open(url);

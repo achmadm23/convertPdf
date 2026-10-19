@@ -11,11 +11,8 @@
   },
   "private": true,
   "dependencies": {
-    "@fontsource/atkinson-hyperlegible": "^5.3.0",
-    "@fontsource/literata": "^5.3.0",
-    "@fontsource/lora": "^5.3.0",
-    "@fontsource/merriweather": "^5.3.0",
-    "@fontsource/open-sans": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
     "@napi-rs/canvas": "^1.0.9",
     "@tesseract.js-data/eng": "^1.0.0",
     "@tesseract.js-data/ind": "^1.0.0",

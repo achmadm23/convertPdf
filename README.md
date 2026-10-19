@@ -8,7 +8,7 @@ Convert PDFs into EPUB e-books. It works on normal PDFs and on scanned books, wi
 - keeps the pictures (photos, charts, diagrams) where they appear in the text, and uses a picture-only first page as the cover
 - lets you use a picture of your own as the cover instead
 - shows every picture, the cover and pages kept as a picture on a page of its own that it fills, in the 4 shades of gray of an e-ink screen, like a page of an XTC book (480 x 800, the Xteink format)
-- embeds a font of your choice, or leaves the font to the e-reader
+- leaves the font to the e-reader, so the book reads in the font and size you choose there
 - reads scanned pages with built-in OCR (English and Indonesian), with nothing extra to install
 - can also make an XTC book for Xteink X3, X4 and X4 Pro readers, with every page drawn for the reader's screen (see [Xteink books](#xteink-books-xtc))
 
@@ -55,16 +55,19 @@ If you use `ConvertPdf.exe`, [download the zip](https://github.com/achmadm23/con
 npm start
 ```
 
-Then open **http://localhost:3000** and:
+Then open **http://localhost:3000**. The steps are numbered down the left of the page:
 
-1. **Choose a PDF**, or drag it onto the page, and the **Output**: an EPUB e-book, or an XTC book for an Xteink reader ([Xteink books](#xteink-books-xtc)).
-2. Optionally type a **title** and **author**. If you leave them blank, they're taken from the PDF.
-3. Optionally choose a **cover** picture (JPEG, PNG or WebP, up to 20 MB), or drop it on the Cover box. It replaces the cover taken from the PDF and is shown in the e-reader's 4 shades of gray.
-4. Pick a **font**. For an XTC book, pick the device and how pages are drawn instead.
-5. Click **Convert**. The progress bar shows what's happening, for example "Reading scanned pages: 57 of 244" or "Finding pictures: page 57 of 121", and about how long is left.
-6. **Preview** the book on the right. Turn pages with **‹ Prev / Next ›** or the arrow keys, and jump to a chapter from the contents list.
-7. Change the font or the cover as often as you like. The preview updates in about a second, without converting again. **Remove** goes back to the PDF's own cover.
-8. Click **Download**. The button stays disabled until the conversion has finished.
+1. **PDF:** choose a PDF, or drop it on the page.
+2. **Output:** an EPUB e-book for any e-reader, or an XTC book for an Xteink reader ([Xteink books](#xteink-books-xtc)).
+3. **Details:** optionally type a title and author. If you leave them blank, they're taken from the PDF.
+4. **Cover:** optionally choose a picture (JPEG, PNG or WebP, up to 20 MB), or drop it on the Cover box. It replaces the cover taken from the PDF.
+5. **Reader**, for an XTC book only: the device, black and white or 4 grays, and whether pages are turned sideways.
+
+Then click **Convert**. The progress bar shows what's happening, for example "Reading scanned pages: 57 of 244", and about how long is left; the panel on the right lists each step.
+
+The book appears on an e-reader in the middle of the page. Move through it with the **slider** under the reader or the arrow keys, and jump to a chapter from **Contents** on the right. Change the cover as often as you like: the preview updates in about a second, without converting again, and **Remove** goes back to the PDF's own cover. When it looks right, click **Download**. **Convert again** converts the PDF anew, for example with other XTC settings.
+
+The page follows your system's light or dark theme, and works offline: its fonts are served by the converter.
 
 For scanned books, a **Scanned pages** tab shows each page as OCR reads it: the scan, the text read from it, and how confidently it was read. Pages read at 75% or lower are marked. Once the conversion has finished, they have two buttons:
 
@@ -75,7 +78,7 @@ Pages read at 90% or lower also have **Keep as picture**, which puts the whole p
 
 Then click **Update the book** to use the changed pages. This takes under a minute, because the other pages aren't read again. Pages read below 30% are mostly pictures (a cover, for example) and have neither Retry nor Edit text.
 
-The server keeps the last 5 converted books in memory so you can change fonts quickly. Restarting the server clears them.
+The server keeps the last 5 converted books in memory so you can change their cover quickly. Restarting the server clears them.
 
 To use a different port:
 
@@ -109,7 +112,7 @@ Details:
 ## Command line
 
 ```
-node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--font id] [--cover image] [--ocr-lang code]
+node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--ocr-lang code]
 ```
 
 If you leave out `output.epub`, the EPUB is saved next to the PDF with the same name.
@@ -120,7 +123,7 @@ If you leave out `output.epub`, the EPUB is saved next to the PDF with the same 
 
 ```
 node index.js "Homo Deus.pdf"
-node index.js book.pdf book.epub --title "My Book" --author "Jane Doe" --font literata --cover cover.jpg
+node index.js book.pdf book.epub --title "My Book" --author "Jane Doe" --cover cover.jpg
 ```
 
 For an Xteink reader, add `--format xtc` (black and white) or `--format xtch` (4 shades of gray). The book is saved as `input.xtc` or `input.xtch`.
@@ -149,19 +152,6 @@ For Xteink readers (X3, X4 and X4 Pro), convertPdf can also make an XTC book: ev
 | More settings | Dithering (Atkinson, Floyd-Steinberg, Sierra Lite, Ordered or none), contrast, trimming wide margins, whether the first page is the cover (shown whole and upright), and which way sideways pages turn |
 
 The PDF's bookmarks become the book's chapters, and its title and author are kept. A cover picture of your own replaces the first page when that is the cover, or comes before it otherwise. The preview shows each page as the reader will.
-
-## Fonts
-
-| `--font` id | Font | Style |
-|---|---|---|
-| `default` | The e-reader's own font | Not embedded |
-| `literata` | Literata | Serif, designed for e-books |
-| `merriweather` | Merriweather | Serif |
-| `lora` | Lora | Serif |
-| `open-sans` | Open Sans | Sans-serif |
-| `atkinson-hyperlegible` | Atkinson Hyperlegible | Sans-serif, designed for readability |
-
-Embedded fonts add about 100 KB to the book and look the same in every e-reader. All of them are open source under the SIL Open Font License.
 
 ## Scanned books (OCR)
 
@@ -197,12 +187,11 @@ To add a language, install its data (for example `npm install @tesseract.js-data
 | `figures.js` | Finds and crops pictures, and renders the cover (from the PDF or a picture you choose). |
 | `eink.js` | Turns pictures into full-screen e-ink pages (480 x 800, 4 shades of gray, dithered). |
 | `ocr.js` | Reads scanned pages with OCR (Tesseract). |
-| `fonts.js` | Font list and embedding. |
 | `xtc.js` | Draws PDF pages for an Xteink screen (fit or split, contrast, dithering) and makes the XTC book. |
 | `xtcfile.js` | The XTC/XTCH file format: page encoding (XTG, XTH) and the book file. |
 | `pdf.js` | Opens a PDF with pdf.js. |
 | `server.js` | Local web server for the web app. |
-| `public/index.html` | The web app page (upload, progress, preview, font and XTC settings). |
+| `public/index.html` | The web app page: the numbered steps, progress, the e-reader preview with its slider, and contents. |
 | `build/build-exe.js` | Builds `ConvertPdf.exe` (`npm run build:exe`). |
 | `build/launcher.js` | Start-up code inside the exe: unpacks the app and starts the server. |
 
