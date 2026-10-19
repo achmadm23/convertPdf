@@ -2,7 +2,7 @@
 // server.js does for the app, done here without a server. public/index.html uses
 // it when this file is loaded (window.convertPdfApi); web/build.js bundles it.
 
-const { analyzePdf, buildEpub } = require('../index');
+const { analyzePdf, buildEpub, readerScreen } = require('../index');
 const { openPdf } = require('../pdf');
 const { imageCover } = require('../figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('../xtc');
@@ -59,8 +59,15 @@ function bookSummary(s) {
     chapters: book.chapters.length,
     ...book.stats,
     scannedPages: scanned.length,
+    ...readerSummary(book.device),
     lowPages: scanned.filter(r => !r.manual && !r.picture && r.confidence >= PICTURE_BELOW && r.confidence <= LOW_CONFIDENCE).length,
   };
+}
+
+// The e-reader an EPUB's pictures are drawn for, for the page's preview.
+function readerSummary(device) {
+  const screen = readerScreen(device);
+  return { device: screen.name, width: screen.width, height: screen.height };
 }
 
 function xtcSummary(s) {
@@ -87,11 +94,11 @@ function xtcSummary(s) {
 // Convert a PDF file. `xtc` is the XTC settings, or null for an EPUB. Reports
 // progress like the server's stream: onProgress, onSession, and onPage for each
 // scanned page as it's read.
-async function convert(file, { title, author, xtc }, { onProgress = () => {}, onSession = () => {}, onPage = () => {} }) {
+async function convert(file, { title, author, xtc, device }, { onProgress = () => {}, onSession = () => {}, onPage = () => {} }) {
   const pdf = await readFile(file, MAX_BYTES);
   if (pdf.subarray(0, 5).toString() !== '%PDF-') throw new Error('That file is not a PDF.');
   const name = file.name.replace(/\.[^.]*$/, '') || 'book';
-  const s = newSession(pdf, { title: title || undefined, author: author || undefined, name });
+  const s = newSession(pdf, { title: title || undefined, author: author || undefined, name, ...(device && { device }) });
   onProgress({ stage: 'text', done: 0, total: 1 });
   if (xtc) {
     onSession({ id: s.id });
@@ -191,21 +198,21 @@ async function setCover(id, file) {
   if (file) {
     const data = await readFile(file, MAX_COVER_BYTES);
     if (s.xtc) s.xtcCover = await coverPage(data, s.xtc);
-    else s.cover = await imageCover(data);
+    else s.cover = await imageCover(data, readerScreen(s.book?.device));
   } else {
     s.cover = s.xtcCover = null;
   }
   return { cover: !!file, book: s.xtc ? xtcSummary(s) : undefined };
 }
 
-async function epubFile(s) {
+async function epubFile(s, pictureParts = 1) {
   if (!s.book) throw new Error('This book has expired. Please convert the PDF again.');
-  return buildEpub(s.book, { cover: s.cover });
+  return buildEpub(s.book, { cover: s.cover, pictureParts });
 }
 
-// The EPUB, for the preview.
-async function epub(id) {
-  const file = await epubFile(session(id));
+// The EPUB, for the preview; full-page pictures in `pictureParts` parts.
+async function epub(id, pictureParts) {
+  const file = await epubFile(session(id), pictureParts);
   return file.buffer.slice(file.byteOffset, file.byteOffset + file.length);
 }
 
@@ -223,11 +230,11 @@ async function screenUrl(id, n) {
 }
 
 // Save the finished book (EPUB or XTC) to the visitor's computer.
-async function download(id) {
+async function download(id, pictureParts) {
   const s = session(id);
   const [data, name] = s.xtc
     ? [buildXtc(s.xtc, s.xtcCover), xtcSummary(s).fileName]
-    : [await epubFile(s), s.book.fileName];
+    : [await epubFile(s, pictureParts), s.book.fileName];
   const url = objectUrl(data, s.xtc ? 'application/octet-stream' : 'application/epub+zip');
   const a = document.createElement('a');
   a.href = url;

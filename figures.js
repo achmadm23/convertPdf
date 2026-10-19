@@ -92,7 +92,7 @@ function proseLines(lines, layout) {
 // Render the page and crop the pictures that sit in its text gaps. Prose lines
 // never count as part of a picture, so a caption or the end of a paragraph next
 // to the picture stays text instead of being cropped into the image.
-async function detectFigures(page, lines, gaps, layout) {
+async function detectFigures(page, lines, gaps, layout, screen) {
   const canvas = await renderPage(page, SCALE);
   const { width, height } = canvas;
   const pageHeight = page.view[3] - page.view[1];
@@ -157,7 +157,7 @@ async function detectFigures(page, lines, gaps, layout) {
       bottom: pageHeight - bottom / SCALE,
       left: left / SCALE,
       right: right / SCALE,
-      data: screenImage(crop),
+      data: screenImage(crop, screen),
       crop, // the picture itself, for cutting it into parts (sidewaysParts)
     });
   }
@@ -169,7 +169,7 @@ async function detectFigures(page, lines, gaps, layout) {
 // text comes out bigger. As in an XTC book: 2 parts are halves, 3 parts are
 // thirds that overlap a little, so no line is only ever seen cut in two.
 // Read with the e-reader turned on its side; the top of the page is on the right.
-function sidewaysParts(canvas, parts) {
+function sidewaysParts(canvas, parts, screen) {
   const { width, height } = canvas;
   const partHeight = parts === 2 ? Math.ceil(height / 2) : Math.ceil(height * 0.37);
   const step = parts > 1 ? (height - partHeight) / (parts - 1) : 0;
@@ -181,24 +181,24 @@ function sidewaysParts(canvas, parts) {
     ctx.translate(h, 0);
     ctx.rotate(Math.PI / 2);
     ctx.drawImage(canvas, 0, top, width, h, 0, 0, width, h);
-    return screenImage(turned);
+    return screenImage(turned, screen);
   });
 }
 
-async function renderCover(page) {
-  return screenImage(await renderPage(page, 1.5));
+async function renderCover(page, screen) {
+  return screenImage(await renderPage(page, 1.5), screen);
 }
 
 // A cover from a picture file (JPEG, PNG, WebP, GIF, ...) chosen by the user,
 // drawn for the e-ink screen like the rest of the book's pictures.
-async function imageCover(data) {
+async function imageCover(data, screen) {
   let image;
   try {
     image = await loadImage(data);
   } catch {
     throw new Error('That file is not a picture that can be read. Use a JPEG, PNG or WebP image.');
   }
-  return screenImage(image);
+  return screenImage(image, screen);
 }
 
 module.exports = { measureLayout, findGaps, detectFigures, sidewaysParts, renderCover, imageCover, renderPage };

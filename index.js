@@ -16,6 +16,7 @@ function parseArgs(argv) {
     if (argv[i] === '--title') opts.title = argv[++i];
     else if (argv[i] === '--author') opts.author = argv[++i];
     else if (argv[i] === '--cover') opts.cover = argv[++i];
+    else if (argv[i] === '--picture-parts') opts.pictureParts = Number(argv[++i]);
     else if (argv[i] === '--ocr-lang') opts.ocrLanguage = argv[++i];
     // XTC (Xteink) output
     else if (argv[i] === '--format') opts.format = argv[++i];
@@ -44,6 +45,8 @@ function escapeXml(s) {
 }
 
 const letterCount = s => (s.match(/\p{L}/gu) || []).length;
+// a picture at least this share of its page's height is a full-page picture
+const FULL_PAGE = 0.6;
 // page and chapter numbers, allowing a stray symbol or two from scanning noise (e.g. "'32", "■55")
 const isNumberLike = s => /^[^\p{L}\d]{0,2}(\d{1,4}|[ivxlc]{1,6})[^\p{L}\d]{0,2}$/iu.test(s);
 
@@ -179,7 +182,7 @@ function linesToBlocks(lines, bodySize) {
 //   ocr: the `ocr` result of an earlier run on the same PDF, whose pages aren't read again
 //   onOcrPage(n, { confidence, text, thumbnail }): called as each scanned page is read
 // The result's `ocr` holds every scanned page's reading, for passing back in later.
-async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: previous, onOcrPage } = {}) {
+async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: previous, onOcrPage, screen } = {}) {
   const doc = await openPdf(buffer);
 
   let meta = {};
@@ -251,9 +254,9 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   if (hasCoverCandidate && pictureParts(1) === 1) {
     const first = await doc.getPage(1);
     const height = first.view[3] - first.view[1];
-    const [picture] = await detectFigures(first, pageLines[0], [{ top: height, bottom: 0 }], layout);
+    const [picture] = await detectFigures(first, pageLines[0], [{ top: height, bottom: 0 }], layout, screen);
     if (picture && picture.top - picture.bottom > height * 0.5) {
-      cover = await renderCover(first);
+      cover = await renderCover(first, screen);
       pageLines[0] = [];
       picturePages.delete(1); // it's the cover, so not a picture in the text as well
     }
@@ -270,12 +273,19 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   for (const n of candidates) {
     const gaps = findGaps(pageLines[n - 1], layout, bodySize);
     const page = await doc.getPage(n);
-    const figures = await detectFigures(page, pageLines[n - 1], gaps, layout);
+    const figures = await detectFigures(page, pageLines[n - 1], gaps, layout, screen);
+    const pageHeight = page.view[3] - page.view[1];
     page.cleanup();
     onProgress({ stage: 'pictures', done: Math.min(++rendered, renders), total: renders });
     for (const fig of figures) {
       const name = `img${images.length + 1}.png`;
-      images.push({ name, data: fig.data });
+      // a portrait picture filling most of its page can also go in the book turned
+      // sideways in 2 or 3 parts (buildEpub's pictureParts): both are made now, so
+      // switching between them later needs no converting again
+      const high = fig.top - fig.bottom;
+      const fullPage = high >= pageHeight * FULL_PAGE && high > fig.right - fig.left;
+      const split = fullPage && { 2: sidewaysParts(fig.crop, 2, screen), 3: sidewaysParts(fig.crop, 3, screen) };
+      images.push({ name, data: fig.data, ...(split && { split }) });
       // text shown inside the cropped picture is dropped; anything outside it stays
       const inside = l =>
         l.y <= fig.top + 2 && l.y >= fig.bottom - 2 && l.x >= fig.left - 2 && l.xEnd <= fig.right + 2;
@@ -291,12 +301,12 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   for (const n of picturePages) {
     const page = await doc.getPage(n);
     const height = page.view[3] - page.view[1];
-    const [picture] = await detectFigures(page, [], [{ top: height, bottom: 0 }], layout);
+    const [picture] = await detectFigures(page, [], [{ top: height, bottom: 0 }], layout, screen);
     page.cleanup();
     onProgress({ stage: 'pictures', done: Math.min(++rendered, renders), total: renders });
     if (!picture) continue; // a blank page
     const parts = pictureParts(n);
-    pageLines[n - 1] = (parts > 1 ? sidewaysParts(picture.crop, parts) : [picture.data]).map((data, i) => {
+    pageLines[n - 1] = (parts > 1 ? sidewaysParts(picture.crop, parts, screen) : [picture.data]).map((data, i) => {
       const name = `img${images.length + 1}.png`;
       images.push({ name, data });
       return { image: name, y: picture.top - i };
@@ -488,12 +498,34 @@ function chapterFiles(ch, number) {
   });
 }
 
+// The book with each full-page picture replaced by its sideways parts, as pictures
+// of their own in its place (img3.png → img3-1.png, img3-2.png, ...).
+function splitPictures(chapters, images, parts) {
+  const partsOf = new Map(images.filter(img => img.split?.[parts]).map(img => [img.name, img.split[parts]]));
+  if (!partsOf.size) return { chapters, images };
+  const partName = (name, k) => name.replace(/\.png$/, `-${k + 1}.png`);
+  return {
+    images: images.flatMap(img =>
+      partsOf.has(img.name) ? partsOf.get(img.name).map((data, k) => ({ name: partName(img.name, k), data })) : [img]
+    ),
+    chapters: chapters.map(ch => ({
+      ...ch,
+      blocks: ch.blocks.flatMap(b =>
+        b.image && partsOf.has(b.image) ? partsOf.get(b.image).map((_, k) => ({ ...b, image: partName(b.image, k) })) : [b]
+      ),
+    })),
+  };
+}
+
 // Package an analysed book as an EPUB. This is fast, so the same book can be
 // re-packaged with a different cover without reading the PDF again.
 // `cover` (a PNG from imageCover) replaces the cover found in the PDF.
 // The text uses the e-reader's own font.
-async function buildEpub({ title, author, chapters, images = [], cover: pdfCover = null }, { cover: customCover } = {}) {
+// `pictureParts` 2 or 3 turns full-page portrait pictures sideways and cuts them into parts.
+async function buildEpub({ title, author, chapters, images = [], cover: pdfCover = null }, { cover: customCover, pictureParts = 1 } = {}) {
   const cover = customCover || pdfCover;
+  if (![1, 2, 3].includes(pictureParts)) throw new Error('Full-page pictures can be cut into 1, 2 or 3 parts.');
+  if (pictureParts > 1) ({ chapters, images } = splitPictures(chapters, images, pictureParts));
   const zip = new JSZip();
   const id = 'urn:uuid:' + crypto.randomUUID();
   const modified = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
@@ -581,12 +613,20 @@ ${spine.join('\n')}
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
+// The screen of an e-reader in DEVICES (xtc.js). The book's pictures and cover
+// are drawn to fill it: 480 x 800 for the Xteink X4 and X4 Pro, 528 x 792 for the X3.
+function readerScreen(device = 'x4') {
+  const screen = DEVICES[device];
+  if (!screen) throw new Error(`Unknown device "${device}". Available: ${Object.keys(DEVICES).join(', ')}.`);
+  return screen;
+}
+
 // Read a PDF into a book: chapters, images and cover, ready for buildEpub.
 // `name` is used as the title when the PDF has none.
 // OCR options are passed on to extractPdf; the book's `ocr` can be passed back in
 // as `ocr` to rebuild it without reading its scanned pages again.
-async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', onProgress, ...ocrOptions } = {}) {
-  const extracted = await extractPdf(pdfBuffer, onProgress, ocrOptions);
+async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', device = 'x4', onProgress, ...ocrOptions } = {}) {
+  const extracted = await extractPdf(pdfBuffer, onProgress, { ...ocrOptions, screen: readerScreen(device) });
   const pages = cleanPages(extracted.pages);
   const paragraphs = pages.reduce((n, p) => n + p.filter(b => !b.heading && !b.image).length, 0);
   if (paragraphs === 0) {
@@ -599,16 +639,17 @@ async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', onProgr
     images: extracted.images,
     cover: extracted.cover,
     ocr: extracted.ocr,
-    stats: { pages: pages.length, paragraphs, images: extracted.images.length },
+    device, // the e-reader its pictures are drawn for
+    stats: { pages: pages.length, paragraphs, images: extracted.images.length, fullPagePictures: extracted.images.filter(i => i.split).length },
   };
 }
 
 // Convert PDF bytes to EPUB bytes in one go. `cover` is a picture file's bytes.
-async function convertPdfToEpub(pdfBuffer, { cover, ...options } = {}) {
+async function convertPdfToEpub(pdfBuffer, { cover, pictureParts, ...options } = {}) {
   // read the cover first, so an unreadable picture fails before the slow part
-  const coverImage = cover && (await imageCover(cover));
+  const coverImage = cover && (await imageCover(cover, readerScreen(options.device)));
   const book = await analyzePdf(pdfBuffer, options);
-  const epub = await buildEpub(book, { cover: coverImage });
+  const epub = await buildEpub(book, { cover: coverImage, pictureParts });
   return { epub, ...book.stats, chapters: book.chapters.length };
 }
 
@@ -617,7 +658,7 @@ async function main() {
   const [input, output] = opts.positional;
   if (!input) {
     console.error(
-      'Usage: node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--ocr-lang code]'
+      'Usage: node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--device x4|x4-pro|x3] [--picture-parts 2|3] [--ocr-lang code]'
     );
     console.error(
       'OCR languages (for scanned pages; detected when not given): ' +
@@ -640,6 +681,8 @@ async function main() {
     title: opts.title,
     author: opts.author,
     cover: opts.cover && fs.readFileSync(opts.cover),
+    device: opts.device,
+    pictureParts: opts.pictureParts,
     ocrLanguage: opts.ocrLanguage,
     name: path.basename(input, path.extname(input)),
     onProgress: ({ stage, done, total }) => {
@@ -675,7 +718,7 @@ async function writeXtc(input, output, opts) {
   );
 }
 
-module.exports = { convertPdfToEpub, analyzePdf, buildEpub, extractPdf, openPdf, cleanPages, buildChapters };
+module.exports = { convertPdfToEpub, analyzePdf, buildEpub, extractPdf, openPdf, cleanPages, buildChapters, readerScreen };
 
 if (require.main === module) {
   main().catch(err => {

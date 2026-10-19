@@ -5,7 +5,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { analyzePdf, buildEpub, openPdf } = require('./index');
+const { analyzePdf, buildEpub, openPdf, readerScreen } = require('./index');
 const { imageCover } = require('./figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('./xtc');
 const { retryPage, manualReading } = require('./ocr');
@@ -122,8 +122,15 @@ function bookSummary(session) {
     chapters: book.chapters.length,
     ...book.stats,
     scannedPages: scanned.length,
+    ...readerSummary(book.device),
     lowPages: scanned.filter(r => !r.manual && !r.picture && r.confidence >= PICTURE_BELOW && r.confidence <= LOW_CONFIDENCE).length,
   };
+}
+
+// The e-reader an EPUB's pictures are drawn for, for the page's preview.
+function readerSummary(device) {
+  const screen = readerScreen(device);
+  return { device: screen.name, width: screen.width, height: screen.height };
 }
 
 function xtcSummary(session) {
@@ -161,7 +168,8 @@ async function handleConvert(req, res) {
 
   const fileName = header(req, 'x-filename') || 'book.pdf';
   const name = path.basename(fileName, path.extname(fileName));
-  const session = newSession(pdf, { title: header(req, 'x-title'), author: header(req, 'x-author'), name });
+  const device = header(req, 'x-device');
+  const session = newSession(pdf, { title: header(req, 'x-title'), author: header(req, 'x-author'), name, ...(device && { device }) });
   if (header(req, 'x-format') === 'xtc') {
     let settings;
     try {
@@ -298,7 +306,7 @@ async function handleCover(req, res, session, use) {
     try {
       const data = await readBody(req, MAX_COVER_BYTES);
       if (session.xtc) session.xtcCover = await coverPage(data, session.xtc);
-      else session.cover = await imageCover(data);
+      else session.cover = await imageCover(data, readerScreen(session.book?.device));
     } catch (err) {
       return sendError(res, 400, err.message);
     }
@@ -328,12 +336,13 @@ function handleScreen(res, session, n) {
   res.end(png);
 }
 
-// GET /book/<id>.epub[?download=1]: package the book as an EPUB.
+// GET /book/<id>.epub[?parts=2|3][&download=1]: package the book as an EPUB, with
+// its full-page pictures turned sideways in 2 or 3 parts when asked.
 async function handleBook(req, res, id, query) {
   const session = sessions.get(id);
   const book = session?.book;
   if (!book) return sendError(res, 404, 'This book has expired. Please convert the PDF again.');
-  const epub = await buildEpub(book, { cover: session.cover });
+  const epub = await buildEpub(book, { cover: session.cover, pictureParts: Number(query.get('parts')) || 1 });
   const headers = { 'Content-Type': 'application/epub+zip', 'Content-Length': epub.length };
   if (query.get('download')) {
     headers['Content-Disposition'] = `attachment; filename*=UTF-8''${encodeURIComponent(book.fileName)}`;

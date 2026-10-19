@@ -7,7 +7,7 @@ Convert PDFs into EPUB e-books. It works on normal PDFs and on scanned books, wi
 - splits the book into its real chapters, with section headings in the table of contents
 - keeps the pictures (photos, charts, diagrams) where they appear in the text, and uses a picture-only first page as the cover
 - lets you use a picture of your own as the cover instead
-- shows every picture, the cover and pages kept as a picture on a page of its own that it fills, in the 4 shades of gray of an e-ink screen, like a page of an XTC book (480 x 800, the Xteink format)
+- shows every picture, the cover and pages kept as a picture on a page of its own that it fills, in the 4 shades of gray of an e-ink screen, sized for your reader: 480 x 800 for the Xteink X4 and X4 Pro, 528 x 792 for the X3
 - leaves the font to the e-reader, so the book reads in the font and size you choose there
 - reads scanned pages with built-in OCR (English and Indonesian), with nothing extra to install
 - can also make an XTC book for Xteink X3, X4 and X4 Pro readers, with every page drawn for the reader's screen (see [Xteink books](#xteink-books-xtc))
@@ -69,11 +69,11 @@ Then open **http://localhost:3000**. The steps are numbered down the left of the
 2. **Output:** an EPUB e-book for any e-reader, or an XTC book for an Xteink reader ([Xteink books](#xteink-books-xtc)).
 3. **Details:** optionally type a title and author. If you leave them blank, they're taken from the PDF.
 4. **Cover:** optionally choose a picture (JPEG, PNG or WebP, up to 20 MB), or drop it on the Cover box. It replaces the cover taken from the PDF.
-5. **Reader**, for an XTC book only: the device, black and white or 4 grays, and whether pages are turned sideways.
+5. **Reader:** your e-reader (Xteink X4 Pro, X4 or X3). An EPUB's pictures and cover are drawn for its screen, and the preview shows the book at its size. **Full-page pictures** chooses how portrait pictures that fill most of their page go in the book: **Whole**, upright, or turned on their side and cut into **2 parts** or **3 parts** that each fill the screen, as in an XTC book. Changing it updates the book at once, without converting again. For an XTC book, also black and white or 4 grays, and whether pages are turned sideways.
 
 Then click **Convert**. The progress bar shows what's happening, for example "Reading scanned pages: 57 of 244", and about how long is left; the panel on the right lists each step.
 
-The book appears on an e-reader in the middle of the page. Move through it with the **slider** under the reader or the arrow keys, and jump to a chapter from **Contents** on the right. Change the cover as often as you like: the preview updates in about a second, without converting again, and **Remove** goes back to the PDF's own cover. When it looks right, click **Download**. **Convert again** converts the PDF anew, for example with other XTC settings.
+The book appears on an e-reader in the middle of the page, laid out at your reader's screen size (480 x 800 on an X4 Pro), so lines and picture pages fall roughly as they will on the device; its own font and margins may differ a little. Move through it with the **slider** under the reader, which stops at every picture page too, or the arrow keys, and jump to a chapter from **Contents** on the right. Change the cover as often as you like: the preview updates in about a second, without converting again, and **Remove** goes back to the PDF's own cover. When it looks right, click **Download**. **Convert again** converts the PDF anew, for example with other XTC settings.
 
 The page follows your system's light or dark theme, and works offline: its fonts are served by the converter.
 
@@ -120,12 +120,16 @@ Details:
 ## Command line
 
 ```
-node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--ocr-lang code]
+node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--device x4|x4-pro|x3] [--picture-parts 2|3] [--ocr-lang code]
 ```
 
 If you leave out `output.epub`, the EPUB is saved next to the PDF with the same name.
 
 `--cover` uses a picture (JPEG, PNG or WebP) as the book's cover instead of the PDF's first page.
+
+`--device` sizes the book's pictures and cover for that e-reader's screen: `x4` and `x4-pro` (480 x 800, the default) or `x3` (528 x 792).
+
+`--picture-parts 2` or `3` turns full-page portrait pictures on their side and cuts them into 2 or 3 parts that each fill the screen.
 
 `--ocr-lang` sets the language of scanned pages: `eng` (English) or `ind` (Indonesian). Without it, the converter tries both on a few pages and uses the one it reads best.
 

@@ -5,8 +5,8 @@
 const zlib = require('zlib');
 const { createCanvas } = require('@napi-rs/canvas');
 
-const WIDTH = 480;
-const HEIGHT = 800;
+// the Xteink X4 and X4 Pro; other readers' screens are passed in (DEVICES in xtc.js)
+const SCREEN = { width: 480, height: 800 };
 const STEP = 255 / 3; // 4 shades: black, dark gray, light gray, white
 
 // Lightest and darkest tones to stretch to white and black, so the gray paper of a
@@ -84,9 +84,9 @@ function encodePng(pixels, width, height) {
   ]);
 }
 
-// A canvas (or image) as a PNG that fills an XTC screen.
-function screenImage(source) {
-  const scale = Math.min(WIDTH / source.width, HEIGHT / source.height);
+// A canvas (or image) as a PNG that fills the reader's screen.
+function screenImage(source, screen = SCREEN) {
+  const scale = Math.min(screen.width / source.width, screen.height / source.height);
   const width = Math.max(1, Math.round(source.width * scale));
   const height = Math.max(1, Math.round(source.height * scale));
   const canvas = createCanvas(width, height);

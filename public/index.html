@@ -74,6 +74,7 @@
   .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .check { display: flex; align-items: flex-start; gap: 10px; min-height: 32px; font-size: 14px; cursor: pointer; }
   .check input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--accent); flex: none; }
+  .reader-xtc { display: flex; flex-direction: column; gap: 12px; }
   .more summary { min-height: 32px; font-size: 14px; font-weight: 500; color: var(--accent); cursor: pointer; }
   .more > div { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; }
 
@@ -104,6 +105,7 @@
 
   /* segmented choices (radio buttons) */
   .seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; background: var(--seg); border-radius: 10px; }
+  .seg.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .seg input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
   .seg label {
     display: flex; flex-direction: column; justify-content: center; min-height: 44px; padding: 6px 12px;
@@ -160,7 +162,7 @@
     box-shadow: 0 28px 48px -28px rgba(21, 23, 26, .55);
   }
   .screen { position: relative; aspect-ratio: 3 / 5; overflow: hidden; background: var(--paper); border-radius: 3px; }
-  #viewer { position: absolute; inset: 0; }
+  #viewer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform-origin: 0 0; }
   .placeholder {
     position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 10px; padding: 32px; text-align: center; color: #55554F; font-size: 13px;
@@ -301,20 +303,34 @@
           </div>
         </div>
       </div>
-      <p class="note" id="coverNote">JPEG, PNG or WebP. Shown at 480 × 800 in 4 shades of gray.</p>
+      <p class="note" id="coverNote">JPEG, PNG or WebP. Drawn for the reader’s screen in 4 shades of gray.</p>
       <input type="file" id="coverFile" accept="image/jpeg,image/png,image/webp,image/gif">
     </div>
 
-    <!-- XTC: every PDF page drawn as a picture for the reader's screen -->
-    <div class="step" id="xtcSettings" hidden>
+    <div class="step" id="readerStep">
       <h2 class="step-title"><span>05</span>Reader</h2>
       <label class="field">Device
-        <select id="xtcDevice">
+        <select id="device">
           <option value="x4">Xteink X4 · 480 × 800</option>
-          <option value="x4-pro">Xteink X4 Pro · 480 × 800</option>
+          <option value="x4-pro" selected>Xteink X4 Pro · 480 × 800</option>
           <option value="x3">Xteink X3 · 528 × 792</option>
         </select>
       </label>
+      <p class="note" id="deviceNote">Pictures and the cover are drawn for this screen, and the preview shows the book at its size.</p>
+      <fieldset class="group" id="partsField">
+        <legend>Full-page pictures</legend>
+        <div class="seg three">
+          <input type="radio" name="pictureParts" id="parts1" value="1" checked>
+          <label for="parts1">Whole</label>
+          <input type="radio" name="pictureParts" id="parts2" value="2">
+          <label for="parts2">2 parts</label>
+          <input type="radio" name="pictureParts" id="parts3" value="3">
+          <label for="parts3">3 parts</label>
+        </div>
+        <p class="note" id="partsNote" style="margin-top: 4px"></p>
+      </fieldset>
+      <!-- XTC: every PDF page drawn as a picture for the reader's screen -->
+      <div class="reader-xtc" id="xtcSettings" hidden>
       <fieldset class="group">
         <legend>Shades</legend>
         <div class="seg">
@@ -375,6 +391,7 @@
           <label class="check"><input type="checkbox" id="xtcFlip">Turn sideways pages the other way</label>
         </div>
       </details>
+      </div>
     </div>
 
     <div class="step actions">
@@ -430,7 +447,7 @@
       <ul class="facts">
         <li><b>Real paragraphs and chapters</b><span>Headers, footers and page numbers removed.</span></li>
         <li><b>Scanned pages read for you</b><span>Built-in OCR for English and Indonesian.</span></li>
-        <li><b>Pictures as full e-ink pages</b><span>480 × 800, in 4 shades of gray.</span></li>
+        <li><b>Pictures as full e-ink pages</b><span>Sized for your reader’s screen, in 4 shades of gray.</span></li>
         <li><b>Your own cover</b><span>Or the one from the PDF.</span></li>
       </ul>
     </div>
@@ -469,8 +486,9 @@
     const json = (url, options) => send(url, options).then(res => res.json());
     return {
       // upload the PDF and follow the server's stream of progress (see streamRequest)
-      convert(pdf, { title, author, xtc }, handlers) {
+      convert(pdf, { title, author, device, xtc }, handlers) {
         const headers = { 'Content-Type': 'application/pdf', 'X-Filename': encodeURIComponent(pdf.name) };
+        if (device) headers['X-Device'] = device;
         if (title) headers['X-Title'] = encodeURIComponent(title);
         if (author) headers['X-Author'] = encodeURIComponent(author);
         if (xtc) {
@@ -487,10 +505,10 @@
         json(`book/${id}/pages/${n}/picture${keep ? `?parts=${parts}` : ''}`, { method: keep ? 'POST' : 'DELETE' }),
       setCover: (id, file) =>
         json(`book/${id}/cover`, file ? { method: 'POST', headers: { 'Content-Type': file.type }, body: file } : { method: 'DELETE' }),
-      epub: id => send(`book/${id}.epub`).then(res => res.arrayBuffer()),
+      epub: (id, parts = 1) => send(`book/${id}.epub?parts=${parts}`).then(res => res.arrayBuffer()),
       scanUrl: (id, n) => `book/${id}/pages/${n}.jpg`,
       screenUrl: async (id, n, version) => `book/${id}/screens/${n}.png?v=${version}`,
-      downloadUrl: (id, xtc) => (xtc ? `book/${id}.xtc?download=1` : `book/${id}.epub?download=1`),
+      downloadUrl: (id, xtc, parts = 1) => (xtc ? `book/${id}.xtc?download=1` : `book/${id}.epub?parts=${parts}&download=1`),
       version: () => json('about.json').then(about => about.version),
     };
   }
@@ -514,7 +532,7 @@
   // The choice and the XTC settings are remembered for next time. They're used
   // by the next conversion; the book already converted keeps its own.
   const isXtc = () => bookMeta && bookMeta.format === 'xtc'; // the converted book
-  const XTC_SELECTS = { device: 'xtcDevice', split: 'xtcSplit', dithering: 'xtcDithering', contrast: 'xtcContrast', cropX: 'xtcCropX', cropY: 'xtcCropY' };
+  const XTC_SELECTS = { device: 'device', split: 'xtcSplit', dithering: 'xtcDithering', contrast: 'xtcContrast', cropX: 'xtcCropX', cropY: 'xtcCropY' };
   const XTC_CHECKS = { firstPageIsCover: 'xtcCoverPage', flip: 'xtcFlip' };
 
   function xtcSettings() {
@@ -526,12 +544,14 @@
 
   function showOutput() {
     const xtc = radio('format') === 'xtc';
+    $('deviceNote').hidden = xtc;
+    $('partsField').hidden = xtc;
     $('xtcSettings').hidden = !xtc;
     $('formatNote').hidden = !xtc;
     $('formatNote').textContent = 'Every page drawn for the reader’s screen, exactly as it looks in the PDF.';
     $('coverNote').textContent = xtc
       ? 'Replaces the first page, drawn for the reader’s screen.'
-      : 'JPEG, PNG or WebP. Shown at 480 × 800 in 4 shades of gray.';
+      : 'JPEG, PNG or WebP. Drawn for the reader’s screen in 4 shades of gray.';
     const sideways = radio('xtcOrientation') === 'landscape';
     $('xtcSplitField').hidden = !sideways;
     $('graysNote').textContent = radio('xtcGrays') === '1'
@@ -563,6 +583,38 @@
   showOutput();
   document.querySelectorAll('input[name="format"]').forEach(r => r.addEventListener('change', saveOutput));
   $('xtcSettings').addEventListener('change', saveOutput);
+
+  // ---------- full-page pictures (EPUB) ----------
+  // Portrait pictures that fill most of their page: whole and upright, or turned
+  // sideways in 2 or 3 parts. All three are made while converting, so changing
+  // this updates the book at once.
+  const pictureParts = () => Number(radio('pictureParts'));
+
+  function showParts() {
+    const parts = pictureParts();
+    const count = bookMeta && !isXtc() ? bookMeta.fullPagePictures : null;
+    $('partsNote').textContent =
+      (parts > 1
+        ? `Portrait pictures that fill most of a page are turned on their side and cut into ${parts} parts that each fill the screen. Turn the e-reader on its side to read them.`
+        : 'Each picture stays upright, on a page of its own.') +
+      (count === null ? '' : count ? ` This book has ${count} full-page ${count === 1 ? 'picture' : 'pictures'}.` : ' This book has no full-page pictures.');
+  }
+
+  try {
+    const saved = localStorage.getItem('pictureParts');
+    if (saved === '2' || saved === '3') $(`parts${saved}`).checked = true;
+  } catch {}
+  showParts();
+  document.querySelectorAll('input[name="pictureParts"]').forEach(r =>
+    r.addEventListener('change', () => {
+      try { localStorage.setItem('pictureParts', String(pictureParts())); } catch {}
+      showParts();
+      if (bookId && !isXtc() && !converting) {
+        updateDownload();
+        openPreview(true).catch(() => showStatus('The preview could not be shown.', { error: true }));
+      }
+    })
+  );
 
   // ---------- file choice ----------
   function setFile(f) {
@@ -702,7 +754,12 @@
     showStatus('');
     progress.start('Uploading…', xtc ? 'xtc' : 'epub');
 
-    const options = { title: $('title').value.trim(), author: $('author').value.trim(), xtc: xtc ? xtcSettings() : null };
+    const options = {
+      title: $('title').value.trim(),
+      author: $('author').value.trim(),
+      device: $('device').value,
+      xtc: xtc ? xtcSettings() : null,
+    };
 
     scans.reset();
     let failed = false;
@@ -729,6 +786,7 @@
       }
       showBookInfo();
       showFilePages();
+      showParts();
       converting = false;
       updateDownload();
       scans.finish(bookMeta);
@@ -809,7 +867,9 @@
     } else {
       const scanned = m.scannedPages ? ` · ${m.scannedPages} scanned pages read with OCR` : '';
       bookInfo.textContent =
-        `${m.title} · ${m.author} · ${m.pages} pages · ${m.chapters} chapters · ${m.images} pictures${scanned}`;
+        `${m.title} · ${m.author} · ${m.pages} pages · ${m.chapters} chapters · ` +
+        `${m.images} pictures${m.fullPagePictures ? ` (${m.fullPagePictures} full-page)` : ''}${scanned}` +
+        (m.device ? ` · for ${m.device}, ${m.width} × ${m.height}` : '');
     }
     bookInfo.hidden = false;
   }
@@ -1255,7 +1315,7 @@
     download.hidden = !bookId;
     if (ready) {
       // the website makes the file when Download is clicked (see its click handler)
-      download.href = api.downloadUrl ? api.downloadUrl(bookId, isXtc()) : '#';
+      download.href = api.downloadUrl ? api.downloadUrl(bookId, isXtc(), pictureParts()) : '#';
       download.textContent = `Download ${bookMeta.fileName}`;
     } else {
       download.removeAttribute('href');
@@ -1293,7 +1353,7 @@
   async function drawPreview(keepPlace, token) {
     if (isXtc()) return showScreens(keepPlace);
     $('screenView').hidden = true;
-    $('screen').style.aspectRatio = '';
+    fitViewer();
     viewer.hidden = false;
     const loc = keepPlace && rendition && rendition.currentLocation();
     const place = loc && loc.start ? { cfi: loc.start.cfi, href: loc.start.href } : null;
@@ -1301,7 +1361,7 @@
 
     let data;
     try {
-      data = await api.epub(bookId);
+      data = await api.epub(bookId, pictureParts());
     } catch (err) {
       showStatus(err.message || 'The preview could not be shown.', { error: true });
       return;
@@ -1338,11 +1398,63 @@
     const book = epub;
     await book.locations.generate(1024);
     if (book !== epub || token !== previewToken) return;
+    buildStops(book);
     slider.min = 0;
-    slider.max = Math.max(0, book.locations.length() - 1);
+    slider.max = Math.max(0, stops.length - 1);
     slider.disabled = false;
     onRelocated(rendition.currentLocation());
   }
+
+  // The slider's stops for an EPUB, in reading order: epub.js's page positions (the
+  // text cut into screens of about the same length), plus one for each section
+  // with no text, like a picture page or the cover, which those positions skip.
+  let stops = []; // { target }: a position to show, or a section's address
+  let stopOfLocation = []; // epub.js position number → its stop
+  const stopOfSection = new Map(); // section with no text (spine index) → its stop
+
+  function buildStops(book) {
+    const positions = JSON.parse(book.locations.save());
+    const bySection = new Map();
+    positions.forEach((cfi, i) => {
+      const section = new ePub.CFI(cfi).spinePos;
+      if (!bySection.has(section)) bySection.set(section, []);
+      bySection.get(section).push(i);
+    });
+    stops = [];
+    stopOfLocation = [];
+    stopOfSection.clear();
+    book.spine.each(item => {
+      const own = bySection.get(item.index);
+      if (own) {
+        for (const i of own) {
+          stopOfLocation[i] = stops.length;
+          stops.push({ target: positions[i] });
+        }
+      } else {
+        stopOfSection.set(item.index, stops.length);
+        stops.push({ target: item.href });
+      }
+    });
+  }
+
+  // An EPUB is laid out at the reader's own screen size (480 x 800 on an X4 Pro),
+  // so lines and picture pages fall as they will on the device, then shrunk to
+  // fit the drawn e-reader.
+  function fitViewer() {
+    const m = bookMeta;
+    if (!m || !m.width || isXtc()) {
+      $('screen').style.aspectRatio = '';
+      Object.assign(viewer.style, { width: '', height: '', transform: '' });
+      return;
+    }
+    $('screen').style.aspectRatio = `${m.width} / ${m.height}`;
+    Object.assign(viewer.style, {
+      width: `${m.width}px`,
+      height: `${m.height}px`,
+      transform: `scale(${$('screen').clientWidth / m.width})`,
+    });
+  }
+  new ResizeObserver(() => { if (bookMeta && !isXtc()) fitViewer(); }).observe($('screen'));
 
   // An XTC book is shown a page at a time, as pictures of the reader's screen.
   let screen = 1;
@@ -1428,11 +1540,11 @@
     const here = inFile.find(it => !it.depth) || inFile[0];
     markContents(here);
     $('where').textContent = here ? here.label : bookMeta.title;
-    if (!slider.disabled) {
-      const total = Number(slider.max) + 1;
-      slider.value = loc.start.location;
-      $('position').textContent = `${loc.start.location + 1} / ${total}`;
-      slider.setAttribute('aria-valuetext', `Page ${loc.start.location + 1} of ${total}`);
+    const stop = stopOfSection.has(loc.start.index) ? stopOfSection.get(loc.start.index) : stopOfLocation[loc.start.location];
+    if (!slider.disabled && stop !== undefined) {
+      slider.value = stop;
+      $('position').textContent = `${stop + 1} / ${stops.length}`;
+      slider.setAttribute('aria-valuetext', `Page ${stop + 1} of ${stops.length}`);
     }
   }
 
@@ -1444,7 +1556,8 @@
     else $('position').textContent = `${v + 1} / ${Number(slider.max) + 1}`;
   });
   slider.addEventListener('change', () => {
-    if (!isXtc() && epub && rendition) rendition.display(epub.locations.cfiFromLocation(Number(slider.value)));
+    const stop = stops[Number(slider.value)];
+    if (!isXtc() && rendition && stop) rendition.display(stop.target);
   });
 
   const prevPage = () => (isXtc() ? goToScreen(screen - 1) : rendition && rendition.prev());
@@ -1474,7 +1587,7 @@
     if (!api.download) return;
     e.preventDefault();
     if (download.classList.contains('disabled')) return;
-    api.download(bookId).catch(err => showStatus(err.message || 'Could not save the book.', { error: true }));
+    api.download(bookId, pictureParts()).catch(err => showStatus(err.message || 'Could not save the book.', { error: true }));
   });
 
   updateDownload();
