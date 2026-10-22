@@ -23,9 +23,16 @@ const HEADERS = {
   'Accept-Language': 'id,en;q=0.8',
 };
 
-// The links in a piece of text: one per line, or separated by spaces.
+// The links in a piece of text: one per line, or separated by commas or spaces.
+// A comma only separates links when another one starts after it (http://, www. or
+// a site's name and a slash), since a link can have commas of its own.
+function splitLinks(text) {
+  const words = String(text).split(/\s+/).flatMap(word => word.split(/,(?=https?:\/\/|www\.|[\w-]+(?:\.[\w-]+)+\/)/i));
+  return [...new Set(words.map(word => word.replace(/^,+|,+$/g, '')).filter(Boolean))];
+}
+
 function parseLinks(text) {
-  const links = [...new Set(String(text).split(/\s+/).filter(Boolean))];
+  const links = splitLinks(text);
   if (!links.length) throw new Error('Paste the link of a web page.');
   if (links.length > MAX_LINKS) throw new Error(`Up to ${MAX_LINKS} links at once.`);
   return links.map(link => {
@@ -356,4 +363,4 @@ async function readWebPages(links, { title, author, device = 'x4', onProgress = 
   };
 }
 
-module.exports = { parseLinks, readWebPages };
+module.exports = { splitLinks, parseLinks, readWebPages };

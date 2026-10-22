@@ -11,7 +11,7 @@ Convert PDFs into EPUB e-books. It works on normal PDFs and on scanned books, wi
 - leaves the font to the e-reader, so the book reads in the font and size you choose there
 - reads scanned pages with built-in OCR (English and Indonesian), with nothing extra to install
 - can also make an XTC book for Xteink X3, X4 and X4 Pro readers, with every page drawn for the reader's screen (see [Xteink books](#xteink-books-xtc))
-- in the app, also makes a book of web pages such as news articles from BBC or Kompas: paste their links (see [Web pages](#web-pages-news-articles))
+- in the app, also makes books of web pages such as news articles from BBC or Kompas: paste their links, and each becomes a book (see [Web pages](#web-pages-news-articles))
 
 It runs entirely on your computer. Your files are never uploaded anywhere.
 
@@ -66,7 +66,7 @@ npm start
 
 Then open **http://localhost:3000**. The steps are numbered down the left of the page:
 
-1. **Source:** **PDF**: choose a PDF, or drop it on the page. **Web pages**: paste the links of news articles or other web pages, one per line ([Web pages](#web-pages-news-articles)).
+1. **Source:** **PDF**: choose a PDF, or drop it on the page. **Web pages**: paste the links of news articles or other web pages, one per line or separated by commas ([Web pages](#web-pages-news-articles)).
 2. **Output:** an EPUB e-book for any e-reader, or an XTC book for an Xteink reader ([Xteink books](#xteink-books-xtc)). Web pages always become an EPUB.
 3. **Details:** optionally type a title and author. If you leave them blank, they're taken from the PDF or the article.
 4. **Cover:** optionally choose a picture (JPEG, PNG or WebP, up to 20 MB), or drop it on the Cover box. It replaces the cover taken from the PDF or the article.
@@ -74,7 +74,7 @@ Then open **http://localhost:3000**. The steps are numbered down the left of the
 
 Then click **Convert**. The progress bar shows what's happening, for example "Reading scanned pages: 57 of 244", and about how long is left; the panel on the right lists each step.
 
-The book appears on an e-reader in the middle of the page, laid out at your reader's screen size (480 x 800 on an X4 Pro), so lines and picture pages fall roughly as they will on the device; its own font and margins may differ a little. Move through it with the **slider** under the reader, which stops at every picture page too, or the arrow keys, and jump to a chapter from **Contents** on the right. Change the cover as often as you like: the preview updates in about a second, without converting again, and **Remove** goes back to the PDF's own cover. When it looks right, click **Download**. **Convert again** converts the PDF anew, for example with other XTC settings.
+The book appears on an e-reader in the middle of the page, laid out at your reader's screen size (480 x 800 on an X4 Pro), so lines and picture pages fall roughly as they will on the device; its own font and margins may differ a little. Move through it with the **slider** under the reader, which has a stop for every screen of the book, picture pages included, or the arrow keys, and jump to a chapter from **Contents** on the right. Change the cover as often as you like: the preview updates in about a second, without converting again, and **Remove** goes back to the PDF's own cover. When it looks right, click **Download**. **Convert again** converts the PDF anew, for example with other XTC settings.
 
 The page follows your system's light or dark theme, and works offline: its fonts are served by the converter.
 
@@ -141,11 +141,12 @@ node index.js "Homo Deus.pdf"
 node index.js book.pdf book.epub --title "My Book" --author "Jane Doe" --cover cover.jpg
 ```
 
-For web pages, give their links instead of a PDF. Each one becomes a chapter. If you leave out `output.epub`, the book is named after the article (or, for several, after the site and today's date) and saved in the current folder.
+For web pages, give their links instead of a PDF, separated by spaces or commas. Each one becomes a book of its own, made one after another and named after its article. With one link, `output.epub` is the file; with several, the output is a folder for the books. Without it, they're saved in the current folder. A link that can't be read is skipped and the others are still made.
 
 ```
-node index.js https://... [more links] [output.epub] [--title ...] [--author ...] [--cover image] [--device x4|x4-pro|x3]
+node index.js https://... [more links] [output.epub, or a folder for several] [--title ...] [--author ...] [--cover image] [--device x4|x4-pro|x3]
 node index.js https://www.bbc.com/indonesia/vert-cap-43738523
+node index.js https://www.bbc.com/indonesia/...,https://nasional.kompas.com/read/... news
 ```
 
 For an Xteink reader, add `--format xtc` (black and white) or `--format xtch` (4 shades of gray). The book is saved as `input.xtc` or `input.xtch`.
@@ -177,16 +178,15 @@ The PDF's bookmarks become the book's chapters, and its title and author are kep
 
 ## Web pages (news articles)
 
-In the app (`npm start` or `ConvertPdf.exe`), choose **Source: Web pages** and paste the links of news articles or other web pages, one per line, for example a BBC News Indonesia or Kompas article. The converter downloads each page and keeps only the article, the way Firefox's Reader View does it ([Mozilla Readability](https://github.com/mozilla/readability)):
+In the app (`npm start` or `ConvertPdf.exe`), choose **Source: Web pages** and paste the links of news articles or other web pages, one per line or separated by commas, for example a BBC News Indonesia or Kompas article. The converter downloads each page and keeps only the article, the way Firefox's Reader View does it ([Mozilla Readability](https://github.com/mozilla/readability)):
 
-- each article is a chapter: its title, then the site, author and date, its text with its subheadings in the contents, and its link at the end
+- the book has the article's title, then the site, author and date, its text with its subheadings in the contents, and its link at the end
 - its pictures are drawn for your reader's screen in 4 shades of gray, each on a page of its own, with their captions
 - menus, ads, share buttons, "Most read" boxes and "Read also" links are left out
-- the first article's main picture is the cover, and is not repeated inside. You can choose another, as for a PDF
+- the article's main picture is the cover, and is not repeated inside. You can choose another, as for a PDF
 - the book is marked with the article's language, for example Indonesian or English
-- a link that can't be read (a site that refuses, a page with no article) is skipped and named, and the other links still make the book
 
-One link makes a book of that article, named after it. Several make one book, named after their site and today's date, like a small magazine of what you saved.
+Each link becomes a book of its own, named after its article. With several links, the books are made one after another and listed under the links as they're made, each with **Preview** and **Download**. The first one made is shown in the preview straight away, and **Preview** shows another. Each book takes its own article's title, author and cover; once they're all made, a cover can be changed for the book being previewed. A link that can't be read (a site that refuses, a page with no article) is marked in the list with the reason, and the other links are still made into books.
 
 Only the app can do this. The website can't: news sites don't let other websites read their pages. Pages behind a paywall or a login only give what they show without it.
 

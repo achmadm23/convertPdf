@@ -1,6 +1,6 @@
 // Convert the text of a PDF into an EPUB 3 file.
 // Usage: node index.js input.pdf [output.epub] [--title "My Book"] [--author "Name"]
-//    or: node index.js https://... [more links] [output.epub]   (web pages, see web.js)
+//    or: node index.js https://... [more links] [output.epub or folder]   (web pages, see web.js)
 
 const fs = require('fs');
 const path = require('path');
@@ -717,7 +717,7 @@ async function main() {
     console.error(
       'Usage: node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--device x4|x4-pro|x3] [--picture-parts 2|3] [--ocr-lang code]'
     );
-    console.error('Web pages (news articles): node index.js https://... [more links] [output.epub] [--title ...] [--author ...] [--cover image] [--device ...]');
+    console.error('Web pages (news articles), a book for each link: node index.js https://... [more links] [output.epub, or a folder for several] [--title ...] [--author ...] [--cover image] [--device ...]');
     console.error(
       'OCR languages (for scanned pages; detected when not given): ' +
         Object.entries(LANGUAGES).map(([code, name]) => `${code} (${name})`).join(', ')
@@ -776,26 +776,39 @@ async function writeXtc(input, output, opts) {
   );
 }
 
-// Web pages (positional links) as an EPUB: one chapter per article. A positional
-// argument that isn't a link is the output file.
+// Web pages (positional links) as EPUBs, a book for each link, made one after
+// another. A positional argument that isn't a link is the output: the file for one
+// link, or the folder for several (each book named after its article).
 async function writeWebPages(opts) {
   const { parseLinks, readWebPages } = require('./web');
   const links = parseLinks(opts.positional.filter(p => /^https?:\/\//i.test(p)).join(' '));
   const output = opts.positional.find(p => !/^https?:\/\//i.test(p));
   const coverImage = opts.cover && (await imageCover(fs.readFileSync(opts.cover), readerScreen(opts.device)));
-  const book = await readWebPages(links, {
-    title: opts.title,
-    author: opts.author,
-    device: opts.device,
-    onProgress: ({ stage, done, total }) => {
-      if (!process.stderr.isTTY || stage === 'finishing') return;
-      process.stderr.write(`\r${stage === 'pages' ? 'Web pages' : 'Pictures'}: ${done} of ${total}${done === total ? '\n' : ''}`);
-    },
-  });
-  for (const { reason } of book.skipped) console.error(`Skipped: ${reason}`);
-  const outFile = output || book.fileName;
-  fs.writeFileSync(outFile, await buildEpub(book, { cover: coverImage }));
-  console.log(`Wrote ${outFile} (${book.stats.articles} ${book.stats.articles === 1 ? 'article' : 'articles'}, ${book.stats.paragraphs} paragraphs, ${book.stats.images} pictures)`);
+  if (links.length > 1 && output) fs.mkdirSync(output, { recursive: true });
+  let made = 0;
+  for (const [i, link] of links.entries()) {
+    const which = links.length > 1 ? `Book ${i + 1} of ${links.length}: ` : '';
+    try {
+      const book = await readWebPages([link], {
+        title: opts.title,
+        author: opts.author,
+        device: opts.device,
+        onProgress: ({ stage, done, total }) => {
+          if (!process.stderr.isTTY || stage === 'finishing') return;
+          process.stderr.write(`\r${which}${stage === 'pages' ? 'web page' : 'pictures'} ${done} of ${total}${done === total ? '\n' : ''}`);
+        },
+      });
+      const outFile = links.length === 1 ? output || book.fileName : path.join(output || '.', book.fileName);
+      fs.writeFileSync(outFile, await buildEpub(book, { cover: coverImage }));
+      made++;
+      console.log(`Wrote ${outFile} (${book.stats.paragraphs} paragraphs, ${book.stats.images} pictures)`);
+    } catch (err) {
+      if (links.length === 1) throw err;
+      console.error(`Skipped book ${i + 1} of ${links.length}: ${err.message}`);
+    }
+  }
+  if (links.length > 1) console.log(`${made} of ${links.length} books made.`);
+  if (!made) process.exitCode = 1;
 }
 
 module.exports = { convertPdfToEpub, analyzePdf, buildEpub, extractPdf, openPdf, cleanPages, buildChapters, readerScreen };

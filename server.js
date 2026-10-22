@@ -16,6 +16,7 @@ const { version } = require('./package.json');
 const PORT = process.env.PORT || 3000;
 const MAX_BYTES = 300 * 1024 * 1024;
 const MAX_BOOKS = 5; // converted books kept in memory so their cover can be changed quickly
+const MAX_WEB_BOOKS = 50; // books of web pages kept: the page makes one for each link, to download each
 const LOW_CONFIDENCE = 75; // scanned pages read this well (%) or worse can be read again or typed in
 const PICTURE_BELOW = 30; // ...unless they're read this badly: then they're pictures, not text
 const OFFER_PICTURE = 90; // scanned pages read this well (%) or worse can be kept as a picture of the page
@@ -54,7 +55,9 @@ function newSession(pdf, options) {
     busy: false, improved: new Set(),
   };
   sessions.set(id, session);
-  while (sessions.size > MAX_BOOKS) sessions.delete(sessions.keys().next().value);
+  // the oldest of the same kind go first: books of PDFs, or books of web pages
+  const same = [...sessions.values()].filter(s => !s.pdf === !pdf);
+  for (const old of same.slice(0, Math.max(0, same.length - (pdf ? MAX_BOOKS : MAX_WEB_BOOKS)))) sessions.delete(old.id);
   return session;
 }
 
@@ -228,6 +231,7 @@ async function handleConvert(req, res) {
 
 // POST /links: web pages (news articles) into an EPUB, one chapter per article.
 // The request body is JSON: { links (text, one per line), title, author, device }.
+// The page sends one link at a time, for a book each.
 // Answers like /convert, with progress stages 'pages', 'images' and 'finishing'.
 async function handleLinks(req, res) {
   let request, links;

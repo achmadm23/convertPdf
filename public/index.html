@@ -76,6 +76,19 @@
   }
   .field textarea:disabled { opacity: .6; cursor: not-allowed; }
   .source { display: flex; flex-direction: column; gap: 12px; }
+  /* several web pages: a book for each, listed as they're made */
+  .books { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+  .books li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; padding: 8px 10px; background: var(--field); border: 1px solid var(--rule); border-radius: 8px; }
+  .books li.current { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+  .books .book-n { font: 12px/20px var(--mono); color: var(--accent); }
+  .books .book-text { display: flex; flex-direction: column; min-width: 0; }
+  .books .book-title { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+  .books li.waiting .book-title, .books li.converting .book-title { font: 12px/1.5 var(--mono); color: var(--muted); }
+  .books .book-state { font-size: 12px; color: var(--muted); }
+  .books li.failed .book-state { color: var(--error); }
+  .books .book-buttons { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; }
+  .books .book-buttons:empty { display: none; }
+  .books .btn { height: 30px; padding: 0 10px; font-size: 13px; }
   .seg input:disabled + label { opacity: .45; cursor: not-allowed; }
   .note { margin: 0; font-size: 13px; color: var(--muted); }
   .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -305,7 +318,8 @@
         <label class="field">Links, one per line
           <textarea id="links" spellcheck="false" placeholder="https://www.bbc.com/indonesia/…"></textarea>
         </label>
-        <p class="note" id="linksNote">News articles and other web pages. Each one becomes a chapter, with its pictures.</p>
+        <p class="note" id="linksNote">News articles and other web pages, one per line or separated by commas. Each one becomes a book of its own, with its pictures.</p>
+        <ol class="books" id="books" aria-label="Books" hidden></ol>
       </div>
     </div>
 
@@ -590,6 +604,11 @@
   // read their pages), and always become an EPUB.
   const source = () => radio('source');
   const canConvert = () => (source() === 'web' ? !!api.convertLinks && !!$('links').value.trim() : !!file);
+  // the links typed: one per line, or separated by commas or spaces (as web.js splitLinks)
+  const splitLinks = text => [...new Set(text.split(/\s+/)
+    .flatMap(word => word.split(/,(?=https?:\/\/|www\.|[\w-]+(?:\.[\w-]+)+\/)/i))
+    .map(word => word.replace(/^,+|,+$/g, '')).filter(Boolean))];
+  const MAX_LINKS = 50;
   // what the book's details are taken from: the converted book's source, or the one chosen
   const origin = () => ((bookMeta ? bookMeta.articles : source() === 'web') ? 'article' : 'PDF');
 
@@ -810,6 +829,10 @@
       showStatus(`The cover picture is too large (max ${MAX_COVER_MB} MB).`, { error: true });
       return;
     }
+    if (books.some(b => b.state === 'waiting' || b.state === 'converting')) {
+      showStatus('Wait until all the books are made to change a cover.', { error: true });
+      return;
+    }
     coverFile = f || null;
     showCover();
     if (bookId && !converting) applyCover();
@@ -829,14 +852,16 @@
 
   async function applyCover() {
     showStatus(coverFile ? 'Setting the cover…' : `Using the cover from the ${origin()}…`, { busy: true });
+    const listed = books.find(b => b.meta && b.meta.id === bookId); // one of several books of web pages
     try {
       await sendCover();
+      if (listed) listed.cover = coverFile;
       await openPreview(true);
       showStatus(coverFile ? 'Cover updated.' : `Using the cover from the ${origin()}.`);
     } catch (err) {
       // the book keeps its previous cover, so don't show a picture it isn't using
       if (coverFile) {
-        coverFile = null;
+        coverFile = listed ? listed.cover || null : null;
         showCover();
       }
       showStatus(err.message || 'Could not change the cover.', { error: true });
@@ -875,6 +900,11 @@
   convertBtn.addEventListener('click', async () => {
     if (!canConvert()) return;
     const web = source() === 'web';
+    const links = web ? splitLinks($('links').value) : [];
+    if (links.length > MAX_LINKS) return showStatus(`Up to ${MAX_LINKS} links at once.`, { error: true });
+    if (links.length > 1) return convertBooks(links);
+    books = [];
+    showBooks();
     const xtc = outputFormat() === 'xtc';
     convertBtn.disabled = true;
     converting = true;
@@ -944,6 +974,103 @@
       if (failed) showSide(bookId ? 'contents' : 'intro');
     }
   });
+
+  // ---------- several web pages: a book for each ----------
+  // The links are made into books one after another, each listed with its progress,
+  // then Preview and Download. The first book made is shown in the preview at once.
+  // Each takes its own article's title, author and cover; a cover can be changed
+  // for the book previewed once they're all made.
+  let books = []; // { link, state: waiting, converting, done or failed, meta, error, cover }
+
+  function showBooks() {
+    const list = $('books');
+    list.hidden = !books.length;
+    list.innerHTML = '';
+    books.forEach((b, i) => {
+      const li = document.createElement('li');
+      li.className = b.state + (b.meta && b.meta.id === bookId ? ' current' : '');
+      li.innerHTML = '<span class="book-n"></span><div class="book-text"><span class="book-title"></span><span class="book-state"></span></div><div class="book-buttons"></div>';
+      li.querySelector('.book-n').textContent = String(i + 1).padStart(2, '0');
+      li.querySelector('.book-title').textContent = b.meta ? b.meta.title : b.link;
+      li.querySelector('.book-state').textContent =
+        b.state === 'waiting' ? 'Waiting' : b.state === 'converting' ? 'Converting…' : b.state === 'failed' ? b.error
+        : `${b.meta.author} · ${b.meta.images} ${b.meta.images === 1 ? 'picture' : 'pictures'}`;
+      if (b.meta) {
+        const buttons = li.querySelector('.book-buttons');
+        const view = document.createElement('button');
+        view.type = 'button';
+        view.className = 'btn';
+        view.textContent = b.meta.id === bookId ? 'Previewing' : 'Preview';
+        view.disabled = b.meta.id === bookId;
+        view.addEventListener('click', () => showBook(b));
+        const save = document.createElement('a');
+        save.className = 'btn primary';
+        save.href = api.downloadUrl(b.meta.id, false, pictureParts());
+        save.textContent = 'Download';
+        save.setAttribute('aria-label', `Download ${b.meta.fileName}`);
+        buttons.append(view, save);
+      }
+      list.append(li);
+    });
+  }
+
+  // show one of the books made in the preview, with its own cover
+  function showBook(b) {
+    bookId = b.meta.id;
+    bookMeta = b.meta;
+    coverFile = b.cover || null;
+    showCover();
+    showBookInfo();
+    showParts();
+    updateDownload();
+    showBooks();
+    showTab('book');
+    openPreview(false).catch(() => showStatus('The preview could not be shown.', { error: true }));
+  }
+
+  async function convertBooks(links) {
+    const started = Date.now();
+    books = links.map(link => ({ link, state: 'waiting' }));
+    // each book is its own article's: the details and a cover chosen apply to one link only
+    coverFile = null;
+    showCover();
+    convertBtn.disabled = true;
+    converting = true;
+    updateDownload();
+    scans.reset();
+    showStatus(`Making ${links.length} books, one after another. Each takes its own article’s title, author and cover.`);
+    for (const [i, b] of books.entries()) {
+      b.state = 'converting';
+      showBooks();
+      // once a book is shown, its contents stay beside the preview
+      progress.start('Reading the web page…', 'web', { prefix: `Book ${i + 1} of ${links.length} · `, keepSide: !!bookId });
+      try {
+        b.meta = await api.convertLinks(b.link, { device: $('device').value }, { onProgress: update => progress.update(update) });
+        b.state = 'done';
+        progress.update({ stage: 'done' });
+        if (!books.some(o => o !== b && o.meta && o.meta.id === bookId)) showBook(b);
+      } catch (err) {
+        b.state = 'failed';
+        // the reason, without the link it's listed under ("<link> could not be opened: ...")
+        const reason = (err.message || 'Could not be read.').replace(b.link, '').trim();
+        b.error = reason.charAt(0).toUpperCase() + reason.slice(1);
+      }
+      showBooks();
+    }
+    progress.stop();
+    converting = false;
+    convertBtn.disabled = !canConvert();
+    updateDownload();
+    const made = books.filter(b => b.state === 'done').length;
+    const failed = books.length - made;
+    showStatus(
+      `Done in ${progress.time(Date.now() - started)}: ${made} of ${books.length} books made.` +
+        (failed ? ` ${failed} ${failed === 1 ? 'link' : 'links'} could not be read; the list says why.` : '') +
+        (made ? ' Preview or download each one in the list.' : ''),
+      { error: !made }
+    );
+    if (!made) showSide(bookId ? 'contents' : 'intro');
+  }
 
   // POST to the server's URL that answers with JSON lines: {progress}, {session},
   // {page}, then {result} or {error}. Resolves with the result. XHR rather than
@@ -1508,6 +1635,7 @@
     let started = 0;
     let timer = null;
     let steps = [];
+    let prefix = ''; // before every label, see start
 
     // Time left, from how fast the slow stages (OCR, pictures, XTC pages) are actually going.
     // Timing starts from a stage's first finished page, since OCR spends its first
@@ -1555,13 +1683,17 @@
     }
 
     return {
-      start(text = 'Uploading…', format = 'epub') {
+      // `prefix` goes before every label (which of several books); `keepSide` leaves
+      // the side panel as it is instead of showing the steps there
+      start(text = 'Uploading…', format = 'epub', { prefix: before = '', keepSide = false } = {}) {
+        clearInterval(timer);
+        prefix = before;
         percent = 0;
         stages.pictures.from = 8;
         started = Date.now();
         bookPages = 0;
         rate = finishAt = null;
-        label.textContent = text;
+        label.textContent = prefix + text;
         box.hidden = false;
         const list = $('steps');
         list.innerHTML = '';
@@ -1574,7 +1706,7 @@
           return { key, li };
         });
         showSteps(format === 'web' ? 'pages' : format === 'xtc' || text === 'Uploading…' ? 'upload' : 'text', 0, 0);
-        showSide('progress');
+        if (!keepSide) showSide('progress');
         render();
         timer = setInterval(render, 1000);
       },
@@ -1590,12 +1722,13 @@
         const counted = ['upload', 'text', 'ocr', 'pictures', 'xtc', 'pages', 'images'];
         const share = counted.includes(stage) ? (total ? done / total : 0) : 0;
         percent = Math.max(percent, s.from + (s.to - s.from) * share); // never moves backwards
-        label.textContent = s.text(done, total);
+        label.textContent = prefix + s.text(done, total);
         // an XTC book reports reading the PDF as 'text' before its own stage starts
         showSteps(stage === 'text' && steps.every(st => st.key !== 'text') ? 'upload' : stage, done, total);
         render();
       },
       elapsed: () => time(Date.now() - started),
+      time,
       stop() {
         clearInterval(timer);
         setTimeout(() => { box.hidden = true; }, percent >= 100 ? 1200 : 0);
@@ -1705,47 +1838,77 @@
     add(nav.toc, 0);
     showContents(items, `${bookMeta.chapters} chapters`);
     if (keepPlace) showStatus('Preview updated.');
-    // page positions for the slider: the book cut into screens of about the same length
-    const book = epub;
-    await book.locations.generate(1024);
-    if (book !== epub || token !== previewToken) return;
-    buildStops(book);
+    if (token !== previewToken) return;
+    epubData = data;
+    await countScreens();
+  }
+
+  // The slider has a stop for every screen of an EPUB, as the reader shows it, picture
+  // pages and the cover included. Each section is laid out once at the reader's size
+  // in a hidden copy of the book that isn't shrunk to fit like the preview: epub.js
+  // works out pages from where they're drawn on the page, so in the shrunk preview it
+  // reports the wrong one. For the same reason the screen shown is found from how far
+  // its section is scrolled (see shownStop), not from what epub.js reports.
+  let stops = []; // { target: a section's address or where a screen starts, section, page }
+  const stopOf = new Map(); // `${section}:${page}` (spine index, screen from 1) → its stop
+  let epubData = null; // the EPUB previewed, to lay its screens out again
+  let countToken = 0; // a newer count (another book, another size) stops an older one
+
+  async function countScreens() {
+    const token = ++countToken;
+    const [w, h] = laidOut.split('x').map(Number);
+    slider.disabled = true;
+    $('position').textContent = 'Counting pages…';
+    const box = document.createElement('div');
+    box.style.cssText = `position: fixed; top: 0; left: ${-w - 100}px; width: ${w}px; height: ${h}px; visibility: hidden; pointer-events: none;`;
+    document.body.append(box);
+    const copy = ePub(epubData);
+    const found = [];
+    try {
+      await copy.opened;
+      const counter = copy.renderTo(box, { width: w, height: h, spread: 'none' });
+      const items = [];
+      copy.spine.each(item => items.push(item));
+      for (const [n, item] of items.entries()) {
+        await counter.display(item.href);
+        if (token !== countToken) return;
+        const { manager } = counter;
+        const view = manager.views.first();
+        const { pageWidth } = manager.layout;
+        const pages = Math.max(1, manager.layout.count(view.width()).pages);
+        for (let p = 0; p < pages; p++) {
+          // where the screen's text starts; a screen without any is shown by turning to it
+          const range = p ? manager.mapping.page(view.contents, view.section.cfiBase, p * pageWidth, (p + 1) * pageWidth) : null;
+          found.push({ target: range ? range.start : item.href, section: item.index, page: p + 1 });
+        }
+        $('position').textContent = `Counting pages… ${Math.round(((n + 1) / items.length) * 100)}%`;
+      }
+    } finally {
+      copy.destroy();
+      box.remove();
+    }
+    stops = found;
+    stopOf.clear();
+    stops.forEach((stop, i) => stopOf.set(`${stop.section}:${stop.page}`, i));
     slider.min = 0;
     slider.max = Math.max(0, stops.length - 1);
     slider.disabled = false;
     onRelocated(rendition.currentLocation());
   }
 
-  // The slider's stops for an EPUB, in reading order: epub.js's page positions (the
-  // text cut into screens of about the same length), plus one for each section
-  // with no text, like a picture page or the cover, which those positions skip.
-  let stops = []; // { target }: a position to show, or a section's address
-  let stopOfLocation = []; // epub.js position number → its stop
-  const stopOfSection = new Map(); // section with no text (spine index) → its stop
+  // The stop of the screen shown: its section, and how many screens it's scrolled along.
+  function shownStop() {
+    const manager = rendition && rendition.manager;
+    const view = manager && manager.views.first();
+    if (!view) return undefined;
+    const page = Math.round(manager.container.scrollLeft / manager.layout.delta) + 1;
+    return stopOf.get(`${view.section.index}:${page}`);
+  }
 
-  function buildStops(book) {
-    const positions = JSON.parse(book.locations.save());
-    const bySection = new Map();
-    positions.forEach((cfi, i) => {
-      const section = new ePub.CFI(cfi).spinePos;
-      if (!bySection.has(section)) bySection.set(section, []);
-      bySection.get(section).push(i);
-    });
-    stops = [];
-    stopOfLocation = [];
-    stopOfSection.clear();
-    book.spine.each(item => {
-      const own = bySection.get(item.index);
-      if (own) {
-        for (const i of own) {
-          stopOfLocation[i] = stops.length;
-          stops.push({ target: positions[i] });
-        }
-      } else {
-        stopOfSection.set(item.index, stops.length);
-        stops.push({ target: item.href });
-      }
-    });
+  async function goToStop(stop) {
+    const where = stop.target.startsWith('epubcfi(') ? stop.target : null;
+    await rendition.display(where || stop.target);
+    if (!where) for (let p = 1; p < stop.page; p++) await rendition.next();
   }
 
   // An EPUB is laid out at the reader's own screen size (480 x 800 on an X4 Pro),
@@ -1794,6 +1957,9 @@
     if (!xtc && rendition && laidOut && laidOut !== `${w}x${h}`) {
       for (const shown of rendition.getContents()) shown.document.documentElement.classList.toggle('landscape', landscape);
       rendition.resize(w, h);
+      // laid out at another size, the book has other screens
+      laidOut = `${w}x${h}`;
+      if (epubData) countScreens().catch(() => {});
     }
     if (!xtc) laidOut = `${w}x${h}`;
   }
@@ -1821,6 +1987,8 @@
   let screenVersion = 0; // changes with the cover, so pages aren't taken from the browser's cache
 
   function showScreens(keepPlace) {
+    countToken++; // an EPUB's screens still being counted aren't needed
+    epubData = null;
     if (epub) epub.destroy();
     epub = rendition = null;
     viewer.innerHTML = '';
@@ -1902,7 +2070,7 @@
     const here = inFile.find(it => !it.depth) || inFile[0];
     markContents(here);
     $('where').textContent = here ? here.label : bookMeta.title;
-    const stop = stopOfSection.has(loc.start.index) ? stopOfSection.get(loc.start.index) : stopOfLocation[loc.start.location];
+    const stop = shownStop();
     if (!slider.disabled && stop !== undefined) {
       slider.value = stop;
       $('position').textContent = `${stop + 1} / ${stops.length}`;
@@ -1919,7 +2087,7 @@
   });
   slider.addEventListener('change', () => {
     const stop = stops[Number(slider.value)];
-    if (!isXtc() && rendition && stop) rendition.display(stop.target);
+    if (!isXtc() && rendition && stop) goToStop(stop);
   });
 
   const prevPage = () => (isXtc() ? goToScreen(screen - 1) : rendition && rendition.prev());
