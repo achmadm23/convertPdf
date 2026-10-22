@@ -33,7 +33,7 @@ To convert on macOS or Linux, or to change the code, install it from source as d
 
 ## Requirements
 
-- [Node.js](https://nodejs.org/) 22.13 or newer (required by pdf.js)
+- [Node.js](https://nodejs.org/) 22.23.4, 24.22.1 or 26.12.1, or newer in the same line. Older ones have a Brotli bug (CVE-2026-111497) that a web page could use when you convert links, and pdf.js needs at least 22.13.
 - Windows, macOS or Linux (x64 or arm64). Page rendering uses `@napi-rs/canvas`, which ships prebuilt binaries for these systems.
 
 ## Install

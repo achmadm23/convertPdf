@@ -213,6 +213,13 @@
   }
   .placeholder b { font: italic 400 18px Georgia, 'Times New Roman', serif; color: #3D3D3A; }
   #screenView { position: absolute; inset: 0; background: #fff; }
+  .screen-busy {
+    position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; padding: 24px; text-align: center; background: color-mix(in srgb, var(--paper) 92%, transparent);
+  }
+  .screen-busy b { font: 500 13px/1.5 var(--mono); color: var(--ink); }
+  .screen-busy .spinner { width: 22px; height: 22px; margin: 0; border-width: 3px; }
+  .screen-busy .bar { width: 70%; }
   #screenView img { position: absolute; top: 0; left: 0; display: block; width: 100%; height: 100%; transform-origin: 0 0; }
   /* the reader turned on its side: wider, with its chin on the side it turned to */
   .device.landscape { width: min(100%, 580px); padding: 18px 40px 18px 18px; }
@@ -439,6 +446,11 @@
             </div>
             <div id="viewer"></div>
             <div id="screenView" hidden><img id="screenImage" alt=""></div>
+            <div class="screen-busy" id="screenBusy" role="status" hidden>
+              <span class="spinner" aria-hidden="true"></span>
+              <b id="screenBusyText"></b>
+              <div class="bar thin" id="screenBusyBar" hidden><div id="screenBusyFill"></div></div>
+            </div>
           </div>
         </div>
         <div class="pager">
@@ -825,9 +837,32 @@
     };
   }
 
-  function showStatus(msg, { error = false, busy = false } = {}) {
+  // The drawn reader's screen while its book isn't ready: the preview still loading
+  // (setLoading), or work on the book with how far along it is (see showStatus).
+  let screenLoading = false;
+  let screenWork = null; // { msg, share }
+  function paintScreenBusy() {
+    const on = (screenLoading || !!screenWork) && !$('bookPane').hidden && !$('bookView').hidden;
+    $('screenBusy').hidden = !on;
+    $('screenBusyText').textContent = screenWork ? screenWork.msg : 'Opening the book…';
+    const share = screenWork ? screenWork.share : null;
+    $('screenBusyBar').hidden = share === null || share === undefined;
+    if (share !== null && share !== undefined) $('screenBusyFill').style.width = `${Math.round(share * 100)}%`;
+  }
+  function setLoading(on) {
+    screenLoading = on;
+    paintScreenBusy();
+  }
+
+  // A message about the book shown. Work still going on (busy) is shown on the drawn
+  // reader's screen while the book is shown on it, with how far along it is (`share`, 0 to 1).
+  function showStatus(msg, { error = false, busy = false, share = null } = {}) {
+    const onScreen = busy && !$('bookPane').hidden && !$('bookView').hidden;
+    screenWork = onScreen ? { msg, share } : null;
+    paintScreenBusy();
     status.className = error ? 'error' : '';
     status.innerHTML = '';
+    if (onScreen) return;
     if (busy) status.insertAdjacentHTML('beforeend', '<span class="spinner" aria-hidden="true"></span>');
     status.append(msg);
   }
@@ -2107,11 +2142,18 @@
       r.busy = true;
       updateCounts(b);
       renderEditor();
-      showStatus('Updating the book…', { busy: true });
+      // the update is watched on the reader, which then shows the book updated
+      if (b === current) {
+        userPickedTab = true;
+        showTab('book');
+      }
+      showStatus('Updating the book…', { busy: true, share: 0 });
       try {
         const meta = await api.rebuild(b.id, {
           onProgress: ({ stage, done, total }) => {
-            if (stage === 'pictures' && total) showStatus(`Updating the book: pictures, page ${done} of ${total}`, { busy: true });
+            if (!total) return;
+            if (stage === 'text') showStatus(`Updating the book · reading text, page ${done} of ${total}`, { busy: true, share: (done / total) * 0.1 });
+            if (stage === 'pictures') showStatus(`Updating the book · pictures, page ${done} of ${total}`, { busy: true, share: 0.1 + (done / total) * 0.9 });
           },
         });
         b.meta = meta;
@@ -2126,6 +2168,7 @@
           showBookInfo();
           showStatus('Book updated with the changed pages.');
           previewStale = true;
+          if (!$('bookView').hidden) openPreview(true).catch(() => showStatus('Book updated, but the preview could not be shown.', { error: true }));
         }
       } catch (err) {
         showStatus(err.message || 'Could not update the book.', { error: true });
@@ -2410,6 +2453,7 @@
     try {
       await drawPreview(keepPlace, token);
     } catch (err) {
+      if (token === previewToken) setLoading(false);
       // a preview replaced by a newer one (another book, a new cover) fails quietly
       if (token === previewToken) throw err;
     }
@@ -2425,11 +2469,13 @@
     // the place to go back to, if the preview is still of this book
     const loc = keepPlace && rendition && previewOf === id && rendition.currentLocation();
     const place = loc && loc.start ? { cfi: loc.start.cfi, href: loc.start.href } : null;
+    setLoading(true);
 
     let data;
     try {
       data = await api.epub(id, pictureParts(), pictureLayout());
     } catch (err) {
+      setLoading(false);
       showStatus(err.message || 'The preview could not be shown.', { error: true });
       return;
     }
@@ -2467,6 +2513,7 @@
     } catch {}
     const now = rendition.currentLocation();
     if (place && (!now || !now.start || now.start.href !== place.href)) await rendition.display(place.href);
+    if (token === previewToken) setLoading(false); // the page is shown; its screens are counted below
     const nav = await epub.loaded.navigation;
     const items = [];
     const add = (list, depth) => {
@@ -2604,6 +2651,8 @@
     if (!xtc) laidOut = `${w}x${h}`;
   }
   new ResizeObserver(() => fitViewer()).observe($('screen'));
+  $('screenImage').addEventListener('load', () => setLoading(false));
+  $('screenImage').addEventListener('error', () => setLoading(false));
 
   // the page shown: turned sideways or not
   function holdFor(sideways, left = true) {
@@ -2652,6 +2701,7 @@
   function goToScreen(n) {
     screen = Math.min(Math.max(1, n), bookMeta.pages);
     const img = $('screenImage');
+    if (!img.getAttribute('src')) setLoading(true);
     const showing = screen;
     api.screenUrl(bookId, screen, screenVersion)
       .then(url => { if (screen === showing) img.src = url; })
