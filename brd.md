@@ -1,6 +1,6 @@
 # convertPdf — Business Requirements Document
 
-Date: 2026-10-19 · Product version: v1.2.4
+Date: 2026-10-22 · Product version: v1.3.0
 
 ## 1. Executive summary
 
@@ -30,7 +30,7 @@ The product succeeds when a non-technical reader can turn a PDF into an e-book t
 
 ## 3. Scope
 
-Version 1.2.4 covers one-way conversion of a single PDF into a single EPUB or XTC book, on the user's own machine.
+Version 1.3.0 covers one-way conversion of PDFs and web pages into EPUB or XTC books, many at once, on the user's own machine.
 
 **In scope**
 
@@ -107,7 +107,7 @@ flowchart LR
 
 ## 6. Functional requirements
 
-45 requirements, 15 of them Must, define what version 1.2.4 delivers; priorities use MoSCoW.
+48 requirements, 17 of them Must, define what version 1.3.0 delivers; priorities use MoSCoW.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
@@ -267,6 +267,7 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 
 | Version | Date | What changed |
 | --- | --- | --- |
+| v1.3.0 | 2026-10-22 | Many books at once: choose PDF or Web pages first, then add as many PDFs or links as you like, converted one after another in a list, each previewed, changed and downloaded on its own, or all in one zip; web pages (news articles such as BBC or Kompas) become EPUBs with only the article, its pictures and captions; the page slider stops at every screen of the book and lands on the one chosen (FR-42, FR-47 to FR-49) |
 | v1.2.4 | 2026-10-19 | Draw a box on scanned pages: the pictures found are marked on each page's scan, and boxes can be drawn, moved, resized or removed around them, the text outside staying text (FR-46); chapter titles of up to 3 centred lines on scanned pages are found, so chapters with a wrapped title no longer go missing (FR-06) |
 | v1.2.3 | 2026-10-19 | Pictures found anywhere on scanned pages, beside the text too; full-page pictures Sideways or Upright, as for XTC; a Portrait / Landscape preview, landscape laying the book out wide; flat mid-grays in pictures no longer print white (FR-43 to FR-45) |
 | v1.2.2 | 2026-10-19 | EPUB pictures and the preview sized for the chosen reader (X4 Pro by default); full-page pictures whole or in 2 or 3 sideways parts; a slider stop for every picture page (FR-41 to FR-43) |
