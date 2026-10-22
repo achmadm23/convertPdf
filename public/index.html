@@ -70,6 +70,13 @@
     background: var(--field); border: 1px solid var(--input); border-radius: 8px;
   }
   .field select { cursor: pointer; }
+  .field textarea {
+    width: 100%; min-height: 104px; padding: 10px 12px; resize: vertical; font: 13px/1.5 var(--mono); color: var(--text);
+    background: var(--field); border: 1px solid var(--input); border-radius: 8px;
+  }
+  .field textarea:disabled { opacity: .6; cursor: not-allowed; }
+  .source { display: flex; flex-direction: column; gap: 12px; }
+  .seg input:disabled + label { opacity: .45; cursor: not-allowed; }
   .note { margin: 0; font-size: 13px; color: var(--muted); }
   .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .check { display: flex; align-items: flex-start; gap: 10px; min-height: 32px; font-size: 14px; cursor: pointer; }
@@ -270,7 +277,14 @@
 <main class="layout">
   <section class="card setup" aria-label="Book setup">
     <div class="step" id="pdfStep">
-      <h2 class="step-title"><span>01</span>PDF</h2>
+      <h2 class="step-title" id="sourceLabel"><span>01</span>Source</h2>
+      <div class="seg" role="radiogroup" aria-labelledby="sourceLabel">
+        <input type="radio" name="source" id="sourcePdf" value="pdf" checked>
+        <label for="sourcePdf">PDF</label>
+        <input type="radio" name="source" id="sourceWeb" value="web">
+        <label for="sourceWeb">Web pages</label>
+      </div>
+      <div class="source" id="pdfSource">
       <div class="drop" id="drop">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--muted)"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 17v-6"/><path d="M9.5 13.5 12 11l2.5 2.5"/></svg>
         <b>Drop a PDF here</b>
@@ -285,6 +299,14 @@
         <button type="button" class="btn" id="replacePdf">Replace</button>
       </div>
       <input type="file" id="file" accept="application/pdf,.pdf">
+      </div>
+      <!-- web pages (news articles): only the app can read them, see web.js -->
+      <div class="source" id="webSource" hidden>
+        <label class="field">Links, one per line
+          <textarea id="links" spellcheck="false" placeholder="https://www.bbc.com/indonesia/…"></textarea>
+        </label>
+        <p class="note" id="linksNote">News articles and other web pages. Each one becomes a chapter, with its pictures.</p>
+      </div>
     </div>
 
     <div class="step">
@@ -525,6 +547,9 @@
         }
         return streamRequest('convert', pdf, headers, handlers, true);
       },
+      // web pages: `links` is text with one link per line
+      convertLinks: (links, { title, author, device }, handlers) =>
+        streamRequest('links', JSON.stringify({ links, title, author, device }), { 'Content-Type': 'application/json' }, handlers),
       rebuild: (id, handlers) => streamRequest(`book/${id}/rebuild`, null, {}, handlers),
       retry: (id, n) => json(`book/${id}/pages/${n}/retry`, { method: 'POST' }),
       setText: (id, n, text) =>
@@ -545,7 +570,7 @@
     };
   }
 
-  let file = null;
+  let file = null; // the PDF; web pages' links are in #links (see source())
   let bookId = null;
   let bookMeta = null;
   let converting = false;
@@ -559,6 +584,49 @@
     if (busy) status.insertAdjacentHTML('beforeend', '<span class="spinner" aria-hidden="true"></span>');
     status.append(msg);
   }
+
+  // ---------- source: a PDF, or web pages ----------
+  // Web pages are read by the app (the website can't: other sites don't let it
+  // read their pages), and always become an EPUB.
+  const source = () => radio('source');
+  const canConvert = () => (source() === 'web' ? !!api.convertLinks && !!$('links').value.trim() : !!file);
+  // what the book's details are taken from: the converted book's source, or the one chosen
+  const origin = () => ((bookMeta ? bookMeta.articles : source() === 'web') ? 'article' : 'PDF');
+
+  function showSource() {
+    const web = source() === 'web';
+    $('pdfSource').hidden = web;
+    $('webSource').hidden = !web;
+    $('formatXtc').disabled = web;
+    $('links').disabled = !api.convertLinks;
+    if (!api.convertLinks) {
+      $('linksNote').textContent = 'Web pages can only be made into books in the app (ConvertPdf.exe or npm start): news sites don’t let other websites read their pages.';
+    }
+    $('title').placeholder = $('author').placeholder = `Taken from the ${web ? 'article' : 'PDF'}`;
+    if (!converting) convertBtn.disabled = !canConvert();
+    if (!bookId && !converting) showStatus(web ? 'Paste the link of a news article or another web page.' : 'Choose a PDF to start.');
+    showOutput();
+    showCover();
+  }
+
+  function setSource(which) {
+    $(which === 'web' ? 'sourceWeb' : 'sourcePdf').checked = true;
+    try { localStorage.setItem('source', which); } catch {}
+    showSource();
+  }
+
+  // links dropped on the page are added to the list
+  function addLinks(text) {
+    const links = text.split(/\r?\n/).filter(l => l && !l.startsWith('#')).join('\n');
+    const box = $('links');
+    box.value = box.value.trim() ? `${box.value.trim()}\n${links}` : links;
+    showSource();
+  }
+
+  document.querySelectorAll('input[name="source"]').forEach(r => r.addEventListener('change', () => setSource(r.value)));
+  $('links').addEventListener('input', () => {
+    if (!converting) convertBtn.disabled = !canConvert();
+  });
 
   // ---------- output: EPUB, or XTC for Xteink readers ----------
   // The choice and the XTC settings are remembered for next time. They're used
@@ -574,14 +642,20 @@
     return settings;
   }
 
+  // XTC books are made from a PDF's pages; web pages always become an EPUB
+  const outputFormat = () => (source() === 'web' ? 'epub' : radio('format'));
+
   function showOutput() {
-    const xtc = radio('format') === 'xtc';
+    const xtc = outputFormat() === 'xtc';
+    const web = source() === 'web';
     $('deviceNote').hidden = xtc;
     $('partsField').hidden = xtc;
     $('pictureSplitField').hidden = xtc || radio('pictureTurn') !== 'sideways';
     $('xtcSettings').hidden = !xtc;
-    $('formatNote').hidden = !xtc;
-    $('formatNote').textContent = 'Every page drawn for the reader’s screen, exactly as it looks in the PDF.';
+    $('formatNote').hidden = !xtc && !web;
+    $('formatNote').textContent = web
+      ? 'Web pages become an EPUB, in the reader’s own font.'
+      : 'Every page drawn for the reader’s screen, exactly as it looks in the PDF.';
     $('coverNote').textContent = xtc
       ? 'Replaces the first page, drawn for the reader’s screen.'
       : 'JPEG, PNG or WebP. Drawn for the reader’s screen in 4 shades of gray.';
@@ -666,7 +740,7 @@
     $('fileSize').textContent = fileSize(f);
     drop.hidden = true;
     $('fileRow').hidden = false;
-    convertBtn.disabled = converting;
+    convertBtn.disabled = converting || !canConvert();
     showStatus(bookId ? 'Convert again to use this PDF.' : 'Ready. Choose the output, then convert.');
   }
 
@@ -674,7 +748,7 @@
 
   // after converting, the file line also says how many pages the PDF has
   function showFilePages() {
-    if (!file || !bookMeta) return;
+    if (!file || !bookMeta || bookMeta.articles) return;
     const m = bookMeta;
     const pages = isXtc() ? `${m.sourcePages} pages`
       : m.scannedPages && m.scannedPages === m.pages ? `${m.pages} scanned pages` : `${m.pages} pages`;
@@ -693,11 +767,19 @@
   pdfStep.addEventListener('drop', e => {
     e.preventDefault();
     drop.classList.remove('over');
-    setFile(e.dataTransfer.files[0]);
+    const f = e.dataTransfer.files[0];
+    const links = !f && (e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain'));
+    if (f) {
+      setSource('pdf');
+      setFile(f);
+    } else if (links && api.convertLinks) {
+      setSource('web');
+      addLinks(links);
+    }
   });
 
   // ---------- cover ----------
-  // A picture chosen to replace the PDF's cover. It's sent to the server once the
+  // A picture chosen to replace the PDF's (or article's) cover. It's sent to the server once the
   // book is converted, and can be changed or removed afterwards.
   const MAX_COVER_MB = 20;
   let coverFile = null;
@@ -709,10 +791,11 @@
     const thumb = $('coverThumb'), img = thumb.querySelector('img');
     thumb.classList.toggle('empty', !coverFile);
     thumb.querySelector('span').hidden = !!coverFile;
+    thumb.querySelector('span').textContent = origin() === 'article' ? 'Web' : 'PDF';
     img.hidden = !coverFile;
     if (coverUrl) img.src = coverUrl;
     else img.removeAttribute('src');
-    $('coverName').textContent = coverFile ? coverFile.name : 'Taken from the PDF';
+    $('coverName').textContent = coverFile ? coverFile.name : `Taken from the ${origin()}`;
     $('coverChoose').textContent = coverFile ? 'Change' : 'Choose image';
     $('coverRemove').hidden = !coverFile;
     $('coverWhen').classList.toggle('on', !!coverFile);
@@ -745,11 +828,11 @@
   }
 
   async function applyCover() {
-    showStatus(coverFile ? 'Setting the cover…' : 'Using the cover from the PDF…', { busy: true });
+    showStatus(coverFile ? 'Setting the cover…' : `Using the cover from the ${origin()}…`, { busy: true });
     try {
       await sendCover();
       await openPreview(true);
-      showStatus(coverFile ? 'Cover updated.' : 'Using the cover from the PDF.');
+      showStatus(coverFile ? 'Cover updated.' : `Using the cover from the ${origin()}.`);
     } catch (err) {
       // the book keeps its previous cover, so don't show a picture it isn't using
       if (coverFile) {
@@ -775,6 +858,12 @@
     if (e.dataTransfer.files[0]) setCover(e.dataTransfer.files[0]);
   });
 
+  // the source chosen last time (shown here, once the cover's state exists)
+  try {
+    if (localStorage.getItem('source') === 'web') $('sourceWeb').checked = true;
+  } catch {}
+  showSource();
+
   // ---------- side panel: what you get, progress, or contents ----------
   function showSide(which) {
     $('sideIntro').hidden = which !== 'intro';
@@ -784,13 +873,14 @@
 
   // ---------- convert ----------
   convertBtn.addEventListener('click', async () => {
-    if (!file) return;
-    const xtc = radio('format') === 'xtc';
+    if (!canConvert()) return;
+    const web = source() === 'web';
+    const xtc = outputFormat() === 'xtc';
     convertBtn.disabled = true;
     converting = true;
     updateDownload();
     showStatus('');
-    progress.start('Uploading…', xtc ? 'xtc' : 'epub');
+    progress.start(web ? 'Reading the web pages…' : 'Uploading…', web ? 'web' : xtc ? 'xtc' : 'epub');
 
     const options = {
       title: $('title').value.trim(),
@@ -802,14 +892,15 @@
     scans.reset();
     let failed = false;
     try {
-      bookMeta = await api.convert(file, options, {
+      const handlers = {
         onProgress: update => {
           progress.update(update);
           if (update.stage === 'ocr') scans.setTotal(update.total);
         },
         onSession: session => scans.start(session),
         onPage: page => scans.add(page),
-      });
+      };
+      bookMeta = await (web ? api.convertLinks($('links').value, options, handlers) : api.convert(file, options, handlers));
       progress.update({ stage: 'done' });
       bookId = bookMeta.id;
       let coverNote = '';
@@ -819,7 +910,7 @@
         } catch (err) {
           coverFile = null;
           showCover();
-          coverNote = ` The cover picture could not be used, so the PDF's cover is kept: ${err.message}`;
+          coverNote = ` The cover picture could not be used, so the ${origin()}'s cover is kept: ${err.message}`;
         }
       }
       showBookInfo();
@@ -831,6 +922,10 @@
       $('tabs').hidden = isXtc();
       showTab('book');
       const took = `Done in ${progress.elapsed()}.`;
+      const skipped = bookMeta.skipped || [];
+      if (skipped.length) {
+        coverNote += ` ${skipped.length} of the links could not be read: ${skipped.map(s => s.reason).join(' ')}`;
+      }
       showStatus(
         (bookMeta.lowPages
           ? `${took} ${bookMeta.lowPages} scanned ${bookMeta.lowPages === 1 ? 'page was' : 'pages were'} read at ${scans.limit}% or lower. Check them in Scanned pages: you can retry or type the text.`
@@ -842,7 +937,7 @@
       showStatus(err.message || 'Conversion failed.', { error: true });
     } finally {
       progress.stop();
-      convertBtn.disabled = false;
+      convertBtn.disabled = !canConvert();
       // after a failed conversion, the previously converted book can still be downloaded
       converting = false;
       updateDownload();
@@ -902,6 +997,10 @@
       bookInfo.textContent =
         `${m.title} · ${m.device}, ${m.grays ? '4 grays' : 'black and white'} · ` +
         `${m.pages} pages from ${m.sourcePages} PDF pages · ${m.chapters.length} chapters`;
+    } else if (m.articles) {
+      bookInfo.textContent =
+        `${m.title} · ${m.author} · ${m.articles} ${m.articles === 1 ? 'article' : 'articles'} · ${m.images} pictures` +
+        (m.device ? ` · for ${m.device}, ${m.width} × ${m.height}` : '');
     } else {
       const scanned = m.scannedPages ? ` · ${m.scannedPages} scanned pages read with OCR` : '';
       bookInfo.textContent =
@@ -1301,7 +1400,7 @@
         progress.stop();
         busy = false;
         converting = false;
-        convertBtn.disabled = !file;
+        convertBtn.disabled = !canConvert();
         updateDownload();
         updateCounts();
       }
@@ -1391,11 +1490,14 @@
       },
       finishing: { from: 98, to: 99, text: () => 'Building chapters…' },
       xtc: { from: 3, to: 99, text: (d, t) => (t ? `Drawing pages for the reader: ${d} of ${t}` : 'Reading the PDF…') },
+      pages: { from: 0, to: 40, text: (d, t) => (t > 1 ? `Reading web pages: ${d} of ${t}` : 'Reading the web page…') },
+      images: { from: 40, to: 98, text: (d, t) => (t ? `Getting pictures: ${d} of ${t}` : 'Getting pictures…') },
       done: { from: 100, to: 100, text: () => 'Done' },
     };
     const STEPS = {
       epub: [['upload', 'Upload'], ['text', 'Reading text'], ['ocr', 'Reading scanned pages'], ['pictures', 'Finding pictures'], ['finishing', 'Building chapters']],
       xtc: [['upload', 'Upload'], ['xtc', 'Drawing pages for the reader']],
+      web: [['pages', 'Reading web pages'], ['images', 'Getting pictures'], ['finishing', 'Building chapters']],
     };
     const ICONS = {
       done: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>',
@@ -1471,7 +1573,7 @@
           list.append(li);
           return { key, li };
         });
-        showSteps(format === 'xtc' || text === 'Uploading…' ? 'upload' : 'text', 0, 0);
+        showSteps(format === 'web' ? 'pages' : format === 'xtc' || text === 'Uploading…' ? 'upload' : 'text', 0, 0);
         showSide('progress');
         render();
         timer = setInterval(render, 1000);
@@ -1485,7 +1587,7 @@
         if (stage === 'ocr') stages.pictures.from = stages.ocr.to;
         const s = stages[stage];
         if (!s) return;
-        const counted = ['upload', 'text', 'ocr', 'pictures', 'xtc'];
+        const counted = ['upload', 'text', 'ocr', 'pictures', 'xtc', 'pages', 'images'];
         const share = counted.includes(stage) ? (total ? done / total : 0) : 0;
         percent = Math.max(percent, s.from + (s.to - s.from) * share); // never moves backwards
         label.textContent = s.text(done, total);

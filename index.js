@@ -1,5 +1,6 @@
 // Convert the text of a PDF into an EPUB 3 file.
 // Usage: node index.js input.pdf [output.epub] [--title "My Book"] [--author "Name"]
+//    or: node index.js https://... [more links] [output.epub]   (web pages, see web.js)
 
 const fs = require('fs');
 const path = require('path');
@@ -573,9 +574,9 @@ function splitPictures(chapters, images, parts) {
 // Package an analysed book as an EPUB. This is fast, so the same book can be
 // re-packaged with a different cover without reading the PDF again.
 // `cover` (a PNG from imageCover) replaces the cover found in the PDF.
-// The text uses the e-reader's own font.
+// The text uses the e-reader's own font. `language` is the book's (a code: en, id, ...).
 // `pictureParts` 2 or 3 turns full-page portrait pictures sideways and cuts them into parts.
-async function buildEpub({ title, author, chapters, images = [], cover: pdfCover = null }, { cover: customCover, pictureParts = 1 } = {}) {
+async function buildEpub({ title, author, language = 'en', chapters, images = [], cover: pdfCover = null }, { cover: customCover, pictureParts = 1 } = {}) {
   const cover = customCover || pdfCover;
   if (![1, 2, 3].includes(pictureParts)) throw new Error('Full-page pictures can be cut into 1, 2 or 3 parts.');
   if (pictureParts > 1) ({ chapters, images } = splitPictures(chapters, images, pictureParts));
@@ -651,7 +652,7 @@ ${navItems.join('\n')}
     <dc:identifier id="bookid">${id}</dc:identifier>
     <dc:title>${escapeXml(title)}</dc:title>
     <dc:creator>${escapeXml(author)}</dc:creator>
-    <dc:language>en</dc:language>
+    <dc:language>${escapeXml(language)}</dc:language>
     <meta property="dcterms:modified">${modified}</meta>${cover ? '\n    <meta name="cover" content="cover-image"/>' : ''}
   </metadata>
   <manifest>
@@ -710,11 +711,13 @@ async function convertPdfToEpub(pdfBuffer, { cover, pictureParts, ...options } =
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
+  if (opts.positional.some(p => /^https?:\/\//i.test(p))) return writeWebPages(opts);
   const [input, output] = opts.positional;
   if (!input) {
     console.error(
       'Usage: node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--device x4|x4-pro|x3] [--picture-parts 2|3] [--ocr-lang code]'
     );
+    console.error('Web pages (news articles): node index.js https://... [more links] [output.epub] [--title ...] [--author ...] [--cover image] [--device ...]');
     console.error(
       'OCR languages (for scanned pages; detected when not given): ' +
         Object.entries(LANGUAGES).map(([code, name]) => `${code} (${name})`).join(', ')
@@ -771,6 +774,28 @@ async function writeXtc(input, output, opts) {
     `Wrote ${outFile} for the ${DEVICES[book.options.device].name} ` +
       `(${bookPages(book, cover).pages.length} screens from ${book.stats.sourcePages} PDF pages, ${book.chapters.length} chapters)`
   );
+}
+
+// Web pages (positional links) as an EPUB: one chapter per article. A positional
+// argument that isn't a link is the output file.
+async function writeWebPages(opts) {
+  const { parseLinks, readWebPages } = require('./web');
+  const links = parseLinks(opts.positional.filter(p => /^https?:\/\//i.test(p)).join(' '));
+  const output = opts.positional.find(p => !/^https?:\/\//i.test(p));
+  const coverImage = opts.cover && (await imageCover(fs.readFileSync(opts.cover), readerScreen(opts.device)));
+  const book = await readWebPages(links, {
+    title: opts.title,
+    author: opts.author,
+    device: opts.device,
+    onProgress: ({ stage, done, total }) => {
+      if (!process.stderr.isTTY || stage === 'finishing') return;
+      process.stderr.write(`\r${stage === 'pages' ? 'Web pages' : 'Pictures'}: ${done} of ${total}${done === total ? '\n' : ''}`);
+    },
+  });
+  for (const { reason } of book.skipped) console.error(`Skipped: ${reason}`);
+  const outFile = output || book.fileName;
+  fs.writeFileSync(outFile, await buildEpub(book, { cover: coverImage }));
+  console.log(`Wrote ${outFile} (${book.stats.articles} ${book.stats.articles === 1 ? 'article' : 'articles'}, ${book.stats.paragraphs} paragraphs, ${book.stats.images} pictures)`);
 }
 
 module.exports = { convertPdfToEpub, analyzePdf, buildEpub, extractPdf, openPdf, cleanPages, buildChapters, readerScreen };

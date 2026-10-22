@@ -27,6 +27,9 @@ const PACKAGES = {
   // Listed before tesseract.js, whose `deps` would otherwise pull in every build.
   'tesseract.js-core': { include: [/^package\.json$/, /^tesseract-core(-simd|-relaxedsimd)?\.(js|wasm)$/] },
   'tesseract.js': { deps: true, include: [/^package\.json$/, /^src\//] },
+  // web pages (web.js): finding a page's article
+  '@mozilla/readability': { include: [/^package\.json$/, /^index\.js$/, /^Readability(-readerable)?\.js$/] },
+  linkedom: { deps: true, include: [/^package\.json$/, /^(cjs|commonjs)\//] },
 };
 for (const code of Object.keys(require('../ocr').LANGUAGES)) {
   PACKAGES[`@tesseract.js-data/${code}`] = { include: [/^package\.json$/, /^4\.0\.0_best_int\//] };
@@ -39,7 +42,7 @@ for (const family of ['sans', 'mono']) {
 }
 
 const APP_FILES = [
-  'index.js', 'pdf.js', 'figures.js', 'eink.js', 'ocr.js', 'ocr-platform.js', 'xtc.js', 'xtcfile.js', 'server.js',
+  'index.js', 'pdf.js', 'figures.js', 'eink.js', 'ocr.js', 'ocr-platform.js', 'xtc.js', 'xtcfile.js', 'web.js', 'server.js',
   'package.json', 'public/index.html',
 ];
 
@@ -51,8 +54,14 @@ function walk(dir, base = dir) {
   });
 }
 
+// Found the way Node finds it: in node_modules here or in a folder above. Not with
+// require.resolve, as some packages' "exports" don't let their package.json be required.
 function packageDir(name, from = root) {
-  return path.dirname(require.resolve(`${name}/package.json`, { paths: [from] }));
+  for (let dir = from; ; dir = path.dirname(dir)) {
+    const found = path.join(dir, 'node_modules', name);
+    if (fs.existsSync(path.join(found, 'package.json'))) return found;
+    if (path.dirname(dir) === dir) throw new Error(`Package ${name} is not installed.`);
+  }
 }
 
 // Collect [{ path in app, source file }]

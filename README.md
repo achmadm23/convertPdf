@@ -11,6 +11,7 @@ Convert PDFs into EPUB e-books. It works on normal PDFs and on scanned books, wi
 - leaves the font to the e-reader, so the book reads in the font and size you choose there
 - reads scanned pages with built-in OCR (English and Indonesian), with nothing extra to install
 - can also make an XTC book for Xteink X3, X4 and X4 Pro readers, with every page drawn for the reader's screen (see [Xteink books](#xteink-books-xtc))
+- in the app, also makes a book of web pages such as news articles from BBC or Kompas: paste their links (see [Web pages](#web-pages-news-articles))
 
 It runs entirely on your computer. Your files are never uploaded anywhere.
 
@@ -18,7 +19,7 @@ It runs entirely on your computer. Your files are never uploaded anywhere.
 
 **[Open convertPdf](https://achmadm23.github.io/convertPdf/)** in your browser: nothing to install, on Windows, macOS, Linux, or a tablet.
 
-The website does everything the app does, and the converting happens inside your browser: your PDF is never uploaded. It's slower than the app on big scanned books, because OCR uses your browser instead of all your computer's cores, and the first scanned book downloads the OCR language data (about 4 MB, kept by the browser afterwards).
+The website does everything the app does except books of web pages, and the converting happens inside your browser: your PDF is never uploaded. It's slower than the app on big scanned books, because OCR uses your browser instead of all your computer's cores, and the first scanned book downloads the OCR language data (about 4 MB, kept by the browser afterwards).
 
 The site is published from this repository by GitHub Pages: every push to `main` rebuilds it (`.github/workflows/pages.yml`). To build it yourself, run `npm run build:web` and serve the `site/` folder.
 
@@ -65,10 +66,10 @@ npm start
 
 Then open **http://localhost:3000**. The steps are numbered down the left of the page:
 
-1. **PDF:** choose a PDF, or drop it on the page.
-2. **Output:** an EPUB e-book for any e-reader, or an XTC book for an Xteink reader ([Xteink books](#xteink-books-xtc)).
-3. **Details:** optionally type a title and author. If you leave them blank, they're taken from the PDF.
-4. **Cover:** optionally choose a picture (JPEG, PNG or WebP, up to 20 MB), or drop it on the Cover box. It replaces the cover taken from the PDF.
+1. **Source:** **PDF**: choose a PDF, or drop it on the page. **Web pages**: paste the links of news articles or other web pages, one per line ([Web pages](#web-pages-news-articles)).
+2. **Output:** an EPUB e-book for any e-reader, or an XTC book for an Xteink reader ([Xteink books](#xteink-books-xtc)). Web pages always become an EPUB.
+3. **Details:** optionally type a title and author. If you leave them blank, they're taken from the PDF or the article.
+4. **Cover:** optionally choose a picture (JPEG, PNG or WebP, up to 20 MB), or drop it on the Cover box. It replaces the cover taken from the PDF or the article.
 5. **Reader:** your e-reader (Xteink X4 Pro, X4 or X3). An EPUB's pictures and cover are drawn for its screen, and the preview shows the book at its size. **Full-page pictures** chooses how portrait pictures that fill most of their page go in the book: **Whole**, upright, or turned on their side and cut into **2 parts** or **3 parts** that each fill the screen, as in an XTC book. Changing it updates the book at once, without converting again. For an XTC book, also black and white or 4 grays, and whether pages are turned sideways.
 
 Then click **Convert**. The progress bar shows what's happening, for example "Reading scanned pages: 57 of 244", and about how long is left; the panel on the right lists each step.
@@ -140,6 +141,13 @@ node index.js "Homo Deus.pdf"
 node index.js book.pdf book.epub --title "My Book" --author "Jane Doe" --cover cover.jpg
 ```
 
+For web pages, give their links instead of a PDF. Each one becomes a chapter. If you leave out `output.epub`, the book is named after the article (or, for several, after the site and today's date) and saved in the current folder.
+
+```
+node index.js https://... [more links] [output.epub] [--title ...] [--author ...] [--cover image] [--device x4|x4-pro|x3]
+node index.js https://www.bbc.com/indonesia/vert-cap-43738523
+```
+
 For an Xteink reader, add `--format xtc` (black and white) or `--format xtch` (4 shades of gray). The book is saved as `input.xtc` or `input.xtch`.
 
 ```
@@ -167,6 +175,21 @@ For Xteink readers (X3, X4 and X4 Pro), convertPdf can also make an XTC book: ev
 
 The PDF's bookmarks become the book's chapters, and its title and author are kept. A cover picture of your own replaces the first page when that is the cover, or comes before it otherwise. The preview shows each page as the reader will.
 
+## Web pages (news articles)
+
+In the app (`npm start` or `ConvertPdf.exe`), choose **Source: Web pages** and paste the links of news articles or other web pages, one per line, for example a BBC News Indonesia or Kompas article. The converter downloads each page and keeps only the article, the way Firefox's Reader View does it ([Mozilla Readability](https://github.com/mozilla/readability)):
+
+- each article is a chapter: its title, then the site, author and date, its text with its subheadings in the contents, and its link at the end
+- its pictures are drawn for your reader's screen in 4 shades of gray, each on a page of its own, with their captions
+- menus, ads, share buttons, "Most read" boxes and "Read also" links are left out
+- the first article's main picture is the cover, and is not repeated inside. You can choose another, as for a PDF
+- the book is marked with the article's language, for example Indonesian or English
+- a link that can't be read (a site that refuses, a page with no article) is skipped and named, and the other links still make the book
+
+One link makes a book of that article, named after it. Several make one book, named after their site and today's date, like a small magazine of what you saved.
+
+Only the app can do this. The website can't: news sites don't let other websites read their pages. Pages behind a paywall or a login only give what they show without it.
+
 ## Scanned books (OCR)
 
 Pages that have no text, only a picture of the page, are read with OCR ([Tesseract](https://github.com/naptha/tesseract.js), built in). This happens automatically:
@@ -193,6 +216,7 @@ To add a language, install its data (for example `npm install @tesseract.js-data
 - **Text quality depends on the PDF.** In scanned books, recognition errors (for example a "1" read as "i") come through as they are.
 - **Layout:** multi-column layouts and tables come out as plain paragraphs.
 - **Pictures:** pages that are mostly pictures, such as ads at the back of a book, are kept as pictures.
+- **Web pages:** the article is found from the page's layout, so on some sites a line that isn't part of it can remain, or a part of it can be missing. Pages that show their text only after scripts run, or only to subscribers, can't be read.
 
 ## Project layout
 
@@ -206,6 +230,7 @@ To add a language, install its data (for example `npm install @tesseract.js-data
 | `xtc.js` | Draws PDF pages for an Xteink screen (fit or split, contrast, dithering) and makes the XTC book. |
 | `xtcfile.js` | The XTC/XTCH file format: page encoding (XTG, XTH) and the book file. |
 | `pdf.js` | Opens a PDF with pdf.js. |
+| `web.js` | Web pages into a book: downloads each page, finds its article (Mozilla Readability), and gets its pictures. Only in the app. |
 | `server.js` | Local web server for the web app. |
 | `public/index.html` | The web app page: the numbered steps, progress, the e-reader preview with its slider, and contents. |
 | `build/build-exe.js` | Builds `ConvertPdf.exe` (`npm run build:exe`). |

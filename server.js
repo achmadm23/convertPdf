@@ -9,6 +9,7 @@ const { analyzePdf, buildEpub, openPdf, readerScreen } = require('./index');
 const { imageCover, cleanBoxes } = require('./figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('./xtc');
 const { retryPage, manualReading } = require('./ocr');
+const { parseLinks, readWebPages } = require('./web');
 
 const { version } = require('./package.json');
 
@@ -21,6 +22,7 @@ const OFFER_PICTURE = 90; // scanned pages read this well (%) or worse can be ke
 const MAX_TEXT_BYTES = 1024 * 1024; // typed-in text for one page
 const MAX_COVER_BYTES = 20 * 1024 * 1024; // a cover picture chosen by the user
 const MAX_BOXES_BYTES = 16 * 1024; // the boxes drawn around a page's pictures
+const MAX_LINKS_BYTES = 64 * 1024; // the links of web pages to convert, and their book's details
 
 const page = path.join(__dirname, 'public', 'index.html');
 const vendor = {
@@ -42,6 +44,7 @@ const uiFontFiles = new Map(
 // scanned pages, the book once it's converted, and a cover picture if the user
 // chose one. Only the last few are kept. An XTC conversion (for Xteink readers)
 // keeps its rendered pages in `xtc` and its cover page in `xtcCover` instead.
+// A book of web pages has no PDF.
 const sessions = new Map();
 
 function newSession(pdf, options) {
@@ -126,6 +129,7 @@ function bookSummary(session) {
     ...readerSummary(book.device),
     lowPages: scanned.filter(r => !r.manual && !r.picture && r.confidence >= PICTURE_BELOW && r.confidence <= LOW_CONFIDENCE).length,
     pictures: scannedPictures(book),
+    ...(book.skipped && { skipped: book.skipped }), // web pages that couldn't be read
   };
 }
 
@@ -217,6 +221,32 @@ async function handleConvert(req, res) {
     console.log(
       `Converted ${fileName}: ${book.stats.pages} pages, ${book.chapters.length} chapters, ` +
         `${book.stats.images} images in ${Math.round((Date.now() - started) / 1000)} s`
+    );
+    return bookSummary(session);
+  });
+}
+
+// POST /links: web pages (news articles) into an EPUB, one chapter per article.
+// The request body is JSON: { links (text, one per line), title, author, device }.
+// Answers like /convert, with progress stages 'pages', 'images' and 'finishing'.
+async function handleLinks(req, res) {
+  let request, links;
+  try {
+    request = JSON.parse((await readBody(req, MAX_LINKS_BYTES)).toString('utf8'));
+    links = parseLinks(request.links || '');
+  } catch (err) {
+    return sendError(res, 400, err instanceof SyntaxError ? 'The links could not be read.' : err.message);
+  }
+  const { title, author, device } = request;
+  const session = newSession(null, { title, author, ...(device && { device }) });
+  await streamJob(res, async (send, onProgress) => {
+    send({ session: { id: session.id } });
+    const started = Date.now();
+    const book = await readWebPages(links, { ...session.options, onProgress });
+    session.book = book;
+    console.log(
+      `Converted ${book.stats.articles} of ${links.length} web pages: ${book.stats.paragraphs} paragraphs, ` +
+        `${book.stats.images} pictures in ${Math.round((Date.now() - started) / 1000)} s`
     );
     return bookSummary(session);
   });
@@ -393,6 +423,8 @@ const server = http.createServer((req, res) => {
     sendFile(res, page, 'text/html; charset=utf-8', 'no-cache');
   } else if (req.method === 'POST' && route === '/convert') {
     handleConvert(req, res);
+  } else if (req.method === 'POST' && route === '/links') {
+    handleLinks(req, res);
   } else if (req.method === 'GET' && (match = route.match(/^\/book\/([\w-]+)\.epub$/))) {
     handleBook(req, res, match[1], url.searchParams).catch(err => {
       console.error(err);

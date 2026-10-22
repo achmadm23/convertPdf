@@ -44,6 +44,7 @@ Version 1.2.4 covers one-way conversion of a single PDF into a single EPUB or XT
 - Reader choice (Xteink X4 Pro, X4 or X3): pictures and cover sized for its screen, the preview laid out at its size, and full-page pictures upright, or sideways in 2 or 3 parts
 - Preview held in portrait or landscape: landscape lays the book out for the wide screen, and in portrait pages turned sideways show in landscape
 - Pictures on scanned pages found anywhere on the page, beside the text too, with the text around them kept as text, and boxes drawn around a page's pictures by hand when one is missed or wrong
+- Web pages (news articles such as BBC or Kompas) into an EPUB in the app and on the command line: each link's article, without the site's menus and boxes, as a chapter with its pictures
 
 **Out of scope**
 
@@ -155,6 +156,7 @@ flowchart LR
 | FR-44 | Preview | Let the preview be held in portrait or landscape, the choice kept from page to page and for next time: in landscape an EPUB is laid out for the wide screen (800 x 480) with picture parts filling it upright, and XTC pages turn with the reader; in portrait pages turned sideways (EPUB picture parts, sideways XTC pages) show in landscape so they read upright | Should |
 | FR-45 | Pictures | Find pictures anywhere on a scanned page, beside the text as well as between paragraphs: words read inside a picture (a sign, a speech bubble) go with the picture, and text beside it stays one paragraph; a framed box of text, a rule or the scanner's shadow is not a picture | Should |
 | FR-46 | OCR review | Mark the pictures found on each scanned page on its scan, and let boxes be drawn, moved, resized and removed around them (Draw a box); what is inside the boxes goes in the book as pictures and the text outside them stays text, with no boxes the page is all text, and Use found pictures goes back; the boxes stay when the page is read again or its text typed | Should |
+| FR-47 | Web pages | Make an EPUB from the links of web pages (Source: Web pages in the app, links instead of a PDF on the command line): each page's article, found as Reader View does (Mozilla Readability), is a chapter with its title, site, author, date, text, subheadings in the contents, pictures drawn for the reader's screen with their captions, and its link; menus, share buttons, "Most read" boxes and "Read also" links are left out; the first article's main picture is the cover; the book takes the article's language; a link that can't be read is skipped and named; only in the app, as the website can't read other sites' pages | Should |
 
 ## 7. Non-functional requirements
 

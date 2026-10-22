@@ -14,11 +14,13 @@
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@mozilla/readability": "^0.6.0",
     "@napi-rs/canvas": "^1.0.9",
     "@tesseract.js-data/eng": "^1.0.0",
     "@tesseract.js-data/ind": "^1.0.0",
     "epubjs": "^0.3.93",
     "jszip": "^3.10.2",
+    "linkedom": "^0.18.14",
     "pdfjs-dist": "^6.3.289",
     "tesseract.js": "^7.0.0"
   },
