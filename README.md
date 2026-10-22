@@ -25,7 +25,7 @@ The site is published from this repository by GitHub Pages: every push to `main`
 
 ## Download (Windows, no install)
 
-**[Download ConvertPdf.zip](https://github.com/achmadm23/convertPdf/releases/download/v1.2.4/ConvertPdf.zip)** (60 MB)
+**[Download ConvertPdf.zip](https://github.com/achmadm23/convertPdf/releases/download/v1.3.0/ConvertPdf.zip)** (63 MB)
 
 Unzip it and double-click `ConvertPdf.exe`. You don't need Node.js. See [Share it as one file](#share-it-as-one-file-convertpdfexe) for what happens when it runs.
 
@@ -56,7 +56,7 @@ npm install
 
 `npm install` fetches any packages that new versions need (OCR, for example, added `tesseract.js`). If the web app is running, stop it (Ctrl+C) and run `npm start` again so it uses the new code.
 
-If you use `ConvertPdf.exe`, [download the zip](https://github.com/achmadm23/convertPdf/releases/download/v1.2.4/ConvertPdf.zip) again instead.
+If you use `ConvertPdf.exe`, [download the zip](https://github.com/achmadm23/convertPdf/releases/download/v1.3.0/ConvertPdf.zip) again instead.
 
 ## Web app (upload, preview, download)
 
