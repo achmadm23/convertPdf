@@ -7,7 +7,7 @@ Convert PDFs into EPUB e-books. It works on normal PDFs and on scanned books, wi
 - splits the book into its real chapters, with section headings in the table of contents
 - keeps the pictures (photos, charts, diagrams) where they appear in the text, and uses a picture-only first page as the cover
 - lets you use a picture of your own as the cover instead
-- shows every picture, the cover and pages kept as a picture on a page of its own that it fills, in the 4 shades of gray of an e-ink screen, sized for your reader: 480 x 800 for the Xteink X4 and X4 Pro, 528 x 792 for the X3
+- puts the pictures in the text, with the text above and below each one, or each on a page of its own that it fills; the cover and pages kept as a picture fill a page, all in the 4 shades of gray of an e-ink screen, sized for your reader: 480 x 800 for the Xteink X4 and X4 Pro, 528 x 792 for the X3
 - leaves the font to the e-reader, so the book reads in the font and size you choose there
 - reads scanned pages with built-in OCR (English and Indonesian), with nothing extra to install
 - can also make an XTC book for Xteink X3, X4 and X4 Pro readers, with every page drawn for the reader's screen (see [Xteink books](#xteink-books-xtc))
@@ -66,7 +66,9 @@ npm start
 
 Then open **http://localhost:3000**. First choose what you convert at the top: **PDF** (books, documents and scans) or **Web pages** (news articles and other pages, [Web pages](#web-pages-news-articles)). Each has its own list of books, its own settings for new books and its own **Download all**; the number on each tab is how many books it has. Below it, the page has three columns: that source's books on the left, the book you click in the middle, and its settings on the right.
 
-**Add books.** On **PDF**, drop PDFs on the page, as many as you like, or click **Add PDFs** at the top. On **Web pages**, paste links, one per line or separated by commas: in the box shown before the first book, then with **Add links** at the top. Each PDF and link becomes a book of its own in the list on the left. A PDF dropped while Web pages is shown, or a link while PDF is shown, goes to its own tab.
+**Add books.** On **PDF**, drop PDFs on the page, as many as you like, or click **Add PDFs** under the list of books. On **Web pages**, paste links, one per line or separated by commas: in the box shown before the first book, then with **Add links** under the list. Each PDF and link becomes a book of its own in the list on the left. A PDF dropped while Web pages is shown, or a link while PDF is shown, goes to its own tab.
+
+Each line shows its book's cover once it's made. A link shows its article's title and main picture straight away, read from the page before its book is made, so you can tell the links apart while they wait.
 
 **They're converted one after another**, as soon as they're added, the books of both tabs in the order they were added. Each line in the list shows its book's state: Waiting, Converting with its progress, Ready (or "Ready · check 6 pages" for a scanned book with pages read badly), or why it could not be made, with **Try again**. Above the list are how far along they all are and **Pause**, which lets the book being made finish and stops there until you click **Resume**.
 
@@ -76,7 +78,7 @@ Then open **http://localhost:3000**. First choose what you convert at the top: *
 
 1. **Details:** the title and author, taken from the PDF or the article if you leave them blank. A change goes in the book at once. The book's contents are here too: click a chapter to go to it.
 2. **Cover:** a picture of your own (JPEG, PNG or WebP, up to 20 MB), or drop one on it. It replaces the cover taken from the PDF or the article; **Remove** goes back to it.
-3. **Reader and pictures:** your e-reader (Xteink X4 Pro, X4 or X3). An EPUB's pictures and cover are drawn for its screen. **Full-page pictures** chooses how portrait pictures that fill most of their page go in the book: upright, or turned on their side and cut into **2** or **3 parts** that each fill the screen, as in an XTC book. Changing it updates the book at once.
+3. **Reader and pictures:** your e-reader (Xteink X4 Pro, X4 or X3). An EPUB's pictures and cover are drawn for its screen. **Pictures** puts them **In the text**, with the text above and below each one (a picture that doesn't fit in the rest of a screen goes at the top of the next), or each **On their own page**, filling it. **Full-page pictures** chooses how portrait pictures that fill most of their page go in the book: upright, or turned on their side and cut into **2** or **3 parts** that each fill the screen, as in an XTC book. Changing it updates the book at once.
 4. **Output:** an EPUB for any e-reader, or for a PDF an XTC book for an Xteink reader ([Xteink books](#xteink-books-xtc)), with its settings. Web pages always become an EPUB.
 
 Another reader or output converts the book again: **Convert this book again** appears, and the book takes its place in the list. **Use these settings for all PDF books** (or **web page books**) gives every book of the tab this one's reader, pictures and output (each keeps its own title, author and cover), converts again those made with others, and uses them for new books too. The settings for new books are under **Change**, below the list.
@@ -130,7 +132,7 @@ Details:
 ## Command line
 
 ```
-node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--device x4|x4-pro|x3] [--picture-parts 2|3] [--ocr-lang code]
+node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--device x4|x4-pro|x3] [--picture-parts 2|3] [--pictures inline|page] [--ocr-lang code]
 ```
 
 If you leave out `output.epub`, the EPUB is saved next to the PDF with the same name.
@@ -140,6 +142,8 @@ If you leave out `output.epub`, the EPUB is saved next to the PDF with the same 
 `--device` sizes the book's pictures and cover for that e-reader's screen: `x4` and `x4-pro` (480 x 800, the default) or `x3` (528 x 792).
 
 `--picture-parts 2` or `3` turns full-page portrait pictures on their side and cuts them into 2 or 3 parts that each fill the screen.
+
+`--pictures page` puts each picture on a page of its own that it fills, instead of in the text with the text above and below it (`inline`, the default). Pictures turned on their side are always pages of their own.
 
 `--ocr-lang` sets the language of scanned pages: `eng` (English) or `ind` (Indonesian). Without it, the converter tries both on a few pages and uses the one it reads best.
 
@@ -188,7 +192,7 @@ The PDF's bookmarks become the book's chapters, and its title and author are kep
 In the app (`npm start` or `ConvertPdf.exe`), choose **Web pages** at the top and paste the links of news articles or other web pages, one per line or separated by commas, for example a BBC News Indonesia or Kompas article. The converter downloads each page and keeps only the article, the way Firefox's Reader View does it ([Mozilla Readability](https://github.com/mozilla/readability)):
 
 - the book has the article's title, then the site, author and date, its text with its subheadings in the contents, and its link at the end
-- its pictures are drawn for your reader's screen in 4 shades of gray, each on a page of its own, with their captions
+- its pictures are drawn for your reader's screen in 4 shades of gray, in the text with their captions below them (or each on a page of its own)
 - menus, ads, share buttons, "Most read" boxes and "Read also" links are left out
 - the article's main picture is the cover, and is not repeated inside. You can choose another, as for a PDF
 - the book is marked with the article's language, for example Indonesian or English

@@ -18,6 +18,7 @@ function parseArgs(argv) {
     else if (argv[i] === '--author') opts.author = argv[++i];
     else if (argv[i] === '--cover') opts.cover = argv[++i];
     else if (argv[i] === '--picture-parts') opts.pictureParts = Number(argv[++i]);
+    else if (argv[i] === '--pictures') opts.pictures = argv[++i];
     else if (argv[i] === '--ocr-lang') opts.ocrLanguage = argv[++i];
     // XTC (Xteink) output
     else if (argv[i] === '--format') opts.format = argv[++i];
@@ -523,15 +524,16 @@ ${body}
 </html>`;
 }
 
-// A chapter's files: its text, with every picture on a page of its own that it
-// fills, like a page of an XTC book. The title goes above the first text. Pages of
-// pictures turned on their side (`sideways`, image names) are marked "sideways",
-// which a preview can use to show them turned.
-function chapterFiles(ch, number, sideways = new Set()) {
+// A chapter's files: its text, with its pictures in the text, the text above and
+// below each one (`inline`), or every picture on a page of its own that it fills,
+// like a page of an XTC book. The title goes above the first text. Pictures turned
+// on their side (`sideways`, image names) are always pages of their own, marked
+// "sideways", which a preview can use to show them turned.
+function chapterFiles(ch, number, sideways = new Set(), inline = false) {
   const parts = [];
   ch.blocks.forEach((b, i) => {
     const last = parts[parts.length - 1];
-    if (b.image) parts.push({ image: b.image });
+    if (b.image && !(inline && !sideways.has(b.image))) parts.push({ image: b.image });
     else if (last && !last.image) last.blocks.push({ ...b, id: `s${i}` });
     else parts.push({ blocks: [{ ...b, id: `s${i}` }] });
   });
@@ -544,7 +546,8 @@ function chapterFiles(ch, number, sideways = new Set()) {
       return { name, sections: [], xhtml: xhtmlFile(ch.title, body, sideways.has(part.image) ? 'picture sideways' : 'picture') };
     }
     const lines = part.blocks.map(b =>
-      b.heading ? `    <h3 id="${b.id}">${escapeXml(b.text)}</h3>` : `    <p>${escapeXml(b.text)}</p>`
+      b.image ? `    <div class="pic"><img src="images/${b.image}" alt=""/></div>`
+      : b.heading ? `    <h3 id="${b.id}">${escapeXml(b.text)}</h3>` : `    <p>${escapeXml(b.text)}</p>`
     );
     if (part === titled) lines.unshift(`    <h2>${escapeXml(ch.title)}</h2>`);
     const sections = part.blocks.filter(b => b.heading).map(b => ({ href: `${name}#${b.id}`, text: b.text }));
@@ -576,9 +579,12 @@ function splitPictures(chapters, images, parts) {
 // `cover` (a PNG from imageCover) replaces the cover found in the PDF.
 // The text uses the e-reader's own font. `language` is the book's (a code: en, id, ...).
 // `pictureParts` 2 or 3 turns full-page portrait pictures sideways and cuts them into parts.
-async function buildEpub({ title, author, language = 'en', chapters, images = [], cover: pdfCover = null }, { cover: customCover, pictureParts = 1 } = {}) {
+// `pictures` 'inline' puts the pictures in the text, with the text above and below
+// each one; 'page' puts each on a page of its own that it fills.
+async function buildEpub({ title, author, language = 'en', chapters, images = [], cover: pdfCover = null }, { cover: customCover, pictureParts = 1, pictures = 'inline' } = {}) {
   const cover = customCover || pdfCover;
   if (![1, 2, 3].includes(pictureParts)) throw new Error('Full-page pictures can be cut into 1, 2 or 3 parts.');
+  if (!['inline', 'page'].includes(pictures)) throw new Error('Pictures go in the text (inline) or on pages of their own (page).');
   if (pictureParts > 1) ({ chapters, images } = splitPictures(chapters, images, pictureParts));
   const zip = new JSZip();
   const id = 'urn:uuid:' + crypto.randomUUID();
@@ -602,6 +608,9 @@ h2 { text-align: center; margin: 1.5em 0; }
 h3 { margin: 1.5em 0 0.75em; }
 h3 + p { text-indent: 0; }
 p { text-indent: 1.5em; margin: 0 0 0.5em 0; text-align: justify; }
+.pic { margin: 0.8em 0; text-align: center; text-indent: 0; page-break-inside: avoid; break-inside: avoid; }
+.pic img { width: auto; height: auto; max-width: 100%; max-height: 95vh; }
+.pic + p { text-indent: 0; }
 body.picture, body.cover { margin: 0; padding: 0; text-align: center; }
 body.picture img, body.cover img { width: auto; height: auto; max-width: 100%; max-height: 100vh; }`);
 
@@ -618,7 +627,7 @@ body.picture img, body.cover img { width: auto; height: auto; max-width: 100%; m
   }
   const sideways = new Set(images.filter(img => img.sideways).map(img => img.name));
   chapters.forEach((ch, i) => {
-    const files = chapterFiles(ch, i + 1, sideways);
+    const files = chapterFiles(ch, i + 1, sideways, pictures === 'inline');
     files.forEach((file, k) => {
       const id = k ? `ch${i + 1}-${k + 1}` : `ch${i + 1}`;
       zip.file(`OEBPS/${file.name}`, file.xhtml);
@@ -701,11 +710,11 @@ async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', device 
 }
 
 // Convert PDF bytes to EPUB bytes in one go. `cover` is a picture file's bytes.
-async function convertPdfToEpub(pdfBuffer, { cover, pictureParts, ...options } = {}) {
+async function convertPdfToEpub(pdfBuffer, { cover, pictureParts, pictures, ...options } = {}) {
   // read the cover first, so an unreadable picture fails before the slow part
   const coverImage = cover && (await imageCover(cover, readerScreen(options.device)));
   const book = await analyzePdf(pdfBuffer, options);
-  const epub = await buildEpub(book, { cover: coverImage, pictureParts });
+  const epub = await buildEpub(book, { cover: coverImage, pictureParts, pictures });
   return { epub, ...book.stats, chapters: book.chapters.length };
 }
 
@@ -715,7 +724,7 @@ async function main() {
   const [input, output] = opts.positional;
   if (!input) {
     console.error(
-      'Usage: node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--device x4|x4-pro|x3] [--picture-parts 2|3] [--ocr-lang code]'
+      'Usage: node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--device x4|x4-pro|x3] [--picture-parts 2|3] [--pictures inline|page] [--ocr-lang code]'
     );
     console.error('Web pages (news articles), a book for each link: node index.js https://... [more links] [output.epub, or a folder for several] [--title ...] [--author ...] [--cover image] [--device ...]');
     console.error(
@@ -741,6 +750,7 @@ async function main() {
     cover: opts.cover && fs.readFileSync(opts.cover),
     device: opts.device,
     pictureParts: opts.pictureParts,
+    pictures: opts.pictures,
     ocrLanguage: opts.ocrLanguage,
     name: path.basename(input, path.extname(input)),
     onProgress: ({ stage, done, total }) => {
@@ -799,7 +809,7 @@ async function writeWebPages(opts) {
         },
       });
       const outFile = links.length === 1 ? output || book.fileName : path.join(output || '.', book.fileName);
-      fs.writeFileSync(outFile, await buildEpub(book, { cover: coverImage }));
+      fs.writeFileSync(outFile, await buildEpub(book, { cover: coverImage, pictures: opts.pictures }));
       made++;
       console.log(`Wrote ${outFile} (${book.stats.paragraphs} paragraphs, ${book.stats.images} pictures)`);
     } catch (err) {

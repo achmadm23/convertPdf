@@ -9,7 +9,7 @@ const { analyzePdf, buildEpub, openPdf, readerScreen } = require('./index');
 const { imageCover, cleanBoxes } = require('./figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('./xtc');
 const { retryPage, manualReading } = require('./ocr');
-const { parseLinks, readWebPages } = require('./web');
+const { parseLinks, readWebPages, previewLink } = require('./web');
 
 const { version } = require('./package.json');
 
@@ -404,6 +404,33 @@ async function handleDetails(req, res, session) {
   res.end(JSON.stringify({ title: book.title, author: book.author }));
 }
 
+// POST /links/preview: a web page's title, site and main picture (JSON: { link }),
+// read quickly so the page's list can show them before the book is made.
+async function handlePreview(req, res) {
+  let link;
+  try {
+    link = JSON.parse((await readBody(req, MAX_LINKS_BYTES)).toString('utf8')).link;
+  } catch {
+    return sendError(res, 400, 'The link could not be read.');
+  }
+  try {
+    const preview = await previewLink(link || '');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(preview));
+  } catch (err) {
+    sendError(res, 422, err.message);
+  }
+}
+
+// GET /book/<id>/cover.png: the book's cover as it is in the book (the picture
+// chosen, or its own), or an XTC book's first page.
+function handleCoverPicture(res, session) {
+  const png = session.xtc ? pagePng(session.xtc, 1, session.xtcCover) : session.cover || session.book?.cover;
+  if (!png) return sendError(res, 404, 'This book has no cover.');
+  res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache' });
+  res.end(png);
+}
+
 // GET /book/<id>.xtc (or .xtch)[?download=1]: the XTC book for an Xteink reader.
 function handleXtc(res, session) {
   const file = buildXtc(session.xtc, session.xtcCover);
@@ -423,13 +450,18 @@ function handleScreen(res, session, n) {
   res.end(png);
 }
 
-// GET /book/<id>.epub[?parts=2|3][&download=1]: package the book as an EPUB, with
-// its full-page pictures turned sideways in 2 or 3 parts when asked.
+// GET /book/<id>.epub[?parts=2|3][&pictures=page][&download=1]: package the book as an
+// EPUB, with its full-page pictures turned sideways in 2 or 3 parts when asked, and
+// its pictures in the text or (pictures=page) on pages of their own.
 async function handleBook(req, res, id, query) {
   const session = sessions.get(id);
   const book = session?.book;
   if (!book) return sendError(res, 404, 'This book has expired. Please convert the PDF again.');
-  const epub = await buildEpub(book, { cover: session.cover, pictureParts: Number(query.get('parts')) || 1 });
+  const epub = await buildEpub(book, {
+    cover: session.cover,
+    pictureParts: Number(query.get('parts')) || 1,
+    pictures: query.get('pictures') === 'page' ? 'page' : 'inline',
+  });
   const headers = { 'Content-Type': 'application/epub+zip', 'Content-Length': epub.length };
   if (query.get('download')) {
     headers['Content-Disposition'] = `attachment; filename*=UTF-8''${encodeURIComponent(book.fileName)}`;
@@ -447,6 +479,20 @@ const server = http.createServer((req, res) => {
     sendFile(res, page, 'text/html; charset=utf-8', 'no-cache');
   } else if (req.method === 'POST' && route === '/convert') {
     handleConvert(req, res);
+  } else if (req.method === 'POST' && route === '/links/preview') {
+    handlePreview(req, res).catch(err => {
+      console.error(err);
+      if (!res.headersSent) sendError(res, 500, 'Could not read the link.');
+    });
+  } else if (req.method === 'GET' && (match = route.match(/^\/book\/([\w-]+)\/cover\.png$/))) {
+    const session = sessions.get(match[1]);
+    if (!session) return sendError(res, 404, 'This book has expired. Please convert it again.');
+    try {
+      handleCoverPicture(res, session);
+    } catch (err) {
+      console.error(err);
+      sendError(res, 500, 'Could not show the cover.');
+    }
   } else if (req.method === 'POST' && route === '/links') {
     handleLinks(req, res);
   } else if (req.method === 'GET' && (match = route.match(/^\/book\/([\w-]+)\.epub$/))) {

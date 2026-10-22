@@ -5,7 +5,7 @@
 
 const { parseHTML } = require('linkedom');
 const { Readability } = require('@mozilla/readability');
-const { loadImage } = require('@napi-rs/canvas');
+const { loadImage, createCanvas } = require('@napi-rs/canvas');
 const { screenImage } = require('./eink');
 const { imageCover } = require('./figures');
 const { readerScreen } = require('./index');
@@ -363,4 +363,39 @@ async function readWebPages(links, { title, author, device = 'x4', onProgress = 
   };
 }
 
-module.exports = { splitLinks, parseLinks, readWebPages };
+// A web page's title, site and main picture, read quickly (not its article), so a
+// list of links can show them while the books wait to be made. The picture is a
+// small JPEG (`size`, cropped to fill it) as a data: address, or null.
+async function previewLink(link, size = { width: 120, height: 180 }) {
+  const [url] = parseLinks(link);
+  let page;
+  try {
+    page = await download(url, MAX_PAGE_BYTES, 'text/html,application/xhtml+xml');
+  } catch (err) {
+    throw new Error(`${url} could not be opened: ${err.message}.`);
+  }
+  if (!/html|xml/i.test(page.type)) throw new Error(`${url} is not a web page.`);
+  const { document } = parseHTML(decodeHtml(page));
+  const meta = name => document.querySelector(`meta[property="${name}"], meta[name="${name}"]`)?.getAttribute('content') || '';
+  const site = clean(meta('og:site_name')) || new URL(page.url).hostname.replace(/^www\./, '');
+  // the title without the site's name after it ("… - BBC News Indonesia")
+  const named = clean(meta('og:title') || meta('twitter:title') || document.querySelector('title')?.textContent || '');
+  const ending = named.match(/^(.*\S)\s+[-–—|:·]\s+([^-–—|:·]+)$/);
+  const title = ending && sameText(ending[2].trim(), site) ? ending[1] : named;
+  let image = null;
+  const src = meta('og:image') || meta('twitter:image');
+  if (src) {
+    try {
+      const { data } = await download(new URL(src, page.url).href, MAX_IMAGE_BYTES, 'image/avif,image/webp,image/png,image/jpeg,image/*');
+      const picture = await loadImage(data);
+      const scale = Math.max(size.width / picture.width, size.height / picture.height);
+      const canvas = createCanvas(size.width, size.height);
+      const w = picture.width * scale, h = picture.height * scale;
+      canvas.getContext('2d').drawImage(picture, (size.width - w) / 2, (size.height - h) / 2, w, h);
+      image = 'data:image/jpeg;base64,' + canvas.toBuffer('image/jpeg').toString('base64');
+    } catch {} // no picture that can be read: the title alone
+  }
+  return { title, site, image };
+}
+
+module.exports = { splitLinks, parseLinks, readWebPages, previewLink };

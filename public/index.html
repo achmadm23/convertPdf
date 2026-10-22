@@ -126,6 +126,8 @@
   .mini { display: block; height: 4px; margin-top: 2px; overflow: hidden; background: var(--stage); border-radius: 2px; }
   .mini span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
   .drop.over, .field.over textarea { background: var(--tint); border-color: var(--accent); }
+  .list-add { display: flex; padding: 4px 16px 16px; }
+  .list-add .btn { flex: 1 1 auto; }
   .list-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: auto; padding: 12px 16px 16px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--muted); }
 
   /* fields */
@@ -231,6 +233,7 @@
   .state-card b { font-size: 16px; font-weight: 600; }
   .state-card .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
   .state-card.bad b { color: var(--error); }
+  .state-pic { width: 96px; height: 144px; object-fit: cover; border-radius: 4px; box-shadow: var(--lift); }
   .progress-text { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font-size: 13px; }
   #progressNumbers { font: 12px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
   .steps { margin: 0; padding: 0; list-style: none; }
@@ -322,10 +325,12 @@
   .cover-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
   #contents { display: flex; flex-direction: column; max-height: 320px; overflow: auto; background: var(--field); border: 1px solid var(--rule); border-radius: 8px; }
   #contents:empty { display: none; }
+  /* each entry as tall as its title (the list scrolls instead of squeezing them); a long one shows 2 lines */
   #contents button {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; padding: 0 12px;
-    font-size: 14px; text-align: left; background: transparent; border: 0; border-top: 1px solid var(--rule); cursor: pointer;
+    flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; padding: 8px 12px;
+    font-size: 14px; line-height: 1.35; text-align: left; background: transparent; border: 0; border-top: 1px solid var(--rule); cursor: pointer;
   }
+  #contents button span:first-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
   #contents button:first-child { border-top: 0; }
   #contents button:hover { background: var(--seg); }
   #contents button[aria-current="true"] { font-weight: 600; background: var(--tint); }
@@ -351,9 +356,6 @@
     </p>
   </div>
   <div class="top-actions">
-    <button type="button" class="btn" id="addTop">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-      <span id="addTopText">Add PDFs</span></button>
     <button type="button" class="btn primary" id="downloadAll" disabled>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
       <span id="downloadAllText">Download all</span></button>
@@ -388,6 +390,11 @@
     </div>
     <p class="list-empty" id="listEmpty"></p>
     <ol class="books" id="books"></ol>
+    <div class="list-add">
+      <button type="button" class="btn soft" id="addTop">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span id="addTopText">Add PDFs</span></button>
+    </div>
     <div class="list-foot"><span id="defaultsText"></span><button type="button" class="link" id="editDefaults">Change</button></div>
   </section>
 
@@ -452,6 +459,7 @@
 
       <div class="stage state" id="convertingView" hidden>
         <div class="state-card">
+          <img class="state-pic" alt="" hidden>
           <b id="convertingTitle">Converting</b>
           <div class="bar" id="progressBar" role="progressbar" aria-label="Conversion progress"
                aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressFill"></div></div>
@@ -463,6 +471,7 @@
 
       <div class="stage state" id="waitingView" hidden>
         <div class="state-card">
+          <img class="state-pic" alt="" hidden>
           <b id="waitingTitle">Waiting</b>
           <p class="note" id="waitingNote">It's converted after the books before it in the list. Its settings can be changed until then.</p>
           <div class="buttons"><button type="button" class="btn" id="removeWaiting">Remove from the list</button></div>
@@ -471,6 +480,7 @@
 
       <div class="stage state" id="failedView" hidden>
         <div class="state-card bad">
+          <img class="state-pic" alt="" hidden>
           <b id="failedTitle">This book could not be made</b>
           <p class="note" id="failedReason" style="color: var(--text)"></p>
           <div class="buttons">
@@ -603,6 +613,16 @@
           </select>
         </label>
         <p class="note" id="deviceNote">Pictures and the cover are drawn for this screen, and the preview shows the book at its size.</p>
+        <fieldset class="group" id="layoutField">
+          <legend>Pictures</legend>
+          <div class="seg">
+            <input type="radio" name="pictureLayout" id="picturesInline" value="inline" checked>
+            <label for="picturesInline">In the text</label>
+            <input type="radio" name="pictureLayout" id="picturesPage" value="page">
+            <label for="picturesPage">On their own page</label>
+          </div>
+          <p class="note" id="layoutNote" style="margin-top: 4px"></p>
+        </fieldset>
         <fieldset class="group" id="partsField">
           <legend>Full-page pictures</legend>
           <div class="seg">
@@ -758,7 +778,8 @@
       return res;
     };
     const json = (url, options) => send(url, options).then(res => res.json());
-    const downloadUrl = (id, xtc, parts = 1) => (xtc ? `book/${id}.xtc?download=1` : `book/${id}.epub?parts=${parts}&download=1`);
+    const downloadUrl = (id, xtc, parts = 1, pictures = 'inline') =>
+      xtc ? `book/${id}.xtc?download=1` : `book/${id}.epub?parts=${parts}&pictures=${pictures}&download=1`;
     return {
       // upload the PDF and follow the server's stream of progress (see streamRequest)
       convert(pdf, { title, author, device, xtc }, handlers) {
@@ -787,11 +808,16 @@
           : { method: 'DELETE' }),
       setCover: (id, file) =>
         json(`book/${id}/cover`, file ? { method: 'POST', headers: { 'Content-Type': file.type }, body: file } : { method: 'DELETE' }),
+      // a link's title and main picture, before its book is made
+      previewLink: link =>
+        json('links/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link }) }),
+      // the book's cover as it is in the book (`version` changes with it)
+      coverUrl: async (id, version) => `book/${id}/cover.png?v=${version}`,
       setDetails: (id, details) =>
         json(`book/${id}/details`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(details) }),
-      epub: (id, parts = 1) => send(`book/${id}.epub?parts=${parts}`).then(res => res.arrayBuffer()),
+      epub: (id, parts = 1, pictures = 'inline') => send(`book/${id}.epub?parts=${parts}&pictures=${pictures}`).then(res => res.arrayBuffer()),
       // the finished book's file, for Download all
-      file: (id, { xtc, parts = 1 }) => send(downloadUrl(id, xtc, parts)).then(res => res.arrayBuffer()),
+      file: (id, { xtc, parts = 1, pictures }) => send(downloadUrl(id, xtc, parts, pictures)).then(res => res.arrayBuffer()),
       scanUrl: (id, n) => `book/${id}/pages/${n}.jpg`,
       screenUrl: async (id, n, version) => `book/${id}/screens/${n}.png?v=${version}`,
       downloadUrl,
@@ -811,7 +837,7 @@
   // for next time). The reader and the output are used when a book is converted:
   // changing them converts it again. Full-page pictures change an EPUB at once.
   const DEFAULTS = {
-    format: 'epub', device: 'x4-pro', parts: 1,
+    format: 'epub', device: 'x4-pro', parts: 1, pictures: 'inline',
     xtc: { grays: false, orientation: 'landscape', split: 'overlap', dithering: 'atkinson', contrast: '0', cropX: '0', cropY: '0', firstPageIsCover: true, flip: false },
   };
   const XTC_SELECTS = { split: 'xtcSplit', dithering: 'xtcDithering', contrast: 'xtcContrast', cropX: 'xtcCropX', cropY: 'xtcCropY' };
@@ -839,6 +865,7 @@
   // the settings form shows these settings (a book's, or the ones for new books)
   function writeForm(s, web) {
     $('device').value = s.device;
+    $(s.pictures === 'page' ? 'picturesPage' : 'picturesInline').checked = true;
     $(s.parts > 1 ? 'pictureSideways' : 'pictureUpright').checked = true;
     if (s.parts > 1) $('pictureSplit').value = String(s.parts);
     $(s.format === 'xtc' && !web ? 'formatXtc' : 'formatEpub').checked = true;
@@ -859,6 +886,7 @@
       format: radio('format'),
       device: $('device').value,
       parts: radio('pictureTurn') === 'sideways' ? Number($('pictureSplit').value) : 1,
+      pictures: radio('pictureLayout'),
       xtc,
     };
   }
@@ -866,6 +894,11 @@
   function showFormNotes() {
     const xtc = radio('format') === 'xtc';
     const parts = radio('pictureTurn') === 'sideways' ? Number($('pictureSplit').value) : 1;
+    const inline = radio('pictureLayout') === 'inline';
+    $('layoutField').hidden = xtc;
+    $('layoutNote').textContent = inline
+      ? 'Text above and below each picture. A picture that doesn’t fit in the rest of a screen goes at the top of the next.'
+      : 'Each picture on a screen of its own that it fills.';
     $('partsField').hidden = xtc;
     $('pictureSplitField').hidden = xtc || parts === 1;
     $('deviceNote').hidden = xtc;
@@ -877,7 +910,7 @@
     $('partsNote').textContent =
       (parts > 1
         ? `Turn the reader on its side. Pictures that fill most of a page are bigger, in ${parts} parts that each fill the screen.`
-        : 'Each picture whole and upright, on a page of its own.') +
+        : inline ? 'Upright, in the text like the other pictures.' : 'Each picture whole and upright, on a page of its own.') +
       (count == null ? '' : count ? ` This book has ${count} full-page ${count === 1 ? 'picture' : 'pictures'}.` : ' This book has no full-page pictures.');
     const sideways = radio('xtcOrientation') === 'landscape';
     $('xtcSplitField').hidden = !sideways;
@@ -892,7 +925,9 @@
     s.format === 'xtc'
       ? `XTC · ${s.xtc.grays ? '4 grays' : 'black and white'} · ${s.xtc.orientation === 'portrait' ? 'upright' : 'sideways'}`
       : 'EPUB';
-  const readerSummary = s => deviceName(s.device) + (s.format === 'xtc' ? '' : s.parts > 1 ? ` · pictures sideways, ${s.parts} parts` : ' · pictures upright');
+  const readerSummary = s =>
+    deviceName(s.device) +
+    (s.format === 'xtc' ? '' : (s.pictures === 'page' ? ' · pictures on their own page' : ' · pictures in the text') + (s.parts > 1 ? `, full-page ones sideways in ${s.parts} parts` : ''));
 
   // ---------- books ----------
   // Every PDF and link added is a book, converted one after another in the list's
@@ -921,14 +956,18 @@
   const shownBook = () => (current && current.state === 'ready' ? current : null);
   const isXtc = () => bookMeta && bookMeta.format === 'xtc';
   const pictureParts = () => (current ? current.settings.parts : 1);
+  const pictureLayout = () => (current && current.settings.pictures) || 'inline';
   const origin = b => (b && b.kind === 'web' ? 'article' : 'PDF');
   const fileSize = f => `${(f.size / 1024 / 1024).toFixed(1)} MB`;
   const pagesText = n => `${n} ${n === 1 ? 'page' : 'pages'}`;
   const hostOf = link => { try { return new URL(link).hostname.replace(/^www\./, ''); } catch { return link; } };
 
   function bookTitle(b) {
-    return (b.meta && b.meta.title) || b.title || (b.kind === 'web' ? b.link.replace(/^https?:\/\/(www\.)?/, '') : b.file.name.replace(/\.pdf$/i, ''));
+    return (b.meta && b.meta.title) || b.title || (b.preview && b.preview.title) ||
+      (b.kind === 'web' ? b.link.replace(/^https?:\/\/(www\.)?/, '') : b.file.name.replace(/\.pdf$/i, ''));
   }
+  // the picture a book is shown with: the cover chosen, its cover once it's made, or a link's own picture
+  const bookPicture = b => b.coverUrl || b.thumb || (b.preview && b.preview.image) || null;
   function bookSub(b) {
     if (b.kind === 'web') return `Web · ${hostOf(b.link)}`;
     const m = b.meta;
@@ -958,11 +997,22 @@
       row.setAttribute('aria-current', String(b === current));
       row.innerHTML = '<span class="thumb" aria-hidden="true"></span><span class="book-text"><span class="book-title"></span><span class="book-sub"></span><span class="chip"></span><span class="mini" hidden><span></span></span></span>';
       const thumb = row.querySelector('.thumb');
-      if (b.coverUrl) thumb.innerHTML = `<img src="${b.coverUrl}" alt="">`;
-      else {
+      const letter = () => {
         thumb.style.background = TONES[i % TONES.length];
         thumb.textContent = (bookTitle(b).match(/[\p{L}\p{N}]/u) || ['·'])[0].toUpperCase();
-      }
+      };
+      if (bookPicture(b)) {
+        const img = document.createElement('img');
+        img.src = bookPicture(b);
+        img.alt = '';
+        // a book without a cover (a PDF whose first page is text) keeps its letter
+        img.addEventListener('error', () => {
+          if (img.src.includes('cover.png') || img.src.startsWith('blob:')) b.thumb = null;
+          img.remove();
+          letter();
+        });
+        thumb.append(img);
+      } else letter();
       row.addEventListener('click', () => selectBook(b));
       b.row = row;
       li.append(row);
@@ -1037,6 +1087,45 @@
     afterAdding(added, files.length - pdfs.length ? ` ${files.length - pdfs.length} other files were left out.` : '');
   }
 
+  // A link's title and picture, read before its book is made, a few links at a time.
+  const previewQueue = [];
+  let previewing = 0;
+  function previewBooks(added) {
+    if (!api.previewLink) return;
+    previewQueue.push(...added);
+    const next = async () => {
+      const b = previewQueue.shift();
+      if (!b) return previewing--;
+      try {
+        b.preview = await api.previewLink(b.link);
+        if (books.includes(b)) {
+          updateRow(b);
+          if (b.row && bookPicture(b) && !b.row.querySelector('.thumb img')) renderBooks();
+          if (b === current) {
+            $('paneTitle').textContent = bookTitle(b);
+            showStatePicture(b);
+            showSummaries();
+          }
+        }
+      } catch {} // the link is read when its book is made, and says then what went wrong
+      next();
+    };
+    while (previewing < 3 && previewQueue.length) {
+      previewing++;
+      next();
+    }
+  }
+
+  // the book's cover as it is in the book, for its line in the list
+  async function refreshThumb(b) {
+    try {
+      b.thumb = await api.coverUrl(b.id, (b.thumbVersion = (b.thumbVersion || 0) + 1));
+    } catch {
+      b.thumb = null;
+    }
+    if (books.includes(b) && b.kind === source) renderBooks();
+  }
+
   function addLinks(text) {
     if (!api.convertLinks) return showStatus('Web pages can only be made into books in the app (ConvertPdf.exe or npm start).', { error: true });
     const links = splitLinks(text);
@@ -1045,6 +1134,7 @@
     const added = links.map(link => newBook({ kind: 'web', link: /^[a-z][\w+.-]*:/i.test(link) ? link : `https://${link}` }));
     books.push(...added);
     afterAdding(added, '');
+    previewBooks(added);
     return true;
   }
 
@@ -1153,6 +1243,7 @@
       }
       if (b.scan) scans.finish(b, b.meta);
       b.state = 'ready';
+      refreshThumb(b);
       b.took = progress.elapsed();
     } catch (err) {
       b.state = 'failed';
@@ -1271,10 +1362,21 @@
     $('waitingTitle').textContent = paused ? 'Waiting · paused' : 'Waiting';
     $('failedTitle').textContent = b.kind === 'web' ? 'This link could not be read' : 'This PDF could not be converted';
     $('failedReason').textContent = b.error || '';
+    showStatePicture(b);
     scans.show(b);
     if (!b.scan || !b.scan.pages.size) viewTab = 'book';
     else if (changed && !userPickedTab) viewTab = b.state === 'converting' ? 'scans' : 'book';
     showTab(viewTab, changed);
+  }
+
+  // a book not made yet is shown with its link's picture, if it has one
+  function showStatePicture(b) {
+    for (const img of document.querySelectorAll('.state-pic')) {
+      const src = b && b.state !== 'ready' && bookPicture(b);
+      img.hidden = !src;
+      if (src) img.src = src;
+      else img.removeAttribute('src');
+    }
   }
 
   function showTab(which, fresh = false) {
@@ -1394,7 +1496,8 @@
     }
     const b = current;
     if (b.kind === 'web') s.format = 'epub';
-    const partsChanged = s.parts !== b.settings.parts;
+    // full-page pictures and where pictures go change the EPUB as it's made from the book
+    const partsChanged = s.parts !== b.settings.parts || s.pictures !== b.settings.pictures;
     b.settings = s;
     showSummaries();
     showAgain();
@@ -1507,6 +1610,7 @@
       const r = await api.setCover(b.id, b.cover);
       if (r.book) b.meta = r.book;
       screenVersion++;
+      refreshThumb(b);
       if (b === current) {
         bookMeta = b.meta;
         showBookInfo();
@@ -1541,7 +1645,7 @@
   // ---------- adding books ----------
   const fileInput = $('file');
   $('choosePdfs').addEventListener('click', () => fileInput.click());
-  // the header's Add: PDFs to choose, or links to paste (in the start box when there are no books yet)
+  // the list's Add: PDFs to choose, or links to paste (in the start box when there are no books yet)
   $('addTop').addEventListener('click', () => {
     if (source === 'pdf') return fileInput.click();
     if (!current) return $('links').focus();
@@ -2238,7 +2342,7 @@
   function updateDownload() {
     const ready = !!bookId;
     if (ready) {
-      download.href = api.downloadUrl ? api.downloadUrl(bookId, isXtc(), pictureParts()) : '#';
+      download.href = api.downloadUrl ? api.downloadUrl(bookId, isXtc(), pictureParts(), pictureLayout()) : '#';
       download.textContent = `Download ${bookMeta.fileName}`;
     } else {
       download.removeAttribute('href');
@@ -2253,7 +2357,7 @@
     if (!api.download) return;
     e.preventDefault();
     if (download.classList.contains('disabled')) return;
-    api.download(bookId, pictureParts()).catch(err => showStatus(err.message || 'Could not save the book.', { error: true }));
+    api.download(bookId, pictureParts(), pictureLayout()).catch(err => showStatus(err.message || 'Could not save the book.', { error: true }));
   });
 
   // Every book made, in one zip file (browsers stop a page saving many files at once).
@@ -2267,7 +2371,7 @@
       const zip = new JSZip();
       const names = new Set();
       for (const b of ready) {
-        const data = await api.file(b.id, { xtc: b.meta.format === 'xtc', parts: b.settings.parts });
+        const data = await api.file(b.id, { xtc: b.meta.format === 'xtc', parts: b.settings.parts, pictures: b.settings.pictures || 'inline' });
         let name = b.meta.fileName;
         for (let k = 2; names.has(name.toLowerCase()); k++) name = b.meta.fileName.replace(/(\.[^.]+)$/, ` (${k})$1`);
         names.add(name.toLowerCase());
@@ -2324,7 +2428,7 @@
 
     let data;
     try {
-      data = await api.epub(id, pictureParts());
+      data = await api.epub(id, pictureParts(), pictureLayout());
     } catch (err) {
       showStatus(err.message || 'The preview could not be shown.', { error: true });
       return;
@@ -2576,6 +2680,7 @@
       b.style.paddingLeft = `${12 + (item.depth || 0) * 14}px`;
       b.innerHTML = '<span></span><span></span>';
       b.children[0].textContent = item.label;
+      b.title = item.label; // the whole title, when it's cut to 2 lines
       b.children[1].textContent = item.page ?? '';
       b.addEventListener('click', () => goTo(item.target));
       item.button = b;

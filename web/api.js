@@ -228,9 +228,9 @@ async function setCover(id, file) {
   return { cover: !!file, book: s.xtc ? xtcSummary(s) : undefined };
 }
 
-async function epubFile(s, pictureParts = 1) {
+async function epubFile(s, pictureParts = 1, pictures = 'inline') {
   if (!s.book) throw new Error('This book has expired. Please convert the PDF again.');
-  return buildEpub(s.book, { cover: s.cover, pictureParts });
+  return buildEpub(s.book, { cover: s.cover, pictureParts, pictures });
 }
 
 // A converted book's title and author; an empty one goes back to the book's own.
@@ -245,10 +245,21 @@ async function setDetails(id, details) {
   return { title: book.title, author: book.author };
 }
 
-// The EPUB, for the preview; full-page pictures in `pictureParts` parts.
-async function epub(id, pictureParts) {
-  const file = await epubFile(session(id), pictureParts);
+// The EPUB, for the preview; full-page pictures in `pictureParts` parts, and the
+// pictures in the text or on pages of their own (`pictures`, see buildEpub).
+async function epub(id, pictureParts, pictures) {
+  const file = await epubFile(session(id), pictureParts, pictures);
   return file.buffer.slice(file.byteOffset, file.byteOffset + file.length);
+}
+
+// The book's cover as it is in the book, or an XTC book's first page, as a picture address.
+async function coverUrl(id) {
+  const s = session(id);
+  const png = s.xtc ? pagePng(s.xtc, 1, s.xtcCover) : s.cover || s.book?.cover;
+  if (!png) return null;
+  if (s.coverPicture) URL.revokeObjectURL(s.coverPicture);
+  s.coverPicture = objectUrl(png, 'image/png');
+  return s.coverPicture;
 }
 
 // The scan of a page read with OCR, as a picture address.
@@ -265,17 +276,17 @@ async function screenUrl(id, n) {
 }
 
 // The finished book's file (EPUB or XTC), for Download all.
-async function file(id, { parts = 1 } = {}) {
+async function file(id, { parts = 1, pictures } = {}) {
   const s = session(id);
-  return s.xtc ? buildXtc(s.xtc, s.xtcCover) : epubFile(s, parts);
+  return s.xtc ? buildXtc(s.xtc, s.xtcCover) : epubFile(s, parts, pictures);
 }
 
 // Save the finished book (EPUB or XTC) to the visitor's computer.
-async function download(id, pictureParts) {
+async function download(id, pictureParts, pictures) {
   const s = session(id);
   const [data, name] = s.xtc
     ? [buildXtc(s.xtc, s.xtcCover), xtcSummary(s).fileName]
-    : [await epubFile(s, pictureParts), s.book.fileName];
+    : [await epubFile(s, pictureParts, pictures), s.book.fileName];
   const url = objectUrl(data, s.xtc ? 'application/octet-stream' : 'application/epub+zip');
   const a = document.createElement('a');
   a.href = url;
@@ -289,4 +300,4 @@ async function download(id, pictureParts) {
 // eslint-disable-next-line no-undef
 const version = async () => __VERSION__;
 
-window.convertPdfApi = { convert, retry, setText, setPicture, setBoxes, rebuild, setCover, setDetails, epub, file, scanUrl, screenUrl, download, version };
+window.convertPdfApi = { convert, retry, setText, setPicture, setBoxes, rebuild, setCover, setDetails, epub, file, coverUrl, scanUrl, screenUrl, download, version };

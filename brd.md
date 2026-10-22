@@ -107,7 +107,7 @@ flowchart LR
 
 ## 6. Functional requirements
 
-49 requirements, 17 of them Must, define what version 1.3.0 delivers; priorities use MoSCoW.
+51 requirements, 17 of them Must, define what version 1.3.0 delivers; priorities use MoSCoW.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
@@ -160,6 +160,8 @@ flowchart LR
 | FR-48 | Books | Take many PDFs and links at once (dropped, chosen or pasted, also while others are converting) and convert them one after another in a list that shows each book's state (waiting, converting with its progress, ready, pages to check, or why it failed, with Try again), with Pause and Resume; a book clicked in the list is previewed and set up on its own while the rest are made: title, author and cover put in it at once, full-page pictures changed at once, another reader or output converting it again in its place; Use these settings for all books; settings for new books, kept for next time; Download for the book shown and Download all as one zip | Must |
 | FR-49 | Books | Let the user choose first what is converted, PDF or Web pages, in tabs at the top that say how many books each has (and whether one is being made); each source has its own description, its own way to add books (a drop box for PDFs, a box for links), its own list of books and book shown, its own settings for new books (web pages always EPUB), Use these settings for all of its books, and Download all of its books; a PDF or link added on the other tab goes to its own; the choice is kept for next time | Must |
 | FR-50 | OCR review | Show a scanned book's pages as a grid of cards (scan, how well it was read, the start of its text), the one clicked opened beside them in a page editor with its scan larger and its picture boxes, its text to correct and save, Read again, Draw a box and Use found pictures, Keep the whole page as a picture (whole, 2 or 3 parts) or Use its text, and Previous / Next low page; keep every page read at 90% or lower as a picture at once (whole, 2 or 3 parts; pages typed by hand keep their text), or use their text again | Should |
+| FR-51 | Pictures | Put an EPUB's pictures in the text, the text above and below each one (top and bottom), a picture that doesn't fit in the rest of a screen going to the top of the next, or each picture on a page of its own that it fills; in the text by default, one setting for each book changed without converting again, pictures turned sideways always pages of their own; `--pictures inline|page` on the command line | Should |
+| FR-52 | Books | Show each book in the list with its cover once it's made (the picture chosen, the one from the PDF or the article, or an XTC book's first page), a book without one with its letter; show a link's article title (without the site's name after it) and main picture as soon as it's added, read quickly from the page before the book is made, in the list and on the waiting and converting screens | Should |
 
 ## 7. Non-functional requirements
 
