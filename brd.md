@@ -107,7 +107,7 @@ flowchart LR
 
 ## 6. Functional requirements
 
-48 requirements, 17 of them Must, define what version 1.3.0 delivers; priorities use MoSCoW.
+49 requirements, 17 of them Must, define what version 1.3.0 delivers; priorities use MoSCoW.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
@@ -159,6 +159,7 @@ flowchart LR
 | FR-47 | Web pages | Make an EPUB from each link of a web page (Add links in the app, links instead of a PDF on the command line; one per line, or separated by commas or spaces): the links are made one after another, a book each, in the app's list of books (FR-48); each page's article, found as Reader View does (Mozilla Readability), has its title, site, author, date, text, subheadings in the contents, pictures drawn for the reader's screen with their captions, and its link; menus, share buttons, "Most read" boxes and "Read also" links are left out; the article's main picture is the cover; the book takes the article's language; a link that can't be read is marked with the reason and the others are still made; only in the app, as the website can't read other sites' pages | Should |
 | FR-48 | Books | Take many PDFs and links at once (dropped, chosen or pasted, also while others are converting) and convert them one after another in a list that shows each book's state (waiting, converting with its progress, ready, pages to check, or why it failed, with Try again), with Pause and Resume; a book clicked in the list is previewed and set up on its own while the rest are made: title, author and cover put in it at once, full-page pictures changed at once, another reader or output converting it again in its place; Use these settings for all books; settings for new books, kept for next time; Download for the book shown and Download all as one zip | Must |
 | FR-49 | Books | Let the user choose first what is converted, PDF or Web pages, in tabs at the top that say how many books each has (and whether one is being made); each source has its own description, its own way to add books (a drop box for PDFs, a box for links), its own list of books and book shown, its own settings for new books (web pages always EPUB), Use these settings for all of its books, and Download all of its books; a PDF or link added on the other tab goes to its own; the choice is kept for next time | Must |
+| FR-50 | OCR review | Show a scanned book's pages as a grid of cards (scan, how well it was read, the start of its text), the one clicked opened beside them in a page editor with its scan larger and its picture boxes, its text to correct and save, Read again, Draw a box and Use found pictures, Keep the whole page as a picture (whole, 2 or 3 parts) or Use its text, and Previous / Next low page; keep every page read at 90% or lower as a picture at once (whole, 2 or 3 parts; pages typed by hand keep their text), or use their text again | Should |
 
 ## 7. Non-functional requirements
 
