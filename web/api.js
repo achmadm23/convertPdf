@@ -9,7 +9,7 @@ const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, exten
 const { retryPage, manualReading } = require('../ocr');
 
 const MAX_BYTES = 300 * 1024 * 1024;
-const MAX_BOOKS = 2; // converted books kept, in this page's memory
+const MAX_BOOKS = 8; // converted books kept, in this page's memory: the page converts several
 const LOW_CONFIDENCE = 75; // scanned pages read this well (%) or worse can be read again or typed in
 const PICTURE_BELOW = 30; // ...unless they're read this badly: then they're pictures, not text
 const OFFER_PICTURE = 90; // scanned pages read this well (%) or worse can be kept as a picture of the page
@@ -233,6 +233,18 @@ async function epubFile(s, pictureParts = 1) {
   return buildEpub(s.book, { cover: s.cover, pictureParts });
 }
 
+// A converted book's title and author; an empty one goes back to the book's own.
+async function setDetails(id, details) {
+  const s = session(id);
+  const book = s.xtc || s.book;
+  if (!book) throw new Error('The book is still being converted.');
+  s.own ??= { title: book.title, author: book.author };
+  const text = v => (typeof v === 'string' ? v.trim().slice(0, 500) : '');
+  book.title = text(details.title) || s.own.title;
+  book.author = text(details.author) || s.own.author;
+  return { title: book.title, author: book.author };
+}
+
 // The EPUB, for the preview; full-page pictures in `pictureParts` parts.
 async function epub(id, pictureParts) {
   const file = await epubFile(session(id), pictureParts);
@@ -250,6 +262,12 @@ async function screenUrl(id, n) {
   if (s.screen) URL.revokeObjectURL(s.screen);
   s.screen = objectUrl(png, 'image/png');
   return s.screen;
+}
+
+// The finished book's file (EPUB or XTC), for Download all.
+async function file(id, { parts = 1 } = {}) {
+  const s = session(id);
+  return s.xtc ? buildXtc(s.xtc, s.xtcCover) : epubFile(s, parts);
 }
 
 // Save the finished book (EPUB or XTC) to the visitor's computer.
@@ -271,4 +289,4 @@ async function download(id, pictureParts) {
 // eslint-disable-next-line no-undef
 const version = async () => __VERSION__;
 
-window.convertPdfApi = { convert, retry, setText, setPicture, setBoxes, rebuild, setCover, epub, scanUrl, screenUrl, download, version };
+window.convertPdfApi = { convert, retry, setText, setPicture, setBoxes, rebuild, setCover, setDetails, epub, file, scanUrl, screenUrl, download, version };

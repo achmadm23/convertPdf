@@ -64,21 +64,28 @@ If you use `ConvertPdf.exe`, [download the zip](https://github.com/achmadm23/con
 npm start
 ```
 
-Then open **http://localhost:3000**. The steps are numbered down the left of the page:
+Then open **http://localhost:3000**. First choose what you convert at the top: **PDF** (books, documents and scans) or **Web pages** (news articles and other pages, [Web pages](#web-pages-news-articles)). Each has its own list of books, its own settings for new books and its own **Download all**; the number on each tab is how many books it has. Below it, the page has three columns: that source's books on the left, the book you click in the middle, and its settings on the right.
 
-1. **Source:** **PDF**: choose a PDF, or drop it on the page. **Web pages**: paste the links of news articles or other web pages, one per line or separated by commas ([Web pages](#web-pages-news-articles)).
-2. **Output:** an EPUB e-book for any e-reader, or an XTC book for an Xteink reader ([Xteink books](#xteink-books-xtc)). Web pages always become an EPUB.
-3. **Details:** optionally type a title and author. If you leave them blank, they're taken from the PDF or the article.
-4. **Cover:** optionally choose a picture (JPEG, PNG or WebP, up to 20 MB), or drop it on the Cover box. It replaces the cover taken from the PDF or the article.
-5. **Reader:** your e-reader (Xteink X4 Pro, X4 or X3). An EPUB's pictures and cover are drawn for its screen, and the preview shows the book at its size. **Full-page pictures** chooses how portrait pictures that fill most of their page go in the book: **Whole**, upright, or turned on their side and cut into **2 parts** or **3 parts** that each fill the screen, as in an XTC book. Changing it updates the book at once, without converting again. For an XTC book, also black and white or 4 grays, and whether pages are turned sideways.
+**Add books.** On **PDF**, drop PDFs on the page, as many as you like, or click **Choose PDFs**. On **Web pages**, paste links, one per line or separated by commas, and click **Add links**. Each PDF and link becomes a book of its own in the list on the left. A PDF dropped while Web pages is shown, or a link while PDF is shown, goes to its own tab.
 
-Then click **Convert**. The progress bar shows what's happening, for example "Reading scanned pages: 57 of 244", and about how long is left; the panel on the right lists each step.
+**They're converted one after another**, as soon as they're added, the books of both tabs in the order they were added. Each line in the list shows its book's state: Waiting, Converting with its progress, Ready (or "Ready · check 6 pages" for a scanned book with pages read badly), or why it could not be made, with **Try again**. Above the list are how far along they all are and **Pause**, which lets the book being made finish and stops there until you click **Resume**.
 
-The book appears on an e-reader in the middle of the page, laid out at your reader's screen size (480 x 800 on an X4 Pro), so lines and picture pages fall roughly as they will on the device; its own font and margins may differ a little. Move through it with the **slider** under the reader, which has a stop for every screen of the book, picture pages included, or the arrow keys, and jump to a chapter from **Contents** on the right. Change the cover as often as you like: the preview updates in about a second, without converting again, and **Remove** goes back to the PDF's own cover. When it looks right, click **Download**. **Convert again** converts the PDF anew, for example with other XTC settings.
+**Click a book** to see it in the middle and change it on the right, while the others are still being made. A book that's ready is shown on an e-reader laid out at your reader's screen size (480 x 800 on an X4 Pro), so lines and picture pages fall roughly as they will on the device; its own font and margins may differ a little. Move through it with the **slider** under the reader, which has a stop for every screen of the book, picture pages included, with the arrow buttons or keys, and hold it in **Portrait** or **Landscape**. A book being converted shows each step and about how long is left, for example "Reading scanned pages: 57 of 244".
 
-The page follows your system's light or dark theme, and works offline: its fonts are served by the converter.
+**Its settings** are in four sections; each shows its current choice when closed:
 
-For scanned books, a **Scanned pages** tab shows each page as OCR reads it: the scan, the text read from it, and how confidently it was read. Pages read at 75% or lower are marked. Once the conversion has finished, they have two buttons:
+1. **Details:** the title and author, taken from the PDF or the article if you leave them blank. A change goes in the book at once. The book's contents are here too: click a chapter to go to it.
+2. **Cover:** a picture of your own (JPEG, PNG or WebP, up to 20 MB), or drop one on it. It replaces the cover taken from the PDF or the article; **Remove** goes back to it.
+3. **Reader and pictures:** your e-reader (Xteink X4 Pro, X4 or X3). An EPUB's pictures and cover are drawn for its screen. **Full-page pictures** chooses how portrait pictures that fill most of their page go in the book: upright, or turned on their side and cut into **2** or **3 parts** that each fill the screen, as in an XTC book. Changing it updates the book at once.
+4. **Output:** an EPUB for any e-reader, or for a PDF an XTC book for an Xteink reader ([Xteink books](#xteink-books-xtc)), with its settings. Web pages always become an EPUB.
+
+Another reader or output converts the book again: **Convert this book again** appears, and the book takes its place in the list. **Use these settings for all PDF books** (or **web page books**) gives every book of the tab this one's reader, pictures and output (each keeps its own title, author and cover), converts again those made with others, and uses them for new books too. The settings for new books are under **Change**, below the list.
+
+When a book looks right, click **Download** under its settings. **Download all** saves every book of the tab that's ready in one zip file. **Remove from the list** takes a book out.
+
+The page works offline: its fonts are served by the converter.
+
+For scanned books, a **Scanned pages** tab above the preview shows each page as OCR reads it, even while the book is being converted: the scan, the text read from it, and how confidently it was read. Pages read at 75% or lower are marked. Once the conversion has finished, they have two buttons:
 
 - **Retry** reads the page again with other settings (higher resolution, black and white, the page as one block of text) and keeps the best reading if it's better than the first.
 - **Edit text** lets you correct the text or type it yourself, looking at the scan next to it. Leave an empty line between paragraphs. Your text is used instead of what OCR read, and the page stays editable.
@@ -89,7 +96,7 @@ Once the book is converted, the pictures found on each scanned page are marked o
 
 Then click **Update the book** to use the changed pages. This takes under a minute, because the other pages aren't read again. Pages read below 30% are mostly pictures (a cover, for example) and have neither Retry nor Edit text.
 
-The server keeps the last 5 converted books in memory so you can change their cover quickly. Restarting the server clears them.
+The server keeps the last 20 books of PDFs and 50 books of web pages in memory, so each can still be changed and downloaded. Restarting the server clears them, and so does reloading the page: the list starts empty again.
 
 To use a different port:
 
@@ -178,7 +185,7 @@ The PDF's bookmarks become the book's chapters, and its title and author are kep
 
 ## Web pages (news articles)
 
-In the app (`npm start` or `ConvertPdf.exe`), choose **Source: Web pages** and paste the links of news articles or other web pages, one per line or separated by commas, for example a BBC News Indonesia or Kompas article. The converter downloads each page and keeps only the article, the way Firefox's Reader View does it ([Mozilla Readability](https://github.com/mozilla/readability)):
+In the app (`npm start` or `ConvertPdf.exe`), choose **Web pages** at the top and paste the links of news articles or other web pages, one per line or separated by commas, for example a BBC News Indonesia or Kompas article. The converter downloads each page and keeps only the article, the way Firefox's Reader View does it ([Mozilla Readability](https://github.com/mozilla/readability)):
 
 - the book has the article's title, then the site, author and date, its text with its subheadings in the contents, and its link at the end
 - its pictures are drawn for your reader's screen in 4 shades of gray, each on a page of its own, with their captions
@@ -186,7 +193,7 @@ In the app (`npm start` or `ConvertPdf.exe`), choose **Source: Web pages** and p
 - the article's main picture is the cover, and is not repeated inside. You can choose another, as for a PDF
 - the book is marked with the article's language, for example Indonesian or English
 
-Each link becomes a book of its own, named after its article. With several links, the books are made one after another and listed under the links as they're made, each with **Preview** and **Download**. The first one made is shown in the preview straight away, and **Preview** shows another. Each book takes its own article's title, author and cover; once they're all made, a cover can be changed for the book being previewed. A link that can't be read (a site that refuses, a page with no article) is marked in the list with the reason, and the other links are still made into books.
+Each link becomes a book of its own, named after its article, and goes in the list of web page books, made one after another. Each book takes its own article's title, author and cover, which can be changed like a PDF's. A link that can't be read (a site that refuses, a page with no article) is marked in the list with the reason, with **Try again**, and the other links are still made into books.
 
 Only the app can do this. The website can't: news sites don't let other websites read their pages. Pages behind a paywall or a login only give what they show without it.
 
@@ -232,7 +239,7 @@ To add a language, install its data (for example `npm install @tesseract.js-data
 | `pdf.js` | Opens a PDF with pdf.js. |
 | `web.js` | Web pages into a book: downloads each page, finds its article (Mozilla Readability), and gets its pictures. Only in the app. |
 | `server.js` | Local web server for the web app. |
-| `public/index.html` | The web app page: the numbered steps, progress, the e-reader preview with its slider, and contents. |
+| `public/index.html` | The web app page: the list of books converted one after another, the e-reader preview with its slider, each book's settings, and the scanned pages. |
 | `build/build-exe.js` | Builds `ConvertPdf.exe` (`npm run build:exe`). |
 | `build/launcher.js` | Start-up code inside the exe: unpacks the app and starts the server. |
 | `web/api.js` | The website's converter: the server's work, done in the browser. |

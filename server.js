@@ -15,7 +15,7 @@ const { version } = require('./package.json');
 
 const PORT = process.env.PORT || 3000;
 const MAX_BYTES = 300 * 1024 * 1024;
-const MAX_BOOKS = 5; // converted books kept in memory so their cover can be changed quickly
+const MAX_BOOKS = 20; // books of PDFs kept in memory: the page converts several, each shown and changed on its own
 const MAX_WEB_BOOKS = 50; // books of web pages kept: the page makes one for each link, to download each
 const LOW_CONFIDENCE = 75; // scanned pages read this well (%) or worse can be read again or typed in
 const PICTURE_BELOW = 30; // ...unless they're read this badly: then they're pictures, not text
@@ -23,6 +23,7 @@ const OFFER_PICTURE = 90; // scanned pages read this well (%) or worse can be ke
 const MAX_TEXT_BYTES = 1024 * 1024; // typed-in text for one page
 const MAX_COVER_BYTES = 20 * 1024 * 1024; // a cover picture chosen by the user
 const MAX_BOXES_BYTES = 16 * 1024; // the boxes drawn around a page's pictures
+const MAX_DETAILS_BYTES = 16 * 1024; // a book's title and author
 const MAX_LINKS_BYTES = 64 * 1024; // the links of web pages to convert, and their book's details
 
 const page = path.join(__dirname, 'public', 'index.html');
@@ -384,6 +385,25 @@ async function handleCover(req, res, session, use) {
   res.end(JSON.stringify({ cover: use, book: session.xtc ? xtcSummary(session) : undefined }));
 }
 
+// POST /book/<id>/details: a converted book's title and author (JSON: { title, author }).
+// An empty one goes back to the book's own (from the PDF or the article).
+async function handleDetails(req, res, session) {
+  const book = session.xtc || session.book;
+  if (!book) return sendError(res, 409, 'The book is still being converted.');
+  let details;
+  try {
+    details = JSON.parse((await readBody(req, MAX_DETAILS_BYTES)).toString('utf8'));
+  } catch {
+    return sendError(res, 400, 'The title and author could not be read.');
+  }
+  session.own ??= { title: book.title, author: book.author };
+  const text = v => (typeof v === 'string' ? v.trim().slice(0, 500) : '');
+  book.title = text(details.title) || session.own.title;
+  book.author = text(details.author) || session.own.author;
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ title: book.title, author: book.author }));
+}
+
 // GET /book/<id>.xtc (or .xtch)[?download=1]: the XTC book for an Xteink reader.
 function handleXtc(res, session) {
   const file = buildXtc(session.xtc, session.xtcCover);
@@ -444,6 +464,13 @@ const server = http.createServer((req, res) => {
       console.error(err);
       sendError(res, 500, err.message || 'Could not build the XTC file.');
     }
+  } else if (req.method === 'POST' && (match = route.match(/^\/book\/([\w-]+)\/details$/))) {
+    const session = sessions.get(match[1]);
+    if (!session) return sendError(res, 404, 'This book has expired. Please convert it again.');
+    handleDetails(req, res, session).catch(err => {
+      console.error(err);
+      if (!res.headersSent) sendError(res, 500, 'Could not change the details.');
+    });
   } else if ((req.method === 'POST' || req.method === 'DELETE') && (match = route.match(/^\/book\/([\w-]+)\/cover$/))) {
     const session = sessions.get(match[1]);
     if (!session) return sendError(res, 404, 'This book has expired. Please convert the PDF again.');
