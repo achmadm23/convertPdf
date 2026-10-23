@@ -351,9 +351,10 @@
   .page-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
   @media (max-width: 760px) { .page-cols { grid-template-columns: 1fr; } }
   .page-scan { position: relative; width: fit-content; max-width: 100%; margin: 0 auto; }
-  .page-scan img { display: block; max-width: 100%; max-height: calc(100vh - 260px); width: auto; height: auto; background: #fff; border: 1px solid var(--rule); border-radius: 4px; }
+  /* --fit: the room below the scan's top on the screen (see fitScan) */
+  .page-scan img { display: block; max-width: 100%; max-height: var(--fit, calc(100vh - 260px)); width: auto; height: auto; background: #fff; border: 1px solid var(--rule); border-radius: 4px; }
   .page-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-  .field textarea.page-text { width: 100%; min-height: 240px; height: calc(100vh - 470px); max-height: 520px; padding: 12px; resize: vertical; font: 14px/1.6 Georgia, 'Times New Roman', serif; color: var(--text); background: var(--field); border: 1px solid var(--input); border-radius: 10px; }
+  .field textarea.page-text { width: 100%; min-height: 200px; height: calc(var(--fit, calc(100vh - 260px)) - 210px); padding: 12px; resize: vertical; font: 14px/1.6 Georgia, 'Times New Roman', serif; color: var(--text); background: var(--field); border: 1px solid var(--input); border-radius: 10px; }
   .page-note { margin: 0; padding: 10px 12px; font-size: 13px; color: var(--text); background: var(--seg); border-radius: 8px; }
   .page-note.good { color: var(--good-text); background: var(--good-bg); }
   .page-note.bad { color: var(--error); background: var(--error-bg); }
@@ -1795,7 +1796,10 @@
     $('scans').hidden = !b || which !== 'scans';
     $('chaptersPanel').hidden = !b || which !== 'chapters';
     $('settingsPanel').hidden = !(editingDefaults || (b && which === 'settings'));
-    if (b && which === 'scans') scans.openFirst();
+    if (b && which === 'scans') {
+      scans.openFirst();
+      scans.fit();
+    }
     if (fresh) previewStale = true; // another book: its preview is drawn when its Preview tab is shown
     if (preview && state === 'ready' && previewStale) {
       openPreview(false).catch(() => showStatus('The preview could not be shown.', { error: true }));
@@ -2820,7 +2824,18 @@
       $('nextLow').disabled = !next;
       $('prevLow').onclick = () => prev && openPage(prev);
       $('nextLow').onclick = () => next && openPage(next);
+      requestAnimationFrame(fitScan);
     }
+
+    // The page open's scan as tall as fits on the screen below where it starts (the
+    // editor stays put as the list scrolls), so the whole page is seen at once.
+    function fitScan() {
+      if ($('scans').hidden || $('pageBody').hidden) return;
+      const top = $('pageScan').getBoundingClientRect().top;
+      const room = Math.max(360, Math.round(innerHeight - Math.max(top, 12) - 24));
+      $('pageBody').style.setProperty('--fit', `${room}px`);
+    }
+    window.addEventListener('resize', () => requestAnimationFrame(fitScan));
 
     // A change to the open page: the server's answer kept with the page, its card and the editor redrawn.
     async function change(button, busyText, call, after) {
@@ -3001,6 +3016,7 @@
         }
       },
       refreshEditor: () => renderEditor(),
+      fit: () => requestAnimationFrame(fitScan),
       // the book's scanned pages are about to come in
       start(b, session) {
         b.scan = {
