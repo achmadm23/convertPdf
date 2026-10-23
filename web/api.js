@@ -2,7 +2,7 @@
 // server.js does for the app, done here without a server. public/index.html uses
 // it when this file is loaded (window.convertPdfApi); web/build.js bundles it.
 
-const { analyzePdf, buildEpub, readerScreen, contentsPagesFrom } = require('../index');
+const { analyzePdf, buildEpub, readerScreen, contentsPagesFrom, chapterStartsFrom } = require('../index');
 const { openPdf } = require('../pdf');
 const { imageCover, cleanBoxes } = require('../figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('../xtc');
@@ -63,6 +63,11 @@ function bookSummary(s) {
     lowPages: scanned.filter(r => !r.manual && !r.picture && r.confidence >= PICTURE_BELOW && r.confidence <= LOW_CONFIDENCE).length,
     pictures: scannedPictures(book),
     ...(book.contents && { contents: book.contents }), // the book's own table of contents, when it's used
+    // each chapter with the page (1-based) it starts on, and whether they're the user's own
+    chapterList: book.chapters.map((ch, i) => ({
+      title: ch.title, page: ch.page === undefined ? null : ch.page + 1, ...(i === 0 && ch.title === 'Opening' && { opening: true }),
+    })),
+    ownChapters: !!book.ownChapters,
   };
 }
 
@@ -254,6 +259,9 @@ async function rebuild(id, { onProgress = () => {} } = {}, changes = {}) {
   if (typeof changes.firstPageCover === 'boolean') options.firstPageCover = changes.firstPageCover;
   if (changes.contentsPages === null) delete options.contentsPages; // looked for again
   else if (changes.contentsPages !== undefined) options.contentsPages = contentsPagesFrom(changes.contentsPages);
+  // the chapters chosen by the user ([{ page, title }]), or the ones found again (null)
+  if (changes.chapterStarts === null) delete options.chapterStarts;
+  else if (changes.chapterStarts !== undefined) options.chapterStarts = chapterStartsFrom(changes.chapterStarts);
   if (changes.device !== undefined) {
     if (!DEVICES[changes.device]) throw new Error(`Unknown reader "${changes.device}".`);
     options.device = changes.device; // its pictures are drawn again for this reader's screen

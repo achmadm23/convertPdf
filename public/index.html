@@ -354,6 +354,17 @@
   #contents button:hover { background: var(--seg); }
   #contents button[aria-current="true"] { font-weight: 600; background: var(--tint); }
   #contents button span + span { flex: none; font: 12px var(--mono); color: var(--muted); }
+  /* a chapter that can be renamed or removed: the entry, then its buttons */
+  #contents .ch-row { flex: none; display: flex; align-items: stretch; border-top: 1px solid var(--rule); }
+  #contents .ch-row:first-child { border-top: 0; }
+  #contents .ch-row > button:first-child { flex: 1 1 auto; min-width: 0; border-top: 0; }
+  #contents .ch-row .ch-edit { flex: none; justify-content: center; width: 36px; min-height: 0; padding: 0; color: var(--muted); border-top: 0; }
+  #contents .ch-row .ch-edit:hover { color: var(--text); }
+  #contents .ch-row input { flex: 1 1 auto; min-width: 0; margin: 4px 8px; }
+  #contents.waiting { border-style: dashed; }
+  .chapter-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+  .chapter-add label { display: flex; align-items: center; gap: 8px; color: var(--text); }
+  .chapter-add input { width: 80px; }
   .again { display: flex; flex-direction: column; gap: 10px; margin: 16px 20px 0; padding: 12px 14px; background: var(--tint); border-radius: 8px; }
   .again p { margin: 0; font-size: 13px; color: var(--accent); }
   .settings-foot { display: flex; flex-direction: column; gap: 10px; margin-top: auto; padding: 16px 20px 20px; }
@@ -599,6 +610,7 @@
       <div class="row-btns" id="boxButtons">
         <button type="button" class="btn small" id="drawBoxes">Draw a box</button>
         <button type="button" class="btn small" id="foundBoxes">Use found pictures</button>
+        <button type="button" class="btn small" id="startChapter" title="Add this page to the book's contents, as the start of a chapter">Add to the contents</button>
         <button type="button" class="btn small" id="useAsContents" title="Make the book's chapters from this page's table of contents">Use as the Daftar Isi</button>
       </div>
       <div class="row-btns" id="drawButtons" hidden>
@@ -658,14 +670,18 @@
           <div class="toc-pick" id="tocPick" hidden>
             <p class="note" id="tocText"></p>
             <div class="toc-row">
-              <label>Daftar Isi on page <input type="number" id="tocPage" min="1" inputmode="numeric"></label>
-              <button type="button" class="btn small" id="tocUse">Use</button>
               <button type="button" class="btn small" id="tocRemove" hidden>Remove</button>
               <button type="button" class="btn small" id="tocAuto" hidden>Find it</button>
             </div>
             <p class="note" id="tocMissing" hidden></p>
           </div>
           <nav id="contents" aria-label="Contents"></nav>
+          <p class="note" id="chaptersNote" hidden></p>
+          <div class="chapter-add" id="chapterAdd" hidden>
+            <label>Add page <input type="number" id="chapterPage" min="1" inputmode="numeric"></label>
+            <button type="button" class="btn small" id="chapterAddBtn">to the contents</button>
+            <button type="button" class="btn small" id="chaptersFound" hidden>Use the chapters found</button>
+          </div>
         </div>
       </div>
     </section>
@@ -1006,7 +1022,7 @@
     // a book as kept: what it's made from and with, and whether it was made
     const record = (b, order) => ({
       key: b.key, order, kind: b.kind, link: b.link || null, settings: b.settings, title: b.title, author: b.author,
-      firstPageCover: wanted(b, 'firstPageCover'), contentsPages: wanted(b, 'contentsPages'),
+      firstPageCover: wanted(b, 'firstPageCover'), contentsPages: wanted(b, 'contentsPages'), chapterStarts: wanted(b, 'chapterStarts'),
       made: b.state === 'ready' || (b.state === 'converting' && !!b.reopen),
       failed: b.state === 'failed' ? b.error : null, thumbsKept: !!b.thumbsKept,
     });
@@ -1543,9 +1559,11 @@
     let note = '';
     try {
       const meta = await (web ? api.convertLinks(b.link, options, handlers) : api.convert(b.file, options, handlers));
-      progress.update({ stage: 'done' });
       b.id = meta.id;
       b.meta = meta;
+      // the chapters chosen by the user (opened again, or converted again): built in at once
+      if (!web && !xtc && b.chapterStarts) b.meta = await api.rebuild(b.id, {}, { chapterStarts: b.chapterStarts });
+      progress.update({ stage: 'done' });
       if (b.cover) {
         try {
           const r = await api.setCover(b.id, b.cover);
@@ -1826,12 +1844,14 @@
   // made yet just uses them when it's made. `b.next` holds the settings waiting.
   const hasChange = (b, key) => !!(b && b.next && key in b.next);
   // the setting as it will be: waiting, or as the book is made (contentsPages null: looked for)
-  const wanted = (b, key) => (hasChange(b, key) ? b.next[key] : key === 'contentsPages' ? b.contentsPages ?? null : !!b[key]);
+  // (chapterStarts null: the chapters found)
+  const LISTS = ['contentsPages', 'chapterStarts'];
+  const wanted = (b, key) => (hasChange(b, key) ? b.next[key] : LISTS.includes(key) ? b[key] ?? null : !!b[key]);
   const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
   const joinList = list => (list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0] || '');
 
   function setChange(b, key, value) {
-    const applied = key === 'contentsPages' ? b.contentsPages ?? null : !!b[key];
+    const applied = LISTS.includes(key) ? b[key] ?? null : !!b[key];
     b.next = b.next || {};
     if (same(value, applied)) delete b.next[key];
     else b.next[key] = value;
@@ -1850,6 +1870,10 @@
     if (hasChange(b, 'contentsPages')) {
       const p = b.next.contentsPages;
       list.push(p === null ? 'the Daftar Isi looked for again' : p.length ? `chapters from the Daftar Isi on page ${tocPagesText(p)}` : 'chapters without the Daftar Isi');
+    }
+    if (hasChange(b, 'chapterStarts')) {
+      const c = b.next.chapterStarts;
+      list.push(c === null ? 'the chapters found again' : `your ${c.length} ${c.length === 1 ? 'chapter' : 'chapters'}`);
     }
     if (changeKind(b) === 'reader') list.push(`the book drawn for the ${deviceName(b.settings.device)}`);
     return list;
@@ -1871,6 +1895,7 @@
     const changes = {};
     if ('firstPageCover' in next) changes.firstPageCover = next.firstPageCover;
     if ('contentsPages' in next) changes.contentsPages = next.contentsPages;
+    if ('chapterStarts' in next) changes.chapterStarts = next.chapterStarts;
     const device = changeKind(b) === 'reader' ? b.settings.device : null;
     if (device) changes.device = device;
     const what = pendingList(b);
@@ -1880,13 +1905,14 @@
         if (changes.firstPageCover && b.cover) setBookCover(b, null);
       }
       if ('contentsPages' in changes) b.contentsPages = changes.contentsPages === null ? undefined : changes.contentsPages;
+      if ('chapterStarts' in changes) b.chapterStarts = changes.chapterStarts || undefined;
       if (device) b.converted = madeWith({ ...b.settings, device });
       // a setting changed again meanwhile still waits
       for (const key of Object.keys(next)) if (b.next && same(b.next[key], next[key])) delete b.next[key];
     });
     store.saveBooks();
     updateRow(b);
-    return { meta, what, contents: 'contentsPages' in changes };
+    return { meta, what, contents: 'contentsPages' in changes && !meta.ownChapters, chapters: 'chapterStarts' in changes };
   }
 
   // the chapters a book got from its Daftar Isi, in words
@@ -1908,7 +1934,8 @@
     }
     try {
       const r = await applyChanges(b);
-      if (b === current) showStatus(`Applied: ${joinList(r.what)}.${r.contents ? ` ${tocResult(r.meta)}` : ''}`);
+      const chapters = r.chapters ? ` The book has ${r.meta.chapters} ${r.meta.chapters === 1 ? 'chapter' : 'chapters'}${r.meta.ownChapters ? ', as you chose them' : ''}.` : '';
+      if (b === current) showStatus(`Applied: ${joinList(r.what)}.${r.contents ? ` ${tocResult(r.meta)}` : ''}${chapters}`);
     } catch (err) {
       showStatus(err.message || 'Could not apply the changes.', { error: true });
     }
@@ -1925,7 +1952,8 @@
       const found = c ? c.entries.filter(e => e.page).length : 0;
       items.push({
         key: 'toc',
-        text: found ? `${m.chapters} chapters, from the Daftar Isi on page ${tocPagesText(c.pages)}` : `${m.chapters} ${m.chapters === 1 ? 'chapter' : 'chapters'}, found by the converter (no Daftar Isi used)`,
+        text: m.ownChapters ? `${m.chapters} ${m.chapters === 1 ? 'chapter' : 'chapters'}, as you chose them`
+          : found ? `${m.chapters} chapters, from the Daftar Isi on page ${tocPagesText(c.pages)}` : `${m.chapters} ${m.chapters === 1 ? 'chapter' : 'chapters'}, found by the converter (no Daftar Isi used)`,
         action: 'Check',
         go: () => openSection('details', 'tocPick'),
       });
@@ -2221,6 +2249,7 @@
         showCover();
         showApply();
         renderChecks();
+        renderContents();
       }
     }
   }
@@ -2251,6 +2280,7 @@
     const b = editingDefaults ? null : current;
     const on = !!b && b.kind === 'pdf' && b.settings.format !== 'xtc';
     $('tocPick').hidden = !on;
+    showChapterTools();
     if (!on) return;
     const asked = wanted(b, 'contentsPages'); // null: looked for
     const waiting = hasChange(b, 'contentsPages');
@@ -2262,26 +2292,33 @@
       text = asked === null ? 'The Daftar Isi will be looked for again when you apply the changes.'
         : asked.length ? `The chapters will follow the Daftar Isi on page ${tocPagesText(asked)} when you apply the changes.`
         : 'The chapters will be made without the Daftar Isi when you apply the changes.';
-    } else if (asked && !asked.length) text = 'Chapters as the converter found them, without the book’s Daftar Isi. To use it, give the page it’s on.';
+    } else if (b.state === 'ready' && b.meta && b.meta.ownChapters) {
+      text = 'The chapters are the ones you chose' + (found ? `; the Daftar Isi on page ${tocPagesText(contents.pages)} is left out of the book.` : '.');
+    } else if (asked && !asked.length) text = `Chapters as the converter found them, without the book’s Daftar Isi. ${pickHint(b)}`;
     else if (b.state !== 'ready') {
       text = asked
         ? `Chapters from the Daftar Isi on page ${tocPagesText(asked)}, once the book is made.`
         : 'The book’s own Daftar Isi (table of contents) is looked for when the book is made, to take its chapters from.';
-    } else if (!contents) text = 'No Daftar Isi was found in the book, so the chapters are as the converter found them. If it has one, give the page it’s on.';
+    } else if (!contents) text = `No Daftar Isi was found in the book, so the chapters are as the converter found them. ${pickHint(b)}`;
     else if (found) {
       text = `${found} ${found === 1 ? 'chapter' : 'chapters'} from the Daftar Isi ${contents.auto ? 'found ' : ''}on page ${tocPagesText(contents.pages)}, at their page numbers.`;
     } else text = `No entries with page numbers were found on page ${tocPagesText(contents.pages)}, so the chapters are as the converter found them.`;
     $('tocText').textContent = text;
-    $('tocMissing').hidden = waiting || !found || !missing.length;
+    const own = b.state === 'ready' && b.meta && b.meta.ownChapters;
+    $('tocMissing').hidden = waiting || own || !found || !missing.length;
     $('tocMissing').textContent = `Not found in the book: ${missing.slice(0, 5).map(e => `${e.title} (${e.printed})`).join('; ')}` +
       (missing.length > 5 ? ` and ${missing.length - 5} more` : '') + '.';
-    $('tocRemove').hidden = !(waiting ? asked === null || asked.length : found || (asked && asked.length));
-    $('tocAuto').hidden = asked === null; // chosen by hand: it can be looked for again
+    $('tocRemove').hidden = own || !(waiting ? asked === null || asked.length : found || (asked && asked.length));
+    $('tocAuto').hidden = own || asked === null; // chosen by hand: it can be looked for again
     const busy = b.state === 'converting' || !!b.rebuilding;
-    for (const id of ['tocUse', 'tocPage', 'tocRemove', 'tocAuto']) $(id).disabled = busy;
-    const page = (asked && asked[0]) || (!waiting && contents && contents.pages[0]);
-    if (document.activeElement !== $('tocPage')) $('tocPage').value = page || '';
+    for (const id of ['tocRemove', 'tocAuto']) $(id).disabled = busy;
   }
+
+  // How to choose the chapters when the Daftar Isi wasn't found: its page picked in
+  // the page editor (scanned books), or the chapters made one by one.
+  const pickHint = b => (b.scan && b.scan.pages.size
+    ? 'If it has one, open its page in Scanned pages and click Use as the Daftar Isi, or choose the chapters yourself below.'
+    : 'You can choose the chapters yourself below.');
 
   // Make the chapters from the Daftar Isi on `pages` (page numbers of the PDF), from
   // the one found by itself (null), or as the converter finds them ([]). A book made
@@ -2307,19 +2344,76 @@
       : 'The chapters will be made without the Daftar Isi when you apply the changes.');
   }
 
-  function useTocPage() {
-    const b = current;
-    const n = Number($('tocPage').value);
-    const last = b && b.meta && b.meta.pages;
-    if (!Number.isInteger(n) || n < 1 || (last && n > last)) {
-      return showStatus(`Give the number of the PDF page the Daftar Isi is on${last ? `, from 1 to ${last}` : ''}.`, { error: true });
-    }
-    useContents([n]);
+  // ---------- chapters chosen page by page ----------
+  // A made EPUB of a PDF can have its chapters chosen by the user: each one starting
+  // on a page, with a title (empty: taken from the page). Renaming, removing or
+  // adding one makes the list the book's own chapters (b.next.chapterStarts, then
+  // b.chapterStarts once applied), which go in with Apply changes; Use the chapters
+  // found goes back.
+  const canChooseChapters = b => !!b && b.kind === 'pdf' && b.settings.format !== 'xtc' && b.state === 'ready' && !!b.meta && !!b.meta.chapterList;
+
+  // the chapters as they'll be: { title, page, opening } each, the Opening first if there is one
+  function chapterRows(b) {
+    const list = wanted(b, 'chapterStarts');
+    if (hasChange(b, 'chapterStarts') && list) return [...list].sort((x, y) => x.page - y.page).map(c => ({ title: c.title || `Page ${c.page} (title from the page)`, page: c.page, own: c }));
+    return b.meta.chapterList;
   }
-  $('tocUse').addEventListener('click', useTocPage);
-  $('tocPage').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); useTocPage(); }
+  // the chapters to change: the list waiting, the user's own, or the ones the book has
+  function chapterStarts(b) {
+    const list = wanted(b, 'chapterStarts');
+    if (list) return list.map(c => ({ ...c }));
+    return b.meta.chapterList.filter(c => !c.opening && c.page).map(c => ({ page: c.page, title: c.title }));
+  }
+  function setChapters(b, list, said) {
+    setChange(b, 'chapterStarts', list);
+    renderContents();
+    showChapterTools();
+    if (b === current && scans) scans.refreshEditor();
+    showStatus(hasChange(b, 'chapterStarts') ? `${said} Apply the changes to put the chapters in the book.` : 'The chapters stay as they are.');
+  }
+  function renameChapter(b, page, title) {
+    const list = chapterStarts(b);
+    const c = list.find(x => x.page === page);
+    if (!c || !title.trim() || c.title === title.trim()) return renderContents();
+    c.title = title.trim();
+    setChapters(b, list, `The chapter on page ${page} will be “${c.title}”.`);
+  }
+  function removeChapter(b, page) {
+    const list = chapterStarts(b).filter(c => c.page !== page);
+    if (!list.length) return showStatus('A book needs a chapter. Add another one first, or use the chapters found.', { error: true });
+    setChapters(b, list, `The chapter on page ${page} will join the one before it.`);
+  }
+  function addChapter(b, page) {
+    const last = b.meta.pages;
+    if (!Number.isInteger(page) || page < 1 || page > last) return showStatus(`Give the number of the PDF page to add, from 1 to ${last}.`, { error: true });
+    const list = chapterStarts(b);
+    if (list.some(c => c.page === page)) return showStatus(`Page ${page} is in the contents already.`, { error: true });
+    list.push({ page, title: '' });
+    list.sort((x, y) => x.page - y.page);
+    setChapters(b, list, `Page ${page} will be in the contents, as a chapter titled from the page (rename it once it's applied).`);
+  }
+
+  function showChapterTools() {
+    const b = editingDefaults ? null : current;
+    const on = canChooseChapters(b);
+    $('chapterAdd').hidden = !on;
+    $('chaptersNote').hidden = !on;
+    if (!on) return;
+    const waiting = hasChange(b, 'chapterStarts');
+    const own = wanted(b, 'chapterStarts');
+    $('chaptersFound').hidden = !own;
+    $('chaptersNote').textContent = waiting
+      ? (own ? 'These chapters go in the book when you apply the changes.' : 'The chapters found go back in the book when you apply the changes.')
+      : 'Rename (✎) or remove (×) a chapter, or add a page to the contents.';
+    const busy = !!b.rebuilding;
+    for (const id of ['chapterPage', 'chapterAddBtn', 'chaptersFound']) $(id).disabled = busy;
+  }
+  $('chapterAddBtn').addEventListener('click', () => current && addChapter(current, Number($('chapterPage').value)));
+  $('chapterPage').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && current) { e.preventDefault(); addChapter(current, Number($('chapterPage').value)); }
   });
+  $('chaptersFound').addEventListener('click', () => current && setChapters(current, null, 'The chapters found will be used again.'));
+
   $('tocRemove').addEventListener('click', () => useContents([]));
   $('tocAuto').addEventListener('click', () => useContents(null));
 
@@ -2665,6 +2759,11 @@
       const isContents = (asked === null ? tocInUse(b) : asked).includes(open);
       $('useAsContents').textContent = isContents ? 'Used as the Daftar Isi' : 'Use as the Daftar Isi';
       $('useAsContents').disabled = !ready || isContents;
+      // this page in the contents: a chapter starts on it, chosen by the user or found
+      const chapterHere = canChooseChapters(b) && chapterRows(b).some(c => !c.opening && c.page === open);
+      $('startChapter').hidden = !canChooseChapters(b);
+      $('startChapter').textContent = chapterHere ? 'In the contents' : 'Add to the contents';
+      $('startChapter').disabled = !ready || chapterHere || !!b.rebuilding;
       // the low pages before and after this one
       const low = lowPages(r);
       const prev = [...low].reverse().find(n => n < open);
@@ -2837,6 +2936,9 @@
     }
 
     $('onlyLow').addEventListener('change', e => $('scans').classList.toggle('only-low', e.target.checked));
+    $('startChapter').addEventListener('click', () => {
+      if (shown === current && open !== null) addChapter(current, open);
+    });
     $('useAsContents').addEventListener('click', () => {
       if (shown === current && open !== null) useContents([open]);
     });
@@ -3495,23 +3597,85 @@
   }
 
   // ---------- contents ----------
+  let contentsNoteText = '';
   function showContents(items, note) {
     contents = items;
+    contentsNoteText = note;
+    renderContents();
+  }
+
+  // The contents: each entry goes to its place in the preview. A made EPUB of a PDF
+  // shows the page each chapter starts on, with ✎ to rename it and × to remove it;
+  // while changes to its chapters wait, the chapters as they'll be.
+  function renderContents() {
     const nav = $('contents');
     nav.innerHTML = '';
-    for (const item of items) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.style.paddingLeft = `${12 + (item.depth || 0) * 14}px`;
-      b.innerHTML = '<span></span><span></span>';
-      b.children[0].textContent = item.label;
-      b.title = item.label; // the whole title, when it's cut to 2 lines
-      b.children[1].textContent = item.page ?? '';
-      b.addEventListener('click', () => goTo(item.target));
-      item.button = b;
-      nav.append(b);
+    const book = shownBook();
+    const editable = canChooseChapters(book) && !book.rebuilding;
+    const waiting = editable && hasChange(book, 'chapterStarts');
+    nav.classList.toggle('waiting', waiting);
+    const rows = editable ? chapterRows(book) : [];
+    // the EPUB's chapters (its top-level entries) are the book's, in order
+    const tops = contents.filter(it => !it.depth);
+    const matches = editable && !waiting && tops.length === rows.length;
+    const entries = waiting ? rows.map(r => ({ label: r.title, row: r }))
+      : contents.map(it => ({ ...it, row: matches && !it.depth ? rows[tops.indexOf(it)] : null, item: it }));
+    for (const entry of entries) {
+      const row = entry.row;
+      const go = document.createElement('button');
+      go.type = 'button';
+      go.style.paddingLeft = `${12 + (entry.depth || 0) * 14}px`;
+      go.innerHTML = '<span></span><span></span>';
+      go.children[0].textContent = entry.label;
+      go.title = entry.label; // the whole title, when it's cut to 2 lines
+      go.children[1].textContent = row && row.page ? `p. ${row.page}` : entry.page ?? '';
+      if (entry.item) {
+        go.addEventListener('click', () => goTo(entry.item.target));
+        entry.item.button = go;
+      }
+      if (!row || row.opening || !editable) {
+        nav.append(go);
+        continue;
+      }
+      const line = document.createElement('div');
+      line.className = 'ch-row';
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'ch-edit';
+      edit.textContent = '✎';
+      edit.title = `Rename the chapter on page ${row.page}`;
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'ch-edit';
+      remove.textContent = '×';
+      remove.title = `Remove the chapter on page ${row.page}`;
+      edit.addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.value = row.own && !row.own.title ? '' : entry.label;
+        input.setAttribute('aria-label', `Title of the chapter on page ${row.page}`);
+        line.replaceChildren(input);
+        input.focus();
+        input.select();
+        let done = false;
+        const finish = save => {
+          if (done) return;
+          done = true;
+          if (save) renameChapter(book, row.page, input.value);
+          else renderContents();
+        };
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+          if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+        });
+        input.addEventListener('blur', () => finish(true));
+      });
+      edit.setAttribute('aria-label', edit.title);
+      remove.setAttribute('aria-label', remove.title);
+      remove.addEventListener('click', () => removeChapter(book, row.page));
+      line.append(go, edit, remove);
+      nav.append(line);
     }
-    $('contentsNote').textContent = note;
+    $('contentsNote').textContent = waiting ? '· waiting for Apply changes' : contentsNoteText;
   }
 
   function markContents(here) {
@@ -3610,6 +3774,7 @@
         settings: { ...clone(DEFAULTS), ...r.settings, xtc: { ...DEFAULTS.xtc, ...(r.settings && r.settings.xtc) } },
         title: r.title || '', author: r.author || '',
         firstPageCover: !!r.firstPageCover, contentsPages: r.contentsPages === null ? undefined : r.contentsPages,
+        chapterStarts: r.chapterStarts || undefined,
         thumbsKept: !!r.thumbsKept, reopen: !!r.made,
       });
       if (r.cover) Object.assign(b, { cover: r.cover, coverUrl: URL.createObjectURL(r.cover) });

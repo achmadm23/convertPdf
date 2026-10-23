@@ -5,7 +5,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { analyzePdf, buildEpub, openPdf, readerScreen, contentsPagesFrom } = require('./index');
+const { analyzePdf, buildEpub, openPdf, readerScreen, contentsPagesFrom, chapterStartsFrom } = require('./index');
 const { imageCover, cleanBoxes } = require('./figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('./xtc');
 const { retryPage, manualReading, readAroundBoxes, readingWithBoxes, packReadings, unpackReadings } = require('./ocr');
@@ -24,6 +24,7 @@ const MAX_TEXT_BYTES = 1024 * 1024; // typed-in text for one page
 const MAX_COVER_BYTES = 20 * 1024 * 1024; // a cover picture chosen by the user
 const MAX_BOXES_BYTES = 16 * 1024; // the boxes drawn around a page's pictures
 const MAX_DETAILS_BYTES = 16 * 1024; // a book's title and author
+const MAX_CHANGES_BYTES = 512 * 1024; // a book's settings to build it again with, its own chapters among them
 const MAX_LINKS_BYTES = 64 * 1024; // the links of web pages to convert, and their book's details
 const MAX_SEND_BYTES = 4 * 1024; // where to send a book: the reader's address and folder
 const MAX_READINGS_BYTES = 300 * 1024 * 1024; // a book's scanned pages as read, kept by the page (see ocr.js packReadings)
@@ -187,6 +188,11 @@ function bookSummary(session) {
     pictures: scannedPictures(book),
     ...(book.skipped && { skipped: book.skipped }), // web pages that couldn't be read
     ...(book.contents && { contents: book.contents }), // the book's own table of contents, when it's used
+    // each chapter with the page (1-based) it starts on, and whether they're the user's own
+    chapterList: book.chapters.map((ch, i) => ({
+      title: ch.title, page: ch.page === undefined ? null : ch.page + 1, ...(i === 0 && ch.title === 'Opening' && { opening: true }),
+    })),
+    ownChapters: !!book.ownChapters,
   };
 }
 
@@ -443,7 +449,7 @@ async function handleRebuild(req, res, session) {
   if (session.busy) return sendError(res, 409, 'Busy reading a page. Try again in a moment.');
   let changes;
   try {
-    const body = (await readBody(req, MAX_DETAILS_BYTES)).toString('utf8');
+    const body = (await readBody(req, MAX_CHANGES_BYTES)).toString('utf8');
     changes = body ? JSON.parse(body) : {};
   } catch {
     return sendError(res, 400, 'The book’s settings could not be read.');
@@ -454,6 +460,9 @@ async function handleRebuild(req, res, session) {
     if (typeof changes.firstPageCover === 'boolean') options.firstPageCover = changes.firstPageCover;
     if (changes.contentsPages === null) delete options.contentsPages; // looked for again
     else if (changes.contentsPages !== undefined) options.contentsPages = contentsPagesFrom(changes.contentsPages);
+    // the chapters chosen by the user ([{ page, title }]), or the ones found again (null)
+    if (changes.chapterStarts === null) delete options.chapterStarts;
+    else if (changes.chapterStarts !== undefined) options.chapterStarts = chapterStartsFrom(changes.chapterStarts);
     if (changes.device !== undefined) {
       if (!DEVICES[changes.device]) throw new Error(`Unknown reader "${changes.device}".`);
       options.device = changes.device; // its pictures are drawn again for this reader's screen

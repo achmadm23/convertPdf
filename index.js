@@ -483,11 +483,11 @@ function buildChapters(pages, startsLow = []) {
       }
       let title = titleParts.join(' ');
       if (title.length > 100) title = title.slice(0, 97) + '…';
-      current = { title, blocks };
+      current = { title, blocks, page: i };
       chapters.push(current);
     } else {
       if (!current) {
-        current = { title: 'Opening', blocks: [] };
+        current = { title: 'Opening', blocks: [], page: i };
         chapters.push(current);
       }
       current.blocks.push(...page);
@@ -506,10 +506,10 @@ function buildChaptersAtPages(pages, starts) {
   let current = null;
   pages.forEach((page, i) => {
     if (starts[i]) {
-      current = { title: `Chapter ${chapters.filter(ch => ch.title !== 'Opening').length + 1}`, blocks: [] };
+      current = { title: `Chapter ${chapters.filter(ch => ch.title !== 'Opening').length + 1}`, blocks: [], page: i };
       chapters.push(current);
     } else if (!current) {
-      current = { title: 'Opening', blocks: [] };
+      current = { title: 'Opening', blocks: [], page: i };
       chapters.push(current);
     }
     current.blocks.push(...page);
@@ -602,7 +602,7 @@ function chaptersFromContents(pages, placed) {
   const starts = placed.filter(e => e.page !== null).sort((a, b) => a.page - b.page);
   const chapters = [];
   const opening = pages.slice(0, starts[0].page).flat();
-  if (opening.length) chapters.push({ title: 'Opening', blocks: opening });
+  if (opening.length) chapters.push({ title: 'Opening', blocks: opening, page: 0 });
   starts.forEach((start, i) => {
     if (starts[i + 1]?.page === start.page) return; // an entry on the same page as the next one ("Part One", then its first chapter)
     const end = i + 1 < starts.length ? starts[i + 1].page : pages.length;
@@ -611,9 +611,56 @@ function chaptersFromContents(pages, placed) {
     const before = starts.filter(e => e !== start && e.page === start.page && starts.indexOf(e) < i);
     let title = [...before.map(e => e.title), start.title].join(' · ');
     if (title.length > 100) title = title.slice(0, 97) + '…';
-    chapters.push({ title, blocks: [...first, ...pages.slice(start.page + 1, end).flat()] });
+    chapters.push({ title, blocks: [...first, ...pages.slice(start.page + 1, end).flat()], page: start.page });
   });
   return chapters;
+}
+
+// The chapters chosen by the user: [{ page (1-based), title }], each starting on its
+// page, in page order; pages before the first are the Opening. A chapter with no
+// title takes the headings at the top of its page (or the start of its text). The
+// headings at the top of its page that are in its title are its printed title, so
+// they're left out. Null when none of the pages are in the book.
+function chaptersAtStarts(pages, starts) {
+  const list = starts.map(c => ({ ...c, page: c.page - 1 })).filter(c => c.page < pages.length).sort((a, b) => a.page - b.page);
+  if (!list.length) return null;
+  const chapters = [];
+  const opening = pages.slice(0, list[0].page).flat();
+  if (opening.length) chapters.push({ title: 'Opening', blocks: opening, page: 0 });
+  list.forEach((start, i) => {
+    const end = i + 1 < list.length ? list[i + 1].page : pages.length;
+    const first = [...pages[start.page]];
+    let title = start.title || pageTitle(first) || `Page ${start.page + 1}`;
+    if (title.length > 100) title = title.slice(0, 97) + '…';
+    const inTitle = new Set(titleWords(title));
+    while (first.length && first[0].heading && titleWords(first[0].text).every(w => inTitle.has(w))) first.shift();
+    chapters.push({ title, blocks: [...first, ...pages.slice(start.page + 1, end).flat()], page: start.page });
+  });
+  return chapters;
+}
+
+// A page's title: the headings at its top, or the start of its first paragraph.
+function pageTitle(page) {
+  const heads = [];
+  for (const b of page) {
+    if (!b.heading || heads.length === 3) break;
+    if (letterCount(b.text)) heads.push(b.text.trim());
+  }
+  if (heads.length) return heads.join(' ');
+  const text = page.find(b => !b.image && b.text && letterCount(b.text) >= 3)?.text.trim() || '';
+  return text.length > 60 ? text.slice(0, 60).replace(/\s+\S*$/, '') + '…' : text;
+}
+
+const MAX_CHAPTER_STARTS = 1000;
+
+// The chapters chosen by the user as asked for ([{ page, title }]), checked: one per
+// page, the first one kept, titles trimmed (empty: found on the page).
+function chapterStartsFrom(value) {
+  const ok = Array.isArray(value) && value.length <= MAX_CHAPTER_STARTS &&
+    value.every(c => c && Number.isInteger(c.page) && c.page >= 1 && c.page <= 100000 && (c.title === undefined || typeof c.title === 'string'));
+  if (!ok) throw new Error(`The chapters could not be read (up to ${MAX_CHAPTER_STARTS}, each with a page number).`);
+  const seen = new Set();
+  return value.filter(c => !seen.has(c.page) && seen.add(c.page)).map(c => ({ page: c.page, title: (c.title || '').replace(/\s+/g, ' ').trim().slice(0, 200) }));
 }
 
 const MAX_CONTENTS_PAGES = 5;
@@ -660,6 +707,7 @@ function buildChaptersByPage(pages, pagesPerChapter = 10) {
     chapters.push({
       title: first === last ? `Page ${first}` : `Pages ${first}–${last}`,
       blocks: pages.slice(i, i + pagesPerChapter).flat(),
+      page: i,
     });
   }
   return chapters;
@@ -863,10 +911,13 @@ async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', device 
   if (paragraphs === 0) {
     throw new Error('No text found, even with OCR. The PDF may contain only pictures.');
   }
+  // the chapters chosen by the user come first; the Daftar Isi still leaves the book
+  const own = ocrOptions.chapterStarts?.length ? chaptersAtStarts(pages, ocrOptions.chapterStarts) : null;
   return {
     title: title || extracted.title || name,
     author: author || extracted.author || 'Unknown',
-    chapters: fromContents ? chaptersFromContents(pages, placed) : buildChapters(pages, extracted.startsLow),
+    chapters: own || (fromContents ? chaptersFromContents(pages, placed) : buildChapters(pages, extracted.startsLow)),
+    ownChapters: !!own,
     // the table of contents: its pages, whether it was found by itself (auto), and each
     // entry with the page (1-based) it starts on, or null; there's none when none was
     // found, or none is wanted
@@ -998,7 +1049,7 @@ async function writeWebPages(opts) {
   if (!made) process.exitCode = 1;
 }
 
-module.exports = { convertPdfToEpub, analyzePdf, buildEpub, extractPdf, openPdf, cleanPages, buildChapters, readerScreen, contentsPagesFrom };
+module.exports = { convertPdfToEpub, analyzePdf, buildEpub, extractPdf, openPdf, cleanPages, buildChapters, readerScreen, contentsPagesFrom, chapterStartsFrom };
 
 if (require.main === module) {
   main().catch(err => {
