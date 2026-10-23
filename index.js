@@ -213,7 +213,12 @@ function linesToBlocks(lines, bodySize) {
 // The result's `ocr` holds every scanned page's reading, for passing back in later.
 // firstPageCover: page 1 is the cover, whatever is on it, and its text is left out
 // (chosen in the web UI); otherwise page 1 is the cover only if it's mostly a picture.
-async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: previous, onOcrPage, screen, firstPageCover = false } = {}) {
+// contentsPages: the pages of the book's own table of contents (chosen in the web UI),
+// [] for none, or left out to look for it in the first and last pages of the book;
+// the result's `contentsLines` are those pages' lines ([page, lines] each), read
+// before anything else is done to them.
+// The result's `printed` is the page number printed on each page, where there is one.
+async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: previous, onOcrPage, screen, firstPageCover = false, contentsPages } = {}) {
   const doc = await openPdf(buffer);
 
   let meta = {};
@@ -269,6 +274,12 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   const bodySize = [...sizeChars.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 10;
 
   const layout = measureLayout(pageLines, bodySize);
+  const printed = printedPageNumbers(pageLines);
+  const tocPages = contentsPages ?? [...new Set([
+    ...pageLines.slice(0, CONTENTS_FRONT).map((_, i) => i + 1),
+    ...pageLines.map((_, i) => i + 1).slice(-CONTENTS_BACK),
+  ])];
+  const contentsLines = tocPages.filter(n => n >= 1 && n <= pageLines.length).map(n => [n, pageLines[n - 1]]);
   // pages read with OCR word by word are searched for pictures anywhere on them,
   // beside the text too; other pages only between paragraphs (findGaps)
   const readWords = new Set(
@@ -378,7 +389,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
 
   const startsLow = lowStartPages(pageLines, layoutLines, layout);
   const pages = pageLines.map(lines => linesToBlocks(lines, bodySize));
-  return { pages, images, cover, startsLow, ocr, pictureBoxes, title: meta.Title, author: meta.Author };
+  return { pages, images, cover, startsLow, ocr, pictureBoxes, printed, contentsLines, title: meta.Title, author: meta.Author };
 }
 
 // Pages whose text starts far below the usual top of the text block, under a
@@ -504,6 +515,140 @@ function buildChaptersAtPages(pages, starts) {
     current.blocks.push(...page);
   });
   return chapters.filter(ch => ch.blocks.length || ch.title !== 'Opening');
+}
+
+// The page number printed on each page (an index of pages, null where there's none):
+// a line of only a number, the first or the last one on its page.
+function printedPageNumbers(pageLines) {
+  return pageLines.map(lines => {
+    const byHeight = lines.filter(l => !l.image).sort((a, b) => b.y - a.y);
+    for (const l of [byHeight[byHeight.length - 1], byHeight[0]]) {
+      const m = l && /^[^\p{L}\d]{0,2}(\d{1,4})[^\p{L}\d]{0,2}$/u.exec(l.text.trim());
+      if (m) return Number(m[1]);
+    }
+    return null;
+  });
+}
+
+// The entries of a table of contents (its lines, top to bottom): [{ title, printed }],
+// `printed` the page number printed after the title ("Bandung di Ujung Malam - 181",
+// "Epilog ........ 285"). A title wrapped onto two lines is joined; the page's own
+// heading ("Daftar Isi", "Contents") and its page number are left out.
+function contentsEntries(lines) {
+  const entries = [];
+  let pending = '';
+  for (const l of [...lines].sort((a, b) => b.y - a.y)) {
+    const text = l.text.trim();
+    if (!text || l.image) continue;
+    const m = /^(.*?\p{L}.*?)[\s.·…_–—-]*?(\d{1,4})$/u.exec(text);
+    if (m) {
+      const title = (pending + ' ' + m[1]).replace(/[\s.·…_–—-]+$/u, '').replace(/\s+/g, ' ').trim();
+      if (letterCount(title) >= 2) entries.push({ title, printed: Number(m[2]) });
+      pending = '';
+    } else if (!isNumberLike(text) && !/^(daftar isi|isi|contents?|table of contents)$/iu.test(text)) {
+      pending = (pending + ' ' + text).trim(); // the first line of a wrapped title
+    }
+  }
+  return entries;
+}
+
+// The page (an index) that printed page number `n` is on, from the pages that show
+// their numbers: counted from the nearest one at or before it, so pages without a
+// number (pictures, chapter openings) and pages left out of the numbering both
+// work out. Numbers misread now and then are ignored: only gaps between printed
+// and real page numbers that 3 or more pages agree on are used.
+function pageOfPrinted(printed, n) {
+  const gaps = new Map();
+  printed.forEach((p, i) => { if (p !== null) gaps.set(i - p, (gaps.get(i - p) || 0) + 1); });
+  const known = printed.map((p, i) => [i, p]).filter(([i, p]) => p !== null && gaps.get(i - p) >= 3);
+  if (!known.length) return null;
+  const before = known.filter(([, p]) => p <= n).pop() || known[0];
+  return before[0] + (n - before[1]);
+}
+
+const titleWords = text => (text.toLowerCase().match(/[\p{L}\d]+/gu) || []);
+
+// How much of a title is in a page's headings (0 to 1).
+function titleOnPage(title, page) {
+  const words = titleWords(title);
+  const found = new Set(titleWords(page.filter(b => b.heading).map(b => b.text).join(' ')));
+  return words.length ? words.filter(w => found.has(w)).length / words.length : 0;
+}
+
+// Where each entry of the table of contents starts: its page (an index) from its
+// printed page number, moved to a page close by whose headings are the title; with
+// no page numbers to go by, the first page after the entry before whose headings
+// are the title. Entries not found have `page` null.
+function placeContents(entries, pages, printed) {
+  let from = 0;
+  return entries.map(entry => {
+    const guess = pageOfPrinted(printed, entry.printed);
+    const near = guess === null
+      ? pages.map((_, i) => i).filter(i => i >= from)
+      : [0, -1, 1, -2, 2, -3, 3].map(d => guess + d).filter(i => i >= 0 && i < pages.length);
+    let page = near.find(i => titleOnPage(entry.title, pages[i]) >= 0.6);
+    const matched = page !== undefined; // its title is in the page's headings
+    if (!matched) page = guess !== null && guess >= 0 && guess < pages.length ? guess : null;
+    if (page !== null) from = page + 1;
+    return { ...entry, page, matched };
+  });
+}
+
+// Chapters from the book's own table of contents: one for each entry found, from
+// its page to the next one's, titled as in the table of contents. The headings at
+// the top of its first page are its printed title, so they're left out. Pages before
+// the first chapter are the Opening.
+function chaptersFromContents(pages, placed) {
+  const starts = placed.filter(e => e.page !== null).sort((a, b) => a.page - b.page);
+  const chapters = [];
+  const opening = pages.slice(0, starts[0].page).flat();
+  if (opening.length) chapters.push({ title: 'Opening', blocks: opening });
+  starts.forEach((start, i) => {
+    if (starts[i + 1]?.page === start.page) return; // an entry on the same page as the next one ("Part One", then its first chapter)
+    const end = i + 1 < starts.length ? starts[i + 1].page : pages.length;
+    const first = [...pages[start.page]];
+    while (first.length && first[0].heading) first.shift();
+    const before = starts.filter(e => e !== start && e.page === start.page && starts.indexOf(e) < i);
+    let title = [...before.map(e => e.title), start.title].join(' · ');
+    if (title.length > 100) title = title.slice(0, 97) + '…';
+    chapters.push({ title, blocks: [...first, ...pages.slice(start.page + 1, end).flat()] });
+  });
+  return chapters;
+}
+
+const MAX_CONTENTS_PAGES = 5;
+const CONTENTS_FRONT = 20; // a table of contents is looked for in the first pages of the book
+const CONTENTS_BACK = 10; // ...and in the last ones
+const MIN_CONTENTS_ENTRIES = 5; // a page with fewer entries isn't a table of contents
+const MIN_CONTENTS_MATCHED = 2; // ...nor one whose titles aren't found as headings in the book
+
+// The book's table of contents, looked for in `candidates` ([page, lines] each): the
+// page with the most entries, at least MIN_CONTENTS_ENTRIES, with their page numbers
+// going up, and the pages right after it that carry on its list.
+// Returns { pages, entries }, or null.
+function findContents(candidates) {
+  const lists = candidates.map(([n, lines]) => ({ n, entries: contentsEntries(lines) }));
+  const goesUp = entries => entries.filter((e, i) => !i || e.printed >= entries[i - 1].printed).length >= entries.length * 0.8;
+  const best = lists
+    .filter(l => l.entries.length >= MIN_CONTENTS_ENTRIES && goesUp(l.entries))
+    .sort((a, b) => b.entries.length - a.entries.length)[0];
+  if (!best) return null;
+  const pages = [best.n];
+  const entries = [...best.entries];
+  for (let next = lists.find(l => l.n === best.n + 1); next; next = lists.find(l => l.n === next.n + 1)) {
+    if (next.entries.length < 3 || !goesUp(next.entries) || next.entries[0].printed < entries[entries.length - 1].printed) break;
+    pages.push(next.n);
+    entries.push(...next.entries);
+  }
+  return { pages, entries };
+}
+
+// The pages of a book's table of contents as asked for (page numbers), checked.
+function contentsPagesFrom(value) {
+  if (!Array.isArray(value) || value.length > MAX_CONTENTS_PAGES || !value.every(n => Number.isInteger(n) && n >= 1 && n <= 100000)) {
+    throw new Error(`The contents pages could not be read (up to ${MAX_CONTENTS_PAGES} page numbers).`);
+  }
+  return [...new Set(value)].sort((a, b) => a - b);
 }
 
 // Fallback when the PDF has no recognisable headings: chapters of 10 pages.
@@ -702,6 +847,18 @@ function readerScreen(device = 'x4') {
 async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', device = 'x4', onProgress, ...ocrOptions } = {}) {
   const extracted = await extractPdf(pdfBuffer, onProgress, { ...ocrOptions, screen: readerScreen(device) });
   const pages = cleanPages(extracted.pages);
+  // chapters from the book's own table of contents, whose pages then leave the book
+  // (the EPUB has its own): the pages asked for, or the ones found, used only if
+  // enough of their titles are headings in the book; else the chapters found as usual
+  const asked = ocrOptions.contentsPages;
+  const toc = asked === undefined
+    ? findContents(extracted.contentsLines)
+    : asked.length ? { pages: asked, entries: contentsEntries(extracted.contentsLines.flatMap(([, lines]) => lines)) } : null;
+  const placed = toc ? placeContents(toc.entries, pages, extracted.printed) : [];
+  const fromContents = asked === undefined
+    ? placed.filter(e => e.page !== null).length >= 3 && placed.filter(e => e.matched).length >= MIN_CONTENTS_MATCHED
+    : placed.some(e => e.page !== null);
+  if (fromContents) for (const n of toc.pages) if (pages[n - 1]) pages[n - 1] = [];
   const paragraphs = pages.reduce((n, p) => n + p.filter(b => !b.heading && !b.image).length, 0);
   if (paragraphs === 0) {
     throw new Error('No text found, even with OCR. The PDF may contain only pictures.');
@@ -709,7 +866,17 @@ async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', device 
   return {
     title: title || extracted.title || name,
     author: author || extracted.author || 'Unknown',
-    chapters: buildChapters(pages, extracted.startsLow),
+    chapters: fromContents ? chaptersFromContents(pages, placed) : buildChapters(pages, extracted.startsLow),
+    // the table of contents: its pages, whether it was found by itself (auto), and each
+    // entry with the page (1-based) it starts on, or null; there's none when none was
+    // found, or none is wanted
+    ...(toc && (asked !== undefined || fromContents) && {
+      contents: {
+        pages: toc.pages,
+        auto: asked === undefined,
+        entries: placed.map(({ matched, ...e }) => ({ ...e, page: e.page === null ? null : e.page + 1 })),
+      },
+    }),
     images: extracted.images,
     cover: extracted.cover,
     ocr: extracted.ocr,
@@ -831,7 +998,7 @@ async function writeWebPages(opts) {
   if (!made) process.exitCode = 1;
 }
 
-module.exports = { convertPdfToEpub, analyzePdf, buildEpub, extractPdf, openPdf, cleanPages, buildChapters, readerScreen };
+module.exports = { convertPdfToEpub, analyzePdf, buildEpub, extractPdf, openPdf, cleanPages, buildChapters, readerScreen, contentsPagesFrom };
 
 if (require.main === module) {
   main().catch(err => {

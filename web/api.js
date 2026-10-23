@@ -2,7 +2,7 @@
 // server.js does for the app, done here without a server. public/index.html uses
 // it when this file is loaded (window.convertPdfApi); web/build.js bundles it.
 
-const { analyzePdf, buildEpub, readerScreen } = require('../index');
+const { analyzePdf, buildEpub, readerScreen, contentsPagesFrom } = require('../index');
 const { openPdf } = require('../pdf');
 const { imageCover, cleanBoxes } = require('../figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('../xtc');
@@ -62,6 +62,7 @@ function bookSummary(s) {
     ...readerSummary(book.device),
     lowPages: scanned.filter(r => !r.manual && !r.picture && r.confidence >= PICTURE_BELOW && r.confidence <= LOW_CONFIDENCE).length,
     pictures: scannedPictures(book),
+    ...(book.contents && { contents: book.contents }), // the book's own table of contents, when it's used
   };
 }
 
@@ -103,12 +104,13 @@ function xtcSummary(s) {
 // Convert a PDF file. `xtc` is the XTC settings, or null for an EPUB. Reports
 // progress like the server's stream: onProgress, onSession, and onPage for each
 // scanned page as it's read.
-async function convert(file, { title, author, xtc, device, firstPageCover }, { onProgress = () => {}, onSession = () => {}, onPage = () => {} }) {
+async function convert(file, { title, author, xtc, device, firstPageCover, contentsPages }, { onProgress = () => {}, onSession = () => {}, onPage = () => {} }) {
   const pdf = await readFile(file, MAX_BYTES);
   if (pdf.subarray(0, 5).toString() !== '%PDF-') throw new Error('That file is not a PDF.');
   const name = file.name.replace(/\.[^.]*$/, '') || 'book';
   const s = newSession(pdf, {
     title: title || undefined, author: author || undefined, name, ...(device && { device }), ...(firstPageCover && { firstPageCover }),
+    ...(contentsPages && { contentsPages: contentsPagesFrom(contentsPages) }), // [] for none; left out, it's looked for
   });
   onProgress({ stage: 'text', done: 0, total: 1 });
   if (xtc) {
@@ -214,16 +216,22 @@ async function rebuild(id, { onProgress = () => {} } = {}, changes = {}) {
   const s = session(id);
   if (!s.book) throw new Error('The book is still being converted.');
   if (s.busy) throw new Error('Busy reading a page. Try again in a moment.');
-  // page 1 as the cover, its text left out of the book (see server.js handleRebuild)
-  const firstPageCover = typeof changes.firstPageCover === 'boolean' ? changes.firstPageCover : !!s.options.firstPageCover;
-  const options = { ...s.options, firstPageCover };
+  // page 1 as the cover, the book's own table of contents (see server.js handleRebuild)
+  const options = { ...s.options };
+  if (typeof changes.firstPageCover === 'boolean') options.firstPageCover = changes.firstPageCover;
+  if (changes.contentsPages === null) delete options.contentsPages; // looked for again
+  else if (changes.contentsPages !== undefined) options.contentsPages = contentsPagesFrom(changes.contentsPages);
+  if (changes.device !== undefined) {
+    if (!DEVICES[changes.device]) throw new Error(`Unknown reader "${changes.device}".`);
+    options.device = changes.device; // its pictures are drawn again for this reader's screen
+  }
   s.busy = true;
   try {
     const book = await analyzePdf(s.pdf, { ...options, onProgress, ocr: s.book.ocr });
     Object.assign(book, { fileName: s.book.fileName, title: s.book.title, author: s.book.author });
     s.book = book;
     s.options = options;
-    if (firstPageCover) s.cover = null;
+    if (changes.firstPageCover === true) s.cover = null;
     s.improved.clear();
     return bookSummary(s);
   } finally {

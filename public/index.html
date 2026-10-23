@@ -337,6 +337,11 @@
   .cover-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .cover-info { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
   .cover-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+  .toc-pick { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+  .toc-pick p { margin: 0; }
+  .toc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .toc-row label { display: flex; align-items: center; gap: 8px; color: var(--text); }
+  .field .toc-row input { width: 80px; }
   #contents { display: flex; flex-direction: column; max-height: 320px; overflow: auto; background: var(--field); border: 1px solid var(--rule); border-radius: 8px; }
   #contents:empty { display: none; }
   /* each entry as tall as its title (the list scrolls instead of squeezing them); a long one shows 2 lines */
@@ -547,6 +552,7 @@
       <div class="row-btns" id="boxButtons">
         <button type="button" class="btn small" id="drawBoxes">Draw a box</button>
         <button type="button" class="btn small" id="foundBoxes">Use found pictures</button>
+        <button type="button" class="btn small" id="useAsContents" title="Make the book's chapters from this page's table of contents">Use as the Daftar Isi</button>
       </div>
       <div class="row-btns" id="drawButtons" hidden>
         <button type="button" class="btn small primary" id="saveBoxes">Save pictures</button>
@@ -597,6 +603,16 @@
         <label class="field">Title<input id="title"></label>
         <label class="field">Author<input id="author"></label>
         <div class="field"><span>Contents <span id="contentsNote"></span></span>
+          <div class="toc-pick" id="tocPick" hidden>
+            <p class="note" id="tocText"></p>
+            <div class="toc-row">
+              <label>Daftar Isi on page <input type="number" id="tocPage" min="1" inputmode="numeric"></label>
+              <button type="button" class="btn small" id="tocUse">Use</button>
+              <button type="button" class="btn small" id="tocRemove" hidden>Remove</button>
+              <button type="button" class="btn small" id="tocAuto" hidden>Find it</button>
+            </div>
+            <p class="note" id="tocMissing" hidden></p>
+          </div>
           <nav id="contents" aria-label="Contents"></nav>
         </div>
       </div>
@@ -826,12 +842,13 @@
       xtc ? `book/${id}.xtc?download=1` : `book/${id}.epub?parts=${parts}&pictures=${pictures}&download=1`;
     return {
       // upload the PDF and follow the server's stream of progress (see streamRequest)
-      convert(pdf, { title, author, device, xtc, firstPageCover }, handlers) {
+      convert(pdf, { title, author, device, xtc, firstPageCover, contentsPages }, handlers) {
         const headers = { 'Content-Type': 'application/pdf', 'X-Filename': encodeURIComponent(pdf.name) };
         if (device) headers['X-Device'] = device;
         if (title) headers['X-Title'] = encodeURIComponent(title);
         if (author) headers['X-Author'] = encodeURIComponent(author);
         if (firstPageCover) headers['X-First-Page-Cover'] = '1';
+        if (contentsPages) headers['X-Contents-Pages'] = contentsPages.length ? contentsPages.join(',') : 'none';
         if (xtc) {
           headers['X-Format'] = 'xtc';
           headers['X-Xtc'] = encodeURIComponent(JSON.stringify(xtc));
@@ -1288,6 +1305,7 @@
       device: b.settings.device,
       xtc: xtc ? { ...b.settings.xtc, device: b.settings.device } : null,
       firstPageCover: !xtc && !web && !!b.firstPageCover,
+      contentsPages: !xtc && !web ? b.contentsPages : undefined, // left out, it's looked for
     };
     const handlers = {
       onProgress: update => {
@@ -1534,6 +1552,7 @@
       if (b.state !== 'ready') $('contentsNote').textContent = '· shown when the book is made';
       showCover();
     }
+    showToc();
     showSections();
     showSummaries();
     showAgain();
@@ -1554,7 +1573,33 @@
   // a book made with another reader or output than it now has can be converted again
   function showAgain() {
     const b = editingDefaults ? null : current;
-    $('again').hidden = !(b && b.state === 'ready' && b.converted !== madeWith(b.settings));
+    $('again').hidden = !(b && changeKind(b) === 'convert');
+  }
+
+  // What changed settings ask of a made book: a new reader for an EPUB of a PDF only
+  // redraws its pictures ('reader': built again, keeping its pages' reading and the
+  // changes to them); another output, or a web page book's reader, converts it again
+  // ('convert'). Nothing when it's made as they say (null).
+  function changeKind(b) {
+    if (b.state !== 'ready' || !b.converted || b.converted === madeWith(b.settings)) return null;
+    const was = JSON.parse(b.converted);
+    return b.kind === 'pdf' && was.format === 'epub' && b.settings.format === 'epub' ? 'reader' : 'convert';
+  }
+
+  // Draw a made EPUB again for the reader now chosen (see changeKind).
+  async function newReader(b) {
+    if (b.rebuilding || changeKind(b) !== 'reader') return;
+    const device = b.settings.device;
+    try {
+      await rebuildBook(b, { device }, `Drawing the book for the ${deviceName(device)}`, () => {
+        b.converted = madeWith({ ...b.settings, device });
+      });
+      if (b === current) showStatus(`The book is drawn for the ${deviceName(device)}. Its pages, and your changes to them, are kept.`);
+    } catch (err) {
+      if (b === current) showStatus(err.message || 'Could not draw the book for that reader.', { error: true });
+    } finally {
+      if (b === current) showAgain();
+    }
   }
   $('againBtn').addEventListener('click', () => current && convertAgain(current));
 
@@ -1578,6 +1623,8 @@
     showSummaries();
     showAgain();
     showBookInfo();
+    if (changeKind(b) === 'reader') newReader(b);
+    if (partsChanged) b.savedMeta = null;
     if (partsChanged && b.state === 'ready' && !isXtc()) {
       updateDownload();
       openPreview(true).catch(() => showStatus('The preview could not be shown.', { error: true }));
@@ -1597,21 +1644,26 @@
   // the reader and output settings for every book of the source: those already made with others are converted again
   $('useForAll').addEventListener('click', () => {
     const s = current.settings;
-    let again = 0;
+    let again = 0, redrawn = 0;
     for (const b of sourceBooks()) {
       if (b === current) continue;
       const next = clone(s);
       if (b.kind === 'web') next.format = 'epub';
       b.settings = next;
-      if (b.state === 'ready' && b.converted !== madeWith(next)) {
+      const kind = changeKind(b);
+      if (kind === 'convert') {
         convertAgain(b);
         again++;
+      } else if (kind === 'reader') {
+        newReader(b);
+        redrawn++;
       }
     }
     defaultsBy[source] = clone(s);
     saveDefaults();
     renderBooks();
-    showStatus(`These settings are used for all ${SOURCES[source].title.toLowerCase()}${again ? `: ${again} ${again === 1 ? 'is' : 'are'} converted again` : ''}, and for new ones.`);
+    const done = [again && `${again} ${again === 1 ? 'is' : 'are'} converted again`, redrawn && `${redrawn} ${redrawn === 1 ? 'is' : 'are'} drawn again for the new reader`].filter(Boolean);
+    showStatus(`These settings are used for all ${SOURCES[source].title.toLowerCase()}${done.length ? `: ${done.join(', ')}` : ''}, and for new ones.`);
     runQueue();
   });
 
@@ -1627,6 +1679,7 @@
       const r = await api.setDetails(b.id, { title: b.title, author: b.author });
       b.meta.title = r.title;
       b.meta.author = r.author;
+      b.savedMeta = null;
       updateRow(b);
       if (b === current) {
         $('paneTitle').textContent = bookTitle(b);
@@ -1695,6 +1748,7 @@
     try {
       const r = await api.setCover(b.id, b.cover);
       if (r.book) b.meta = r.book;
+      b.savedMeta = null;
       screenVersion++;
       refreshThumb(b);
       if (b === current) {
@@ -1728,38 +1782,160 @@
       return;
     }
     $('coverFirstPage').disabled = $('coverRemove').disabled = true;
-    const doing = on ? 'Using page 1 as the cover' : `Using the cover from the ${origin(b)}`;
-    showStatus(`${doing}…`, { busy: true, share: 0 });
     try {
-      const meta = await api.rebuild(b.id, {
-        onProgress: ({ stage, done, total }) => {
-          if (!total || b !== current) return;
-          if (stage === 'text') showStatus(`${doing} · reading text, page ${done} of ${total}`, { busy: true, share: (done / total) * 0.1 });
-          if (stage === 'pictures') showStatus(`${doing} · pictures, page ${done} of ${total}`, { busy: true, share: 0.1 + (done / total) * 0.9 });
-        },
-      }, { firstPageCover: on });
-      b.firstPageCover = on;
-      if (on) setBookCover(b, null);
+      await rebuildBook(b, { firstPageCover: on }, on ? 'Using page 1 as the cover' : `Using the cover from the ${origin(b)}`, () => {
+        b.firstPageCover = on;
+        if (on) setBookCover(b, null);
+      });
+      if (b === current) showStatus(on ? 'Page 1 is the cover, and its text is left out of the book.' : `Using the cover from the ${origin(b)}.`);
+    } catch (err) {
+      showStatus(err.message || 'Could not change the cover.', { error: true });
+    } finally {
+      $('coverRemove').disabled = false;
+      if (b === current) {
+        showCover();
+        showSummaries();
+      }
+    }
+  }
+  $('coverFirstPage').addEventListener('click', () => useFirstPage(true));
+
+  // Build a made book again with `changes` to its settings (see server.js handleRebuild),
+  // without reading its pages again: the changed pages waiting go in too. `done(meta)`
+  // runs as soon as it's built. Shown as it goes while it's the book shown. Throws if
+  // it can't be done.
+  async function rebuildBook(b, changes, doing, done = () => {}) {
+    if (b.rebuilding) throw new Error('The book is being updated. Try again in a moment.');
+    b.rebuilding = true;
+    if (b.scan) scans.setBusy(b, true);
+    if (b === current) showStatus(`${doing}…`, { busy: true, share: 0 });
+    try {
+      const meta = await api.rebuild(b.id, { onProgress: rebuilding(b, doing) }, changes);
       b.meta = meta;
+      done(meta);
       if (b.scan) scans.rebuilt(b, meta);
-      await refreshThumb(b);
+      refreshThumb(b);
       if (b === current) {
         bookMeta = meta;
         showBookInfo();
         showSummaries();
         screenVersion++;
         previewStale = true;
-        if (!$('bookView').hidden) await openPreview(true);
-        showStatus(on ? 'Page 1 is the cover, and its text is left out of the book.' : `Using the cover from the ${origin(b)}.`);
+        if (!$('bookView').hidden) await openPreview(true).catch(() => showStatus('The preview could not be shown.', { error: true }));
       }
-    } catch (err) {
-      showStatus(err.message || 'Could not change the cover.', { error: true });
+      setTimeout(() => newReader(b)); // the reader was changed again meanwhile
+      return meta;
     } finally {
-      $('coverRemove').disabled = false;
-      if (b === current) showCover();
+      b.rebuilding = false;
+      if (b.scan) scans.setBusy(b, false);
+      if (b === current) showToc();
     }
   }
-  $('coverFirstPage').addEventListener('click', () => useFirstPage(true));
+
+  // How far a book being built again has got, shown while it's the book shown.
+  function rebuilding(b, doing) {
+    return ({ stage, done, total }) => {
+      if (!total || b !== current) return;
+      if (stage === 'text') showStatus(`${doing} · reading text, page ${done} of ${total}`, { busy: true, share: (done / total) * 0.1 });
+      if (stage === 'pictures') showStatus(`${doing} · pictures, page ${done} of ${total}`, { busy: true, share: 0.1 + (done / total) * 0.9 });
+    };
+  }
+
+  // ---------- Daftar Isi ----------
+  // The book's chapters from its own table of contents (Daftar Isi): its entries'
+  // titles and printed page numbers, matched to the PDF's pages. It's looked for in
+  // the first and last pages of the book (b.contentsPages left out), or it's on the
+  // pages chosen, or there's none ([]). For EPUBs of PDFs; an XTC book's chapters are
+  // the PDF's bookmarks.
+  const tocPagesText = pages => pages.join(', ');
+  // the pages of the Daftar Isi the book's chapters come from
+  const tocInUse = b => {
+    const c = b && b.state === 'ready' && b.meta && b.meta.contents;
+    return c && c.entries.some(e => e.page) ? c.pages : [];
+  };
+
+  function showToc() {
+    const b = editingDefaults ? null : current;
+    const on = !!b && b.kind === 'pdf' && b.settings.format !== 'xtc';
+    $('tocPick').hidden = !on;
+    if (!on) return;
+    const asked = b.contentsPages;
+    const contents = b.state === 'ready' && b.meta ? b.meta.contents : null;
+    const missing = contents ? contents.entries.filter(e => !e.page) : [];
+    const found = contents ? contents.entries.length - missing.length : 0;
+    let text;
+    if (asked && !asked.length) text = 'Chapters as the converter found them, without the book’s Daftar Isi. To use it, give the page it’s on.';
+    else if (b.state !== 'ready') {
+      text = asked
+        ? `Chapters from the Daftar Isi on page ${tocPagesText(asked)}, once the book is made.`
+        : 'The book’s own Daftar Isi (table of contents) is looked for when the book is made, to take its chapters from.';
+    } else if (!contents) text = 'No Daftar Isi was found in the book, so the chapters are as the converter found them. If it has one, give the page it’s on.';
+    else if (found) {
+      text = `${found} ${found === 1 ? 'chapter' : 'chapters'} from the Daftar Isi ${contents.auto ? 'found ' : ''}on page ${tocPagesText(contents.pages)}, at their page numbers.`;
+    } else text = `No entries with page numbers were found on page ${tocPagesText(contents.pages)}, so the chapters are as the converter found them.`;
+    $('tocText').textContent = text;
+    $('tocMissing').hidden = !found || !missing.length;
+    $('tocMissing').textContent = `Not found in the book: ${missing.slice(0, 5).map(e => `${e.title} (${e.printed})`).join('; ')}` +
+      (missing.length > 5 ? ` and ${missing.length - 5} more` : '') + '.';
+    $('tocRemove').hidden = !(found || (asked && asked.length));
+    $('tocAuto').hidden = !asked; // chosen by hand: it can be looked for again
+    const busy = b.state === 'converting' || !!b.rebuilding;
+    for (const id of ['tocUse', 'tocPage', 'tocRemove', 'tocAuto']) $(id).disabled = busy;
+    const page = (contents && contents.pages[0]) || (asked && asked[0]);
+    if (document.activeElement !== $('tocPage')) $('tocPage').value = page || '';
+  }
+
+  // Make the chapters from the Daftar Isi on `pages` (page numbers of the PDF), from
+  // the one found by itself (null), or as the converter finds them ([]). A book made
+  // already is built again for it, keeping its pages' reading and changes.
+  async function useContents(pages) {
+    const b = current;
+    if (!b || b.state === 'converting' || b.rebuilding) return;
+    if (b.state !== 'ready') {
+      b.contentsPages = pages === null ? undefined : pages;
+      showToc();
+      showStatus(pages === null ? 'The book’s Daftar Isi will be looked for when the book is made.'
+        : pages.length ? `The chapters will follow the Daftar Isi on page ${tocPagesText(pages)} when the book is made.`
+        : 'The chapters will be as the converter finds them.');
+      return;
+    }
+    const doing = pages === null ? 'Looking for the Daftar Isi'
+      : pages.length ? `Making the chapters from the Daftar Isi on page ${tocPagesText(pages)}`
+      : 'Finding the chapters without the Daftar Isi';
+    const building = rebuildBook(b, { contentsPages: pages }, doing, () => { b.contentsPages = pages === null ? undefined : pages; });
+    showToc();
+    try {
+      const meta = await building;
+      if (b === current) {
+        const c = meta.contents;
+        const found = c ? c.entries.filter(e => e.page).length : 0;
+        showStatus(found ? `The book has ${found} ${found === 1 ? 'chapter' : 'chapters'} from the Daftar Isi on page ${tocPagesText(c.pages)}.`
+          : pages && !pages.length ? 'The chapters are as the converter found them.'
+          : c ? `No entries with page numbers were found on page ${tocPagesText(c.pages)}.`
+          : 'No Daftar Isi was found, so the chapters are as the converter found them.');
+      }
+    } catch (err) {
+      showStatus(err.message || 'Could not make the chapters.', { error: true });
+    } finally {
+      if (b === current) showToc();
+    }
+  }
+
+  function useTocPage() {
+    const b = current;
+    const n = Number($('tocPage').value);
+    const last = b && b.meta && b.meta.pages;
+    if (!Number.isInteger(n) || n < 1 || (last && n > last)) {
+      return showStatus(`Give the number of the PDF page the Daftar Isi is on${last ? `, from 1 to ${last}` : ''}.`, { error: true });
+    }
+    useContents([n]);
+  }
+  $('tocUse').addEventListener('click', useTocPage);
+  $('tocPage').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); useTocPage(); }
+  });
+  $('tocRemove').addEventListener('click', () => useContents([]));
+  $('tocAuto').addEventListener('click', () => useContents(null));
 
   const coverInput = $('coverFile'), coverPick = $('coverPick');
   $('coverChoose').addEventListener('click', () => coverInput.click());
@@ -2097,6 +2273,9 @@
         btn.title = waitTitle;
       }
       if (drawing) $('clearBoxes').disabled = !ready || !drawing.length;
+      const isContents = tocInUse(b).includes(open);
+      $('useAsContents').textContent = isContents ? 'Used as the Daftar Isi' : 'Use as the Daftar Isi';
+      $('useAsContents').disabled = !ready || isContents;
       // the low pages before and after this one
       const low = lowPages(r);
       const prev = [...low].reverse().find(n => n < open);
@@ -2251,39 +2430,17 @@
     // Build the book again with its changed pages. Pages aren't read again, so it's quick.
     rebuildBtn.addEventListener('click', async () => {
       const b = shown;
-      const r = b.scan;
-      r.busy = true;
-      updateCounts(b);
-      renderEditor();
       // the update is watched on the reader, which then shows the book updated
       if (b === current) {
         userPickedTab = true;
         showTab('book');
       }
-      showStatus('Updating the book…', { busy: true, share: 0 });
       try {
-        const meta = await api.rebuild(b.id, {
-          onProgress: ({ stage, done, total }) => {
-            if (!total) return;
-            if (stage === 'text') showStatus(`Updating the book · reading text, page ${done} of ${total}`, { busy: true, share: (done / total) * 0.1 });
-            if (stage === 'pictures') showStatus(`Updating the book · pictures, page ${done} of ${total}`, { busy: true, share: 0.1 + (done / total) * 0.9 });
-          },
-        });
-        b.meta = meta;
-        rebuilt(b, meta);
-        if (b === current) {
-          bookMeta = meta;
-          showBookInfo();
-          showStatus('Book updated with the changed pages.');
-          previewStale = true;
-          if (!$('bookView').hidden) openPreview(true).catch(() => showStatus('Book updated, but the preview could not be shown.', { error: true }));
-        }
+        await rebuildBook(b, undefined, 'Updating the book');
+        if (b === current) showStatus('Book updated with the changed pages.');
       } catch (err) {
         showStatus(err.message || 'Could not update the book.', { error: true });
       }
-      r.busy = false;
-      updateCounts(b);
-      if (b === shown) renderEditor();
     });
 
     // the book was built again with its changed pages: none are waiting any more
@@ -2306,6 +2463,9 @@
     }
 
     $('onlyLow').addEventListener('change', e => $('scans').classList.toggle('only-low', e.target.checked));
+    $('useAsContents').addEventListener('click', () => {
+      if (shown === current && open !== null) useContents([open]);
+    });
     $('onlyPictures').addEventListener('change', e => $('scans').classList.toggle('only-pictures', e.target.checked));
 
     return {
@@ -2341,6 +2501,13 @@
         b.scan.done = true;
         b.scan.total = meta.scannedPages || b.scan.total;
         showPictures(b, meta.pictures);
+        updateCounts(b);
+        if (b === shown) renderEditor();
+      },
+      // a book of these pages being built again: no changes until it's done
+      setBusy(b, on) {
+        if (!b.scan) return;
+        b.scan.busy = on;
         updateCounts(b);
         if (b === shown) renderEditor();
       },
@@ -2522,11 +2689,50 @@
     download.tabIndex = ready ? 0 : -1;
   }
 
+  // pages changed in the page editor and not yet in the book (Update the book)
+  function pendingPages(b) {
+    return !!(b && b.scan && b.scan.pending);
+  }
+
+  // Save a made book to the computer: changed pages waiting go in it first, so the
+  // file is the book as it's checked. The website makes the file here; the app's
+  // server sends it.
+  async function saveBook(b) {
+    const changed = pendingPages(b);
+    if (changed) await rebuildBook(b, undefined, 'Putting the changed pages in the book first');
+    const parts = b.settings.parts, pictures = b.settings.pictures || 'inline';
+    if (api.download) await api.download(b.id, parts, pictures);
+    else {
+      const a = document.createElement('a');
+      a.href = api.downloadUrl(b.id, b.meta.format === 'xtc', parts, pictures);
+      document.body.append(a);
+      a.click();
+      a.remove();
+    }
+    b.savedMeta = b.meta;
+    if (changed && b === current) showStatus(`Saved ${b.meta.fileName}, with the changed pages in it.`);
+  }
+
   download.addEventListener('click', e => {
-    if (!api.download) return;
+    const b = shownBook();
+    if (!b || download.classList.contains('disabled')) return e.preventDefault();
+    if (!api.download && !pendingPages(b)) {
+      b.savedMeta = b.meta; // the link saves it
+      return;
+    }
     e.preventDefault();
-    if (download.classList.contains('disabled')) return;
-    api.download(bookId, pictureParts(), pictureLayout()).catch(err => showStatus(err.message || 'Could not save the book.', { error: true }));
+    saveBook(b).catch(err => showStatus(err.message || 'Could not save the book.', { error: true }));
+  });
+
+  // Leaving the page loses its books: ask first while one is being made, or is made
+  // and not saved since it last changed.
+  window.addEventListener('beforeunload', e => {
+    const unsaved = books.some(b => b.state === 'waiting' || b.state === 'converting' ||
+      (b.state === 'ready' && (b.savedMeta !== b.meta || pendingPages(b))));
+    if (unsaved) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
   });
 
   // Every book made, in one zip file (browsers stop a page saving many files at once).
@@ -2540,6 +2746,7 @@
       const zip = new JSZip();
       const names = new Set();
       for (const b of ready) {
+        if (pendingPages(b)) await rebuildBook(b, undefined, `Putting the changed pages in ${bookTitle(b)} first`);
         const data = await api.file(b.id, { xtc: b.meta.format === 'xtc', parts: b.settings.parts, pictures: b.settings.pictures || 'inline' });
         let name = b.meta.fileName;
         for (let k = 2; names.has(name.toLowerCase()); k++) name = b.meta.fileName.replace(/(\.[^.]+)$/, ` (${k})$1`);
@@ -2555,6 +2762,7 @@
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
+      for (const b of ready) b.savedMeta = b.meta;
       showStatus(`Saved ${ready.length} ${ready.length === 1 ? 'book' : 'books'} in convertPdf books.zip.`);
     } catch (err) {
       showStatus(err.message || 'Could not save the books.', { error: true });

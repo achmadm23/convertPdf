@@ -5,7 +5,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { analyzePdf, buildEpub, openPdf, readerScreen } = require('./index');
+const { analyzePdf, buildEpub, openPdf, readerScreen, contentsPagesFrom } = require('./index');
 const { imageCover, cleanBoxes } = require('./figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('./xtc');
 const { retryPage, manualReading, readAroundBoxes, readingWithBoxes } = require('./ocr');
@@ -136,6 +136,7 @@ function bookSummary(session) {
     lowPages: scanned.filter(r => !r.manual && !r.picture && r.confidence >= PICTURE_BELOW && r.confidence <= LOW_CONFIDENCE).length,
     pictures: scannedPictures(book),
     ...(book.skipped && { skipped: book.skipped }), // web pages that couldn't be read
+    ...(book.contents && { contents: book.contents }), // the book's own table of contents, when it's used
   };
 }
 
@@ -190,9 +191,18 @@ async function handleConvert(req, res) {
   const fileName = header(req, 'x-filename') || 'book.pdf';
   const name = path.basename(fileName, path.extname(fileName));
   const device = header(req, 'x-device');
+  let contentsPages;
+  try {
+    const asked = header(req, 'x-contents-pages');
+    if (asked === 'none') contentsPages = [];
+    else if (asked) contentsPages = contentsPagesFrom(asked.split(',').map(Number));
+  } catch (err) {
+    return sendError(res, 400, err.message);
+  }
   const session = newSession(pdf, {
     title: header(req, 'x-title'), author: header(req, 'x-author'), name, ...(device && { device }),
     ...(header(req, 'x-first-page-cover') === '1' && { firstPageCover: true }),
+    ...(contentsPages && { contentsPages }),
   });
   if (header(req, 'x-format') === 'xtc') {
     let settings;
@@ -364,8 +374,11 @@ async function handleBoxes(req, res, session, n, use) {
 
 // POST /book/<id>/rebuild: build the book again using improved page readings.
 // Pages aren't read with OCR again, so this only takes the time for pictures and chapters.
-// The request body can change the book's settings (JSON: { firstPageCover }): page 1
-// as the cover, its text left out of the book, instead of a picture chosen.
+// The request body can change the book's settings (JSON: { firstPageCover, contentsPages, device }):
+// page 1 as the cover, its text left out of the book, instead of a picture chosen; the
+// pages of the book's own table of contents to take its chapters from ([] for none, null
+// to look for it); the reader its pictures are drawn for. Pages aren't read again, so
+// changes made to them stay.
 async function handleRebuild(req, res, session) {
   if (session.busy) return sendError(res, 409, 'Busy reading a page. Try again in a moment.');
   let changes;
@@ -375,8 +388,19 @@ async function handleRebuild(req, res, session) {
   } catch {
     return sendError(res, 400, 'The book’s settings could not be read.');
   }
-  const firstPageCover = typeof changes.firstPageCover === 'boolean' ? changes.firstPageCover : !!session.options.firstPageCover;
-  const options = { ...session.options, firstPageCover };
+  let options;
+  try {
+    options = { ...session.options };
+    if (typeof changes.firstPageCover === 'boolean') options.firstPageCover = changes.firstPageCover;
+    if (changes.contentsPages === null) delete options.contentsPages; // looked for again
+    else if (changes.contentsPages !== undefined) options.contentsPages = contentsPagesFrom(changes.contentsPages);
+    if (changes.device !== undefined) {
+      if (!DEVICES[changes.device]) throw new Error(`Unknown reader "${changes.device}".`);
+      options.device = changes.device; // its pictures are drawn again for this reader's screen
+    }
+  } catch (err) {
+    return sendError(res, 400, err.message);
+  }
   session.busy = true;
   try {
     await streamJob(res, async (send, onProgress) => {
@@ -385,7 +409,7 @@ async function handleRebuild(req, res, session) {
       Object.assign(book, { fileName: session.book.fileName, title: session.book.title, author: session.book.author });
       session.book = book;
       session.options = options;
-      if (firstPageCover) session.cover = null; // page 1 is the cover, not a picture chosen
+      if (changes.firstPageCover === true) session.cover = null; // page 1 is the cover, not a picture chosen
       session.improved.clear();
       return bookSummary(session);
     });

@@ -76,12 +76,14 @@ Each line shows its book's cover once it's made. A link shows its article's titl
 
 **Its settings** are in four sections; each shows its current choice when closed:
 
-1. **Details:** the title and author, taken from the PDF or the article if you leave them blank. A change goes in the book at once. The book's contents are here too: click a chapter to go to it.
+1. **Details:** the title and author, taken from the PDF or the article if you leave them blank. A change goes in the book at once. The book's contents are here too: click a chapter to go to it. For an EPUB of a PDF, the chapters follow the book's own table of contents (Daftar Isi) when it has one: it's looked for in the first 20 and last 10 pages, and used when it lists 5 or more chapters with page numbers whose titles are found in the book. If it's missed or the wrong page, give the PDF page it's on and click **Use**, or open that page in **Scanned pages** and click **Use as the Daftar Isi**; **Find it** looks for it again. Each entry's title and page number ("Bandung di Ujung Malam - 181") make a chapter that starts on that page, found from the page numbers printed on the pages, so it doesn't matter how many pages come before page 1; entries that can't be found are listed. The Daftar Isi page itself leaves the book, which has its own contents. **Remove** makes the chapters without it.
 2. **Cover:** a picture of your own (JPEG, PNG or WebP, up to 20 MB), or drop one on it. It replaces the cover taken from the PDF or the article; **Remove** goes back to it. For an EPUB of a PDF, **Use page 1** makes the PDF's first page the cover, whatever is on it, and leaves its text out of the book; the book is built again for it, without reading scanned pages again. **Remove** puts page 1's text back.
 3. **Reader and pictures:** your e-reader (Xteink X4 Pro, X4 or X3). An EPUB's pictures and cover are drawn for its screen. **Pictures** puts them **In the text**, with the text above and below each one (a picture that doesn't fit in the rest of a screen goes at the top of the next), or each **On their own page**, filling it. **Full-page pictures** chooses how portrait pictures that fill most of their page go in the book: upright, or turned on their side and cut into **2** or **3 parts** that each fill the screen, as in an XTC book. Changing it updates the book at once.
 4. **Output:** an EPUB for any e-reader, or for a PDF an XTC book for an Xteink reader ([Xteink books](#xteink-books-xtc)), with its settings. Web pages always become an EPUB.
 
-Another reader or output converts the book again: **Convert this book again** appears, and the book takes its place in the list. **Use these settings for all PDF books** (or **web page books**) gives every book of the tab this one's reader, pictures and output (each keeps its own title, author and cover), converts again those made with others, and uses them for new books too. The settings for new books are under **Change**, below the list.
+Another reader for an EPUB of a PDF draws the book again at once for its screen, without reading its pages again, so your changes to scanned pages stay. Another output converts the book again: **Convert this book again** appears, and the book takes its place in the list. **Use these settings for all PDF books** (or **web page books**) gives every book of the tab this one's reader, pictures and output (each keeps its own title, author and cover), converts again those made with others, and uses them for new books too. The settings for new books are under **Change**, below the list.
+
+The books are kept only while the page is open: the browser asks before you leave or reload it while a book is being made, or is made and not downloaded since it last changed.
 
 When a book looks right, click **Download** under its settings. **Download all** saves every book of the tab that's ready in one zip file. **Remove from the list** takes a book out.
 
@@ -96,7 +98,7 @@ For scanned books, a **Scanned pages** tab above the preview shows a card for ea
 
 **Previous low page** and **Next low page** go from one page read at 75% or lower to the next. To put every page read at 90% or lower in the book as a picture at once, click **Keep N pages at 90% or lower as pictures** above the cards and choose **Whole**, **2 parts** or **3 parts**; pages whose text you typed keep it. **Use the text of N pages kept as pictures** undoes it.
 
-Then click **Update the book** to use the changed pages. This takes under a minute, because the other pages aren't read again. Pages read below 30% are marked as mostly pictures (a cover, for example).
+Then click **Update the book** to use the changed pages. This takes under a minute, because the other pages aren't read again. **Download** (and **Download all**) puts changed pages in the book first, so the file always has them. Pages read below 30% are marked as mostly pictures (a cover, for example).
 
 The server keeps the last 20 books of PDFs and 50 books of web pages in memory, so each can still be changed and downloaded. Restarting the server clears them, and so does reloading the page: the list starts empty again.
 
