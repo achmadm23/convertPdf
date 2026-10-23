@@ -6,7 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const JSZip = require('jszip');
-const { measureLayout, findGaps, detectFigures, findPictures, cropBoxes, sidewaysParts, renderCover, imageCover } = require('./figures');
+const { measureLayout, findGaps, detectFigures, sidewaysParts, renderCover, imageCover } = require('./figures');
+const { findPagePictures } = require('./picture-pages');
 const { recognizePages, finishPages, LANGUAGES } = require('./ocr');
 const { openPdf } = require('./pdf');
 const { DEVICES, DITHERING, convertPdfPages, coverPage, bookPages, buildXtc, extensionFor } = require('./xtc');
@@ -47,8 +48,6 @@ function escapeXml(s) {
 }
 
 const letterCount = s => (s.match(/\p{L}/gu) || []).length;
-// a picture at least this share of its page's height is a full-page picture
-const FULL_PAGE = 0.6;
 // page and chapter numbers, allowing a stray symbol or two from scanning noise (e.g. "'32", "■55")
 const isNumberLike = s => /^[^\p{L}\d]{0,2}(\d{1,4}|[ivxlc]{1,6})[^\p{L}\d]{0,2}$/iu.test(s);
 
@@ -119,8 +118,12 @@ function besidePicture(lines, fig) {
   const beside = l => !l.image && l.y < fig.top && (l.top ?? l.y + l.size) > fig.bottom;
   const right = lines.filter(l => beside(l) && l.x >= fig.right - 2);
   const left = lines.filter(l => beside(l) && l.xEnd <= fig.left + 2);
-  const colLeft = right.length ? Math.min(...right.map(l => l.x)) : null;
-  const colRight = left.length ? Math.max(...left.map(l => l.xEnd)) : null;
+  // the column's edge is where most of its lines start (or end), not the furthest
+  // one: OCR can stretch the first word of a line over a stroke of the picture next
+  // to it, and that one line would make all the others look indented
+  const quarter = (values, from) => [...values].sort((a, b) => from * (a - b))[Math.floor(values.length / 4)];
+  const colLeft = right.length ? quarter(right.map(l => l.x), 1) : null;
+  const colRight = left.length ? quarter(left.map(l => l.xEnd), -1) : null;
   return lines.map(l =>
     right.includes(l) ? { ...l, colLeft } : left.includes(l) ? { ...l, colRight } : l
   );
@@ -208,7 +211,9 @@ function linesToBlocks(lines, bodySize) {
 //   ocr: the `ocr` result of an earlier run on the same PDF, whose pages aren't read again
 //   onOcrPage(n, { confidence, text, thumbnail }): called as each scanned page is read
 // The result's `ocr` holds every scanned page's reading, for passing back in later.
-async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: previous, onOcrPage, screen } = {}) {
+// firstPageCover: page 1 is the cover, whatever is on it, and its text is left out
+// (chosen in the web UI); otherwise page 1 is the cover only if it's mostly a picture.
+async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: previous, onOcrPage, screen, firstPageCover = false } = {}) {
   const doc = await openPdf(buffer);
 
   let meta = {};
@@ -275,19 +280,25 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   const mayHavePictures = n =>
     drawn(n) ? drawn(n).length > 0 : readWords.has(n) || findGaps(pageLines[n - 1], layout, bodySize).length > 0;
   const hasCoverCandidate = pageLines.length > 0 && pageLines[0].filter(layout.isLong).length < 5;
-  const firstChecked = hasCoverCandidate ? 2 : 1;
+  const coverChecked = pageLines.length > 0 && (firstPageCover || hasCoverCandidate);
+  const firstChecked = coverChecked ? 2 : 1;
   const candidates = [];
   for (let n = firstChecked; n <= doc.numPages; n++) {
     if (!picturePages.has(n) && mayHavePictures(n)) candidates.push(n);
   }
-  const renders = candidates.length + picturePages.size + (hasCoverCandidate ? 1 : 0);
+  const renders = candidates.length + picturePages.size + (coverChecked ? 1 : 0);
   let rendered = 0;
   onProgress({ stage: 'pictures', done: 0, total: renders });
 
   let cover = null;
-  // a first page that is mostly picture with hardly any body text is the cover,
-  // unless it was kept as a picture in parts, which go in the book instead
-  if (hasCoverCandidate && pictureParts(1) === 1 && !drawn(1)) {
+  if (firstPageCover && pageLines.length > 0) {
+    cover = await renderCover(await doc.getPage(1), screen);
+    pageLines[0] = [];
+    picturePages.delete(1); // it's the cover, so not a picture in the text as well
+    onProgress({ stage: 'pictures', done: ++rendered, total: renders });
+  } else if (hasCoverCandidate && pictureParts(1) === 1 && !drawn(1)) {
+    // a first page that is mostly picture with hardly any body text is the cover,
+    // unless it was kept as a picture in parts, which go in the book instead
     const first = await doc.getPage(1);
     const height = first.view[3] - first.view[1];
     const [picture] = await detectFigures(first, pageLines[0], [{ top: height, bottom: 0 }], layout, screen);
@@ -309,16 +320,20 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   // where the pictures are on each scanned page, as boxes like the ones drawn
   // (cleanBoxes), for showing them on the page
   const pictureBoxes = {};
-  for (const n of candidates) {
-    const page = await doc.getPage(n);
-    const figures = drawn(n)
-      ? await cropBoxes(page, drawn(n), screen)
+  // the pages are searched several at once (picture-pages.js), then their
+  // pictures go in the text page by page, in order
+  const tasks = candidates.map(n =>
+    drawn(n)
+      ? { n, find: 'drawn', boxes: drawn(n) }
       : readWords.has(n)
-        ? await findPictures(page, layoutLines[n - 1], layout, screen)
-        : await detectFigures(page, pageLines[n - 1], findGaps(pageLines[n - 1], layout, bodySize), layout, screen);
-    const pageWidth = page.view[2] - page.view[0];
-    const pageHeight = page.view[3] - page.view[1];
-    page.cleanup();
+        ? { n, find: 'words', lines: layoutLines[n - 1] }
+        : { n, find: 'gaps', lines: pageLines[n - 1], gaps: findGaps(pageLines[n - 1], layout, bodySize) }
+  );
+  const found = await findPagePictures(buffer, doc, tasks, layout, screen, () =>
+    onProgress({ stage: 'pictures', done: Math.min(++rendered, renders), total: renders })
+  );
+  for (const n of candidates) {
+    const { figures, pageWidth, pageHeight } = found.get(n);
     if (ocr?.pages.has(n)) {
       const share = v => Math.round(v * 10000) / 10000;
       pictureBoxes[n] = figures.map(f => ({
@@ -326,16 +341,11 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
         w: share((f.right - f.left) / pageWidth), h: share((f.top - f.bottom) / pageHeight),
       }));
     }
-    onProgress({ stage: 'pictures', done: Math.min(++rendered, renders), total: renders });
     for (const fig of figures) {
       const name = `img${images.length + 1}.png`;
-      // a portrait picture filling most of its page can also go in the book turned
-      // sideways in 2 or 3 parts (buildEpub's pictureParts): both are made now, so
-      // switching between them later needs no converting again
-      const high = fig.top - fig.bottom;
-      const fullPage = high >= pageHeight * FULL_PAGE && high > fig.right - fig.left;
-      const split = fullPage && { 2: sidewaysParts(fig.crop, 2, screen), 3: sidewaysParts(fig.crop, 3, screen) };
-      images.push({ name, data: fig.data, ...(split && { split }) });
+      // a portrait picture filling most of its page also comes turned sideways in
+      // 2 or 3 parts (buildEpub's pictureParts, see figures.js pagePictures)
+      images.push({ name, data: fig.data, ...(fig.split && { split: fig.split }) });
       // text shown inside the cropped picture is dropped; anything outside it stays.
       // Text typed in by hand all stays: it isn't where it was on the page
       const lines = ocr?.pages.get(n)?.manual

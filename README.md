@@ -77,7 +77,7 @@ Each line shows its book's cover once it's made. A link shows its article's titl
 **Its settings** are in four sections; each shows its current choice when closed:
 
 1. **Details:** the title and author, taken from the PDF or the article if you leave them blank. A change goes in the book at once. The book's contents are here too: click a chapter to go to it.
-2. **Cover:** a picture of your own (JPEG, PNG or WebP, up to 20 MB), or drop one on it. It replaces the cover taken from the PDF or the article; **Remove** goes back to it.
+2. **Cover:** a picture of your own (JPEG, PNG or WebP, up to 20 MB), or drop one on it. It replaces the cover taken from the PDF or the article; **Remove** goes back to it. For an EPUB of a PDF, **Use page 1** makes the PDF's first page the cover, whatever is on it, and leaves its text out of the book; the book is built again for it, without reading scanned pages again. **Remove** puts page 1's text back.
 3. **Reader and pictures:** your e-reader (Xteink X4 Pro, X4 or X3). An EPUB's pictures and cover are drawn for its screen. **Pictures** puts them **In the text**, with the text above and below each one (a picture that doesn't fit in the rest of a screen goes at the top of the next), or each **On their own page**, filling it. **Full-page pictures** chooses how portrait pictures that fill most of their page go in the book: upright, or turned on their side and cut into **2** or **3 parts** that each fill the screen, as in an XTC book. Changing it updates the book at once.
 4. **Output:** an EPUB for any e-reader, or for a PDF an XTC book for an Xteink reader ([Xteink books](#xteink-books-xtc)), with its settings. Web pages always become an EPUB.
 
@@ -92,7 +92,7 @@ For scanned books, a **Scanned pages** tab above the preview shows a card for ea
 - **Text of the page:** correct the text or type it yourself, looking at the scan above it, then **Save text**. Leave an empty line between paragraphs. Your text is used instead of what OCR read, and the page stays editable.
 - **Read again** reads the page with other settings (higher resolution, black and white, the page as one block of text) and keeps the best reading if it's better than the first.
 - **Keep the whole page as a picture** instead of its text: for a handwritten letter, a table, or a page OCR garbles. **Whole** keeps it upright; **2 parts** or **3 parts** turn it on its side and cut it into halves, or thirds that overlap a little, as in an XTC book: each part fills the screen, so the text is bigger. Turn your e-reader on its side to read them. **Use its text** undoes it. A first page kept whole as a picture becomes the book's cover.
-- **Draw a box:** the pictures found on the page are marked on its scan with dashed boxes. When one was missed, cut short, or isn't a picture, drag across the page to draw a box around a picture, drag a box to move it or its corner to resize it, and × removes it. **Save pictures** puts what's inside the boxes in the book as pictures, and the text outside them stays text; with no boxes, the whole page is text. **Use found pictures** goes back to the ones the converter found.
+- **Draw a box:** the pictures found on the page are marked on its scan with dashed boxes. When one was missed, cut short, or isn't a picture, drag across the page to draw a box around a picture, drag a box to move it or its corner to resize it, and × removes it. **Save pictures** puts what's inside the boxes in the book as pictures, and the text outside them stays text; with no boxes, the whole page is text. Saving reads the page again with the boxes left out (a few seconds), so text right beside a drawing, which OCR can mix up with the drawing's lines, is read cleanly. **Use found pictures** goes back to the ones the converter found.
 
 **Previous low page** and **Next low page** go from one page read at 75% or lower to the next. To put every page read at 90% or lower in the book as a picture at once, click **Keep N pages at 90% or lower as pictures** above the cards and choose **Whole**, **2 parts** or **3 parts**; pages whose text you typed keep it. **Use the text of N pages kept as pictures** undoes it.
 
@@ -235,6 +235,7 @@ To add a language, install its data (for example `npm install @tesseract.js-data
 |---|---|
 | `index.js` | Reads the PDF, builds paragraphs and chapters, writes the EPUB. Also the command-line tool. |
 | `figures.js` | Finds and crops pictures, and renders the cover (from the PDF or a picture you choose). |
+| `picture-pages.js` | In the app, finds the pictures on several pages at once, in worker threads (up to 4); the website does them one by one. |
 | `eink.js` | Turns pictures into full-screen e-ink pages (480 x 800, 4 shades of gray, dithered). |
 | `ocr.js` | Reads scanned pages with OCR (Tesseract). |
 | `ocr-platform.js` | Where OCR finds its language data and how many pages it reads at once (the app's settings). |

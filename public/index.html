@@ -307,6 +307,12 @@
   dialog { width: min(92vw, 520px); padding: 0; border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--text); }
   dialog::backdrop { background: rgba(21, 23, 26, .35); }
   dialog form { display: flex; flex-direction: column; gap: 14px; padding: 20px; }
+  dialog p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+  /* Download and Send, side by side */
+  .get-row { display: flex; gap: 8px; }
+  .get-row .btn.big { width: auto; }
+  .get-row #download { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; line-height: 46px; }
+  .get-row #send { flex: none; }
 
   /* the settings: of the book shown, or for new books */
   .settings-head { display: flex; flex-direction: column; gap: 6px; padding: 18px 20px 14px; border-bottom: 1px solid var(--rule); }
@@ -366,6 +372,9 @@
     <button type="button" class="btn primary" id="downloadAll" disabled>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
       <span id="downloadAllText">Download all</span></button>
+    <button type="button" class="btn" id="sendAll" disabled hidden>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><path d="M2 9a15 15 0 0 1 20 0"/><circle cx="12" cy="19.5" r="1"/></svg>
+      <span id="sendAllText">Send all</span></button>
   </div>
 </header>
 
@@ -603,6 +612,7 @@
             <span id="coverName">Taken from the PDF</span>
             <div class="cover-buttons">
               <button type="button" class="btn small" id="coverChoose">Choose image</button>
+              <button type="button" class="btn small" id="coverFirstPage" hidden>Use page 1</button>
               <button type="button" class="btn small" id="coverRemove" hidden>Remove</button>
             </div>
           </div>
@@ -741,7 +751,10 @@
     <div class="settings-foot" id="bookFoot" hidden>
       <button type="button" class="btn quiet" id="useForAll">Use these settings for all books</button>
       <span class="small" style="text-align: center">Title, author and cover stay each book’s own.</span>
-      <a class="btn big primary disabled" id="download" aria-disabled="true" tabindex="-1">Download</a>
+      <div class="get-row">
+        <a class="btn big primary disabled" id="download" aria-disabled="true" tabindex="-1">Download</a>
+        <button type="button" class="btn big soft" id="send" disabled hidden title="Send to your reader over Wi-Fi">Send</button>
+      </div>
       <button type="button" class="link" id="removeBook" style="align-self: center">Remove from the list</button>
     </div>
 
@@ -763,6 +776,23 @@
     <div class="row-end">
       <button type="submit" class="btn" value="cancel">Cancel</button>
       <button type="button" class="btn primary" id="addMoreLinks">Add links</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="sendDialog" aria-labelledby="sendDialogTitle">
+  <form method="dialog">
+    <h2 class="panel-title" id="sendDialogTitle">Send to your reader</h2>
+    <p>On the reader, turn on Wi-Fi file transfer, on the same Wi-Fi as this computer. Type the address it shows.</p>
+    <label class="field">Reader’s address
+      <input id="readerAddress" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="192.168.1.23">
+    </label>
+    <label class="field">Folder on the reader
+      <input id="readerFolder" type="text" autocomplete="off" spellcheck="false" placeholder="/">
+    </label>
+    <div class="row-end">
+      <button type="submit" class="btn" value="cancel">Cancel</button>
+      <button type="button" class="btn primary" id="sendNow">Send</button>
     </div>
   </form>
 </dialog>
@@ -794,11 +824,12 @@
       xtc ? `book/${id}.xtc?download=1` : `book/${id}.epub?parts=${parts}&pictures=${pictures}&download=1`;
     return {
       // upload the PDF and follow the server's stream of progress (see streamRequest)
-      convert(pdf, { title, author, device, xtc }, handlers) {
+      convert(pdf, { title, author, device, xtc, firstPageCover }, handlers) {
         const headers = { 'Content-Type': 'application/pdf', 'X-Filename': encodeURIComponent(pdf.name) };
         if (device) headers['X-Device'] = device;
         if (title) headers['X-Title'] = encodeURIComponent(title);
         if (author) headers['X-Author'] = encodeURIComponent(author);
+        if (firstPageCover) headers['X-First-Page-Cover'] = '1';
         if (xtc) {
           headers['X-Format'] = 'xtc';
           headers['X-Xtc'] = encodeURIComponent(JSON.stringify(xtc));
@@ -808,7 +839,9 @@
       // web pages: `links` is text with one link per line
       convertLinks: (links, { title, author, device }, handlers) =>
         streamRequest('links', JSON.stringify({ links, title, author, device }), { 'Content-Type': 'application/json' }, handlers),
-      rebuild: (id, handlers) => streamRequest(`book/${id}/rebuild`, null, {}, handlers),
+      // `changes`: the book's settings to change, { firstPageCover }
+      rebuild: (id, handlers, changes) =>
+        streamRequest(`book/${id}/rebuild`, changes ? JSON.stringify(changes) : null, changes ? { 'Content-Type': 'application/json' } : {}, handlers),
       retry: (id, n) => json(`book/${id}/pages/${n}/retry`, { method: 'POST' }),
       setText: (id, n, text) =>
         json(`book/${id}/pages/${n}/text`, { method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: text }),
@@ -832,6 +865,8 @@
       file: (id, { xtc, parts = 1, pictures }) => send(downloadUrl(id, xtc, parts, pictures)).then(res => res.arrayBuffer()),
       scanUrl: (id, n) => `book/${id}/pages/${n}.jpg`,
       screenUrl: async (id, n, version) => `book/${id}/screens/${n}.png?v=${version}`,
+      send: (id, where) =>
+        json(`book/${id}/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(where) }),
       downloadUrl,
       version: () => json('about.json').then(about => about.version),
     };
@@ -984,6 +1019,7 @@
   // the book shown, once it's made: the preview's
   let bookId = null;
   let bookMeta = null;
+  let sending = false; // books are being sent to the reader
   let epub = null;
   let rendition = null;
   let previewToken = 0;
@@ -1093,6 +1129,8 @@
     $('queueFill').style.width = `${Math.round(share * 100)}%`;
     $('downloadAll').disabled = !ready;
     $('downloadAllText').textContent = ready ? `Download all · ${ready}` : 'Download all';
+    $('sendAll').disabled = !ready || sending || !api.send;
+    $('sendAllText').textContent = ready ? `Send all · ${ready}` : 'Send all';
     const d = defaultsBy[source];
     $('defaultsText').textContent = `New books: ${d.format === 'xtc' ? 'XTC' : 'EPUB'} · ${deviceName(d.device)}`;
     // each source's tab says how many books it has, and whether one is being made
@@ -1247,6 +1285,7 @@
       author: b.author,
       device: b.settings.device,
       xtc: xtc ? { ...b.settings.xtc, device: b.settings.device } : null,
+      firstPageCover: !xtc && !web && !!b.firstPageCover,
     };
     const handlers = {
       onProgress: update => {
@@ -1504,7 +1543,7 @@
     if (b) {
       const author = b.author || (b.meta && b.meta.author);
       $('sumDetails').textContent = bookTitle(b) + (author && author !== 'Unknown' ? ` · ${author}` : '');
-      $('sumCover').textContent = b.cover ? b.cover.name : `Taken from the ${origin(b)}`;
+      $('sumCover').textContent = coverName(b);
     }
     $('sumReader').textContent = readerSummary(s);
     $('sumOutput').textContent = outputSummary(s);
@@ -1608,19 +1647,28 @@
     b.coverUrl = f ? URL.createObjectURL(f) : null;
   }
 
+  // Page 1 as the cover (b.firstPageCover) applies to EPUBs of PDFs: an XTC book
+  // has its own setting for that (First page is the cover).
+  const firstPageCover = b => !!b.firstPageCover && b.kind === 'pdf' && b.settings.format !== 'xtc';
+  const coverName = b => (b.cover ? b.cover.name : firstPageCover(b) ? 'Page 1 of the PDF' : `Taken from the ${origin(b)}`);
+
   function showCover() {
     const b = current;
     if (!b) return;
     const thumb = $('coverThumb'), img = thumb.querySelector('img');
-    thumb.classList.toggle('empty', !b.cover);
-    thumb.querySelector('span').hidden = !!b.cover;
+    const src = b.coverUrl || (firstPageCover(b) && b.state === 'ready' && b.thumb) || null;
+    thumb.classList.toggle('empty', !src);
+    thumb.querySelector('span').hidden = !!src;
     thumb.querySelector('span').textContent = b.kind === 'web' ? 'Web' : 'PDF';
-    img.hidden = !b.cover;
-    if (b.coverUrl) img.src = b.coverUrl;
+    img.hidden = !src;
+    if (src) img.src = src;
     else img.removeAttribute('src');
-    $('coverName').textContent = b.cover ? b.cover.name : `Taken from the ${origin(b)}`;
+    $('coverName').textContent = coverName(b);
     $('coverChoose').textContent = b.cover ? 'Change' : 'Choose image';
-    $('coverRemove').hidden = !b.cover;
+    $('coverRemove').hidden = !(b.cover || firstPageCover(b));
+    const firstPage = $('coverFirstPage');
+    firstPage.hidden = b.kind !== 'pdf' || b.settings.format === 'xtc' || firstPageCover(b);
+    firstPage.disabled = b.state === 'converting';
     $('coverNote').textContent = b.settings.format === 'xtc'
       ? 'Replaces the first page, drawn for the reader’s screen.'
       : 'JPEG, PNG or WebP. Drawn for the reader’s screen in 4 shades of gray.';
@@ -1640,7 +1688,8 @@
       if (f) showStatus('The cover will be used when the book is made.');
       return;
     }
-    showStatus(f ? 'Setting the cover…' : `Using the cover from the ${origin(b)}…`, { busy: true });
+    const back = firstPageCover(b) ? 'page 1 as the cover' : `the cover from the ${origin(b)}`;
+    showStatus(f ? 'Setting the cover…' : `Using ${back}…`, { busy: true });
     try {
       const r = await api.setCover(b.id, b.cover);
       if (r.book) b.meta = r.book;
@@ -1651,7 +1700,7 @@
         showBookInfo();
         await openPreview(true);
       }
-      showStatus(f ? 'Cover updated.' : `Using the cover from the ${origin(b)}.`);
+      showStatus(f ? 'Cover updated.' : `Using ${back}.`);
     } catch (err) {
       // the book keeps its previous cover, so don't show a picture it isn't using
       setBookCover(b, before);
@@ -1661,9 +1710,59 @@
     }
   }
 
+  // Page 1 of the PDF as the cover, and its text out of the book (on), or back to
+  // the PDF's own cover with page 1's text (off). A book made already is built
+  // again for it: its scanned pages aren't read again. A picture chosen gives way to page 1.
+  async function useFirstPage(on) {
+    const b = current;
+    if (!b || b.state === 'converting') return;
+    if (b.state !== 'ready') {
+      b.firstPageCover = on;
+      if (on) setBookCover(b, null);
+      showCover();
+      showSummaries();
+      renderBooks();
+      showStatus(on ? 'Page 1 will be the cover when the book is made.' : '');
+      return;
+    }
+    $('coverFirstPage').disabled = $('coverRemove').disabled = true;
+    const doing = on ? 'Using page 1 as the cover' : `Using the cover from the ${origin(b)}`;
+    showStatus(`${doing}…`, { busy: true, share: 0 });
+    try {
+      const meta = await api.rebuild(b.id, {
+        onProgress: ({ stage, done, total }) => {
+          if (!total || b !== current) return;
+          if (stage === 'text') showStatus(`${doing} · reading text, page ${done} of ${total}`, { busy: true, share: (done / total) * 0.1 });
+          if (stage === 'pictures') showStatus(`${doing} · pictures, page ${done} of ${total}`, { busy: true, share: 0.1 + (done / total) * 0.9 });
+        },
+      }, { firstPageCover: on });
+      b.firstPageCover = on;
+      if (on) setBookCover(b, null);
+      b.meta = meta;
+      if (b.scan) scans.rebuilt(b, meta);
+      await refreshThumb(b);
+      if (b === current) {
+        bookMeta = meta;
+        showBookInfo();
+        showSummaries();
+        screenVersion++;
+        previewStale = true;
+        if (!$('bookView').hidden) await openPreview(true);
+        showStatus(on ? 'Page 1 is the cover, and its text is left out of the book.' : `Using the cover from the ${origin(b)}.`);
+      }
+    } catch (err) {
+      showStatus(err.message || 'Could not change the cover.', { error: true });
+    } finally {
+      $('coverRemove').disabled = false;
+      if (b === current) showCover();
+    }
+  }
+  $('coverFirstPage').addEventListener('click', () => useFirstPage(true));
+
   const coverInput = $('coverFile'), coverPick = $('coverPick');
   $('coverChoose').addEventListener('click', () => coverInput.click());
-  $('coverRemove').addEventListener('click', () => chooseCover(null));
+  // a picture chosen goes first; then page 1 as the cover, if it was used
+  $('coverRemove').addEventListener('click', () => (current && !current.cover && firstPageCover(current) ? useFirstPage(false) : chooseCover(null)));
   coverInput.addEventListener('change', () => {
     chooseCover(coverInput.files[0]);
     coverInput.value = ''; // so choosing the same file again still counts
@@ -2072,19 +2171,21 @@
     const savedBoxes = (p, res) => {
       const count = res.boxes?.length;
       Object.assign(p, { drawn: res.drawn, boxes: res.boxes || [], changed: true });
+      // the page's text, read again around the boxes
+      if (res.text !== undefined) Object.assign(p, { text: res.text, confidence: res.confidence });
       p.note = {
         good: true,
         text: !res.drawn
           ? 'The pictures found on the page will be used again. Update the book to see them.'
           : count
-            ? `${count === 1 ? 'The picture in the box' : `The ${count} pictures in the boxes`} will go in the book, and the rest of the page stays text. Update the book to use ${count === 1 ? 'it' : 'them'}.`
+            ? `${count === 1 ? 'The picture in the box' : `The ${count} pictures in the boxes`} will go in the book, and the text around ${count === 1 ? 'it' : 'them'} was read again without ${count === 1 ? 'it' : 'them'}. Update the book to use ${count === 1 ? 'it' : 'them'}.`
             : 'The whole page will be text, with no pictures. Update the book to use it.',
       };
     };
     $('saveBoxes').addEventListener('click', e => {
       const boxes = drawing;
       drawing = null;
-      change(e.currentTarget, 'Saving…', (id, n) => api.setBoxes(id, n, boxes), savedBoxes);
+      change(e.currentTarget, boxes.length ? 'Reading the text around them…' : 'Saving…', (id, n) => api.setBoxes(id, n, boxes), savedBoxes);
     });
     $('foundBoxes').addEventListener('click', e => change(e.currentTarget, 'Saving…', (id, n) => api.setBoxes(id, n, null), savedBoxes));
 
@@ -2157,12 +2258,7 @@
           },
         });
         b.meta = meta;
-        r.pending = 0;
-        for (const p of r.pages.values()) {
-          p.changed = false;
-          p.note = null;
-        }
-        showPictures(b, meta.pictures);
+        rebuilt(b, meta);
         if (b === current) {
           bookMeta = meta;
           showBookInfo();
@@ -2177,6 +2273,16 @@
       updateCounts(b);
       if (b === shown) renderEditor();
     });
+
+    // the book was built again with its changed pages: none are waiting any more
+    function rebuilt(b, meta) {
+      b.scan.pending = 0;
+      for (const p of b.scan.pages.values()) {
+        p.changed = false;
+        p.note = null;
+      }
+      showPictures(b, meta.pictures);
+    }
 
     // Mark the pictures of each page on its scan, once the book is (re)built.
     function showPictures(b, pictures = {}) {
@@ -2222,6 +2328,12 @@
         b.scan.done = true;
         b.scan.total = meta.scannedPages || b.scan.total;
         showPictures(b, meta.pictures);
+        updateCounts(b);
+        if (b === shown) renderEditor();
+      },
+      // the book was built again (with page 1 as the cover, say): its changed pages are in it
+      rebuilt(b, meta) {
+        rebuilt(b, meta);
         updateCounts(b);
         if (b === shown) renderEditor();
       },
@@ -2391,6 +2503,7 @@
       download.removeAttribute('href');
       download.textContent = current && current.state === 'failed' ? 'Not made' : 'Download when it’s made';
     }
+    $('send').disabled = !ready || sending || !api.send;
     download.classList.toggle('disabled', !ready);
     download.setAttribute('aria-disabled', String(!ready));
     download.tabIndex = ready ? 0 : -1;
@@ -2434,6 +2547,65 @@
       showStatus(err.message || 'Could not save the books.', { error: true });
     } finally {
       showQueue();
+    }
+  });
+
+  // ---------- send to the reader ----------
+  // Each book is sent as its own file to an e-reader on the same Wi-Fi, at the
+  // address it shows in its file transfer mode (kept for next time).
+  let sendWhat = null; // 'one' (the book shown) or 'all'
+  const readerPlace = () => {
+    try { return JSON.parse(localStorage.getItem('reader') || 'null') || {}; } catch { return {}; }
+  };
+
+  function askWhereToSend(what) {
+    sendWhat = what;
+    const place = readerPlace();
+    $('readerAddress').value = place.address || '';
+    $('readerFolder').value = place.folder || '';
+    const count = books.filter(b => b.state === 'ready').length;
+    $('sendNow').textContent = what === 'all' ? `Send ${count} ${count === 1 ? 'book' : 'books'}` : 'Send';
+    $('sendDialog').showModal();
+    $('readerAddress').focus();
+  }
+  $('send').addEventListener('click', () => shownBook() && askWhereToSend('one'));
+  $('sendAll').addEventListener('click', () => askWhereToSend('all'));
+  $('readerAddress').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); $('sendNow').click(); }
+  });
+
+  $('sendNow').addEventListener('click', async () => {
+    const address = $('readerAddress').value.trim();
+    if (!address) return $('readerAddress').focus();
+    const folder = $('readerFolder').value.trim() || '/';
+    try { localStorage.setItem('reader', JSON.stringify({ address, folder })); } catch {}
+    $('sendDialog').close();
+    const list = sendWhat === 'all' ? books.filter(b => b.state === 'ready') : [shownBook()].filter(Boolean);
+    if (!list.length) return;
+    sending = true;
+    showQueue();
+    updateDownload();
+    const names = new Set();
+    let sent = 0;
+    try {
+      for (const b of list) {
+        // two books with the same name would overwrite each other on the reader
+        let name = b.meta.fileName;
+        for (let k = 2; names.has(name.toLowerCase()); k++) name = b.meta.fileName.replace(/(.[^.]+)$/, ` (${k})$1`);
+        names.add(name.toLowerCase());
+        showStatus(list.length > 1 ? `Sending ${sent + 1} of ${list.length}: ${name}…` : `Sending ${name}…`,
+          { busy: true, share: list.length > 1 ? sent / list.length : null });
+        await api.send(b.id, { address, folder, name, parts: b.settings.parts, pictures: b.settings.pictures || 'inline' });
+        sent++;
+      }
+      showStatus(list.length > 1 ? `Sent ${sent} books to ${address}.` : `Sent ${list[0].meta.fileName} to ${address}.`);
+    } catch (err) {
+      const done = sent ? ` (${sent} of ${list.length} sent)` : '';
+      showStatus((err.message || 'Could not send the book.') + done, { error: true });
+    } finally {
+      sending = false;
+      showQueue();
+      updateDownload();
     }
   });
 

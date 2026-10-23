@@ -1,4 +1,4 @@
-// Local web UI: upload a PDF, preview the EPUB or XTC book, download.
+// Local web UI: upload a PDF, preview the EPUB or XTC book, download it or send it to the reader.
 // Usage: node server.js  then open http://localhost:3000
 
 const http = require('http');
@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const { analyzePdf, buildEpub, openPdf, readerScreen } = require('./index');
 const { imageCover, cleanBoxes } = require('./figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('./xtc');
-const { retryPage, manualReading } = require('./ocr');
+const { retryPage, manualReading, readAroundBoxes, readingWithBoxes } = require('./ocr');
 const { parseLinks, readWebPages, previewLink } = require('./web');
 
 const { version } = require('./package.json');
@@ -25,6 +25,8 @@ const MAX_COVER_BYTES = 20 * 1024 * 1024; // a cover picture chosen by the user
 const MAX_BOXES_BYTES = 16 * 1024; // the boxes drawn around a page's pictures
 const MAX_DETAILS_BYTES = 16 * 1024; // a book's title and author
 const MAX_LINKS_BYTES = 64 * 1024; // the links of web pages to convert, and their book's details
+const MAX_SEND_BYTES = 4 * 1024; // where to send a book: the reader's address and folder
+const SEND_TIMEOUT = 10 * 60 * 1000; // the reader takes in a file slowly over Wi-Fi
 
 const page = path.join(__dirname, 'public', 'index.html');
 const vendor = {
@@ -188,7 +190,10 @@ async function handleConvert(req, res) {
   const fileName = header(req, 'x-filename') || 'book.pdf';
   const name = path.basename(fileName, path.extname(fileName));
   const device = header(req, 'x-device');
-  const session = newSession(pdf, { title: header(req, 'x-title'), author: header(req, 'x-author'), name, ...(device && { device }) });
+  const session = newSession(pdf, {
+    title: header(req, 'x-title'), author: header(req, 'x-author'), name, ...(device && { device }),
+    ...(header(req, 'x-first-page-cover') === '1' && { firstPageCover: true }),
+  });
   if (header(req, 'x-format') === 'xtc') {
     let settings;
     try {
@@ -339,23 +344,48 @@ async function handleBoxes(req, res, session, n, use) {
   } catch (err) {
     return sendError(res, 400, err instanceof SyntaxError ? 'The picture boxes could not be read.' : err.message);
   }
-  const { boxes: old, ...reading } = current;
-  session.book.ocr.pages.set(n, use ? { ...reading, boxes } : reading);
+  // the text beside the pictures is read again without them (a few seconds)
+  session.busy = true;
+  let next;
+  try {
+    next = await readingWithBoxes(current, use ? boxes : null, async around =>
+      readAroundBoxes(await openPdf(session.pdf), n, around, session.book.ocr.language)
+    );
+  } finally {
+    session.busy = false;
+  }
+  session.book.ocr.pages.set(n, next);
   session.improved.add(n);
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ drawn: use, boxes: boxes || null, pendingPages: session.improved.size }));
+  res.end(JSON.stringify({
+    drawn: use, boxes: boxes || null, text: next.text, confidence: next.confidence, pendingPages: session.improved.size,
+  }));
 }
 
 // POST /book/<id>/rebuild: build the book again using improved page readings.
 // Pages aren't read with OCR again, so this only takes the time for pictures and chapters.
-async function handleRebuild(res, session) {
+// The request body can change the book's settings (JSON: { firstPageCover }): page 1
+// as the cover, its text left out of the book, instead of a picture chosen.
+async function handleRebuild(req, res, session) {
   if (session.busy) return sendError(res, 409, 'Busy reading a page. Try again in a moment.');
+  let changes;
+  try {
+    const body = (await readBody(req, MAX_DETAILS_BYTES)).toString('utf8');
+    changes = body ? JSON.parse(body) : {};
+  } catch {
+    return sendError(res, 400, 'The book’s settings could not be read.');
+  }
+  const firstPageCover = typeof changes.firstPageCover === 'boolean' ? changes.firstPageCover : !!session.options.firstPageCover;
+  const options = { ...session.options, firstPageCover };
   session.busy = true;
   try {
     await streamJob(res, async (send, onProgress) => {
-      const book = await analyzePdf(session.pdf, { ...session.options, onProgress, ocr: session.book.ocr });
-      book.fileName = session.book.fileName;
+      const book = await analyzePdf(session.pdf, { ...options, onProgress, ocr: session.book.ocr });
+      // the same PDF, so the title and author stay as they are (maybe changed by the user)
+      Object.assign(book, { fileName: session.book.fileName, title: session.book.title, author: session.book.author });
       session.book = book;
+      session.options = options;
+      if (firstPageCover) session.cover = null; // page 1 is the cover, not a picture chosen
       session.improved.clear();
       return bookSummary(session);
     });
@@ -450,24 +480,91 @@ function handleScreen(res, session, n) {
   res.end(png);
 }
 
+// The finished book's file and name: the XTC book, or the EPUB with its full-page
+// pictures turned sideways in `parts` parts and its pictures in the text or on pages of their own.
+async function bookFile(session, { parts = 1, pictures = 'inline' } = {}) {
+  if (session.xtc) return { data: buildXtc(session.xtc, session.xtcCover), name: xtcSummary(session).fileName };
+  const data = await buildEpub(session.book, {
+    cover: session.cover,
+    pictureParts: parts,
+    pictures: pictures === 'page' ? 'page' : 'inline',
+  });
+  return { data, name: session.book.fileName };
+}
+
 // GET /book/<id>.epub[?parts=2|3][&pictures=page][&download=1]: package the book as an
 // EPUB, with its full-page pictures turned sideways in 2 or 3 parts when asked, and
 // its pictures in the text or (pictures=page) on pages of their own.
 async function handleBook(req, res, id, query) {
   const session = sessions.get(id);
-  const book = session?.book;
-  if (!book) return sendError(res, 404, 'This book has expired. Please convert the PDF again.');
-  const epub = await buildEpub(book, {
-    cover: session.cover,
-    pictureParts: Number(query.get('parts')) || 1,
-    pictures: query.get('pictures') === 'page' ? 'page' : 'inline',
+  if (!session?.book) return sendError(res, 404, 'This book has expired. Please convert the PDF again.');
+  const { data: epub, name } = await bookFile(session, {
+    parts: Number(query.get('parts')) || 1,
+    pictures: query.get('pictures'),
   });
   const headers = { 'Content-Type': 'application/epub+zip', 'Content-Length': epub.length };
   if (query.get('download')) {
-    headers['Content-Disposition'] = `attachment; filename*=UTF-8''${encodeURIComponent(book.fileName)}`;
+    headers['Content-Disposition'] = `attachment; filename*=UTF-8''${encodeURIComponent(name)}`;
   }
   res.writeHead(200, headers);
   res.end(epub);
+}
+
+// The reader's address as typed: an IP address or name on this Wi-Fi (192.168.1.23,
+// crosspoint.local), with a port if it has one. Only addresses on the local network,
+// so a book never leaves it.
+function readerAddress(text) {
+  const address = String(text || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  const match = address.match(/^([\w.-]+)(?::(\d{1,5}))?$/);
+  if (!match) throw new Error('Type the reader’s address as it shows it, like 192.168.1.23.');
+  const host = match[1].toLowerCase();
+  const ip = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)?.slice(1).map(Number);
+  const local = ip
+    ? ip.every(n => n <= 255) &&
+      (ip[0] === 10 || (ip[0] === 172 && ip[1] >= 16 && ip[1] <= 31) || (ip[0] === 192 && ip[1] === 168) || (ip[0] === 169 && ip[1] === 254))
+    : host.endsWith('.local') || !host.includes('.');
+  if (!local) throw new Error(`${host} is not on this Wi-Fi. Type the address the reader shows, like 192.168.1.23.`);
+  return match[2] ? `${host}:${match[2]}` : host;
+}
+
+// POST /book/<id>/send: upload the finished book to an e-reader on the same Wi-Fi
+// (JSON: { address, folder, name, parts, pictures }), the way the reader's own
+// file transfer page does (CrossPoint firmware: POST /upload?path=<folder>, the
+// file in the form field "file"). `name` is the file's name on the reader.
+async function handleSend(req, res, session) {
+  if (!session.xtc && !session.book) return sendError(res, 409, 'The book is still being converted.');
+  let request, address;
+  try {
+    request = JSON.parse((await readBody(req, MAX_SEND_BYTES)).toString('utf8'));
+    address = readerAddress(request.address);
+  } catch (err) {
+    return sendError(res, 400, err instanceof SyntaxError ? 'Where to send the book could not be read.' : err.message);
+  }
+  const folder = '/' + String(request.folder || '').split(/[\\/]+/).filter(p => p && p !== '.' && p !== '..').join('/');
+  const file = await bookFile(session, { parts: Number(request.parts) || 1, pictures: request.pictures });
+  const name = path.basename(String(request.name || '')).replace(/[\x00-\x1f<>:"|?*]/g, '') || file.name;
+
+  const form = new FormData();
+  form.append('file', new Blob([file.data]), name);
+  let answer;
+  try {
+    answer = await fetch(`http://${address}/upload?path=${encodeURIComponent(folder)}`, {
+      method: 'POST',
+      body: form,
+      signal: AbortSignal.timeout(SEND_TIMEOUT),
+    });
+  } catch (err) {
+    console.error(`Could not send ${name} to ${address}:`, err.cause?.code || err.message);
+    return sendError(res, 502,
+      `Could not reach the reader at ${address}. Check it is in Wi-Fi file transfer, on the same Wi-Fi as this computer, and that the address is the one it shows.`);
+  }
+  const text = (await answer.text().catch(() => '')).trim();
+  if (!answer.ok) {
+    return sendError(res, 502, `The reader at ${address} did not take ${name}` + (text ? `: ${text.slice(0, 200)}` : ` (error ${answer.status}).`));
+  }
+  console.log(`Sent ${name} (${Math.round(file.data.length / 1024)} KB) to ${address}${folder}`);
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ sent: name, address, folder }));
 }
 
 const server = http.createServer((req, res) => {
@@ -517,6 +614,13 @@ const server = http.createServer((req, res) => {
       console.error(err);
       if (!res.headersSent) sendError(res, 500, 'Could not change the details.');
     });
+  } else if (req.method === 'POST' && (match = route.match(/^\/book\/([\w-]+)\/send$/))) {
+    const session = sessions.get(match[1]);
+    if (!session) return sendError(res, 404, 'This book has expired. Please convert it again.');
+    handleSend(req, res, session).catch(err => {
+      console.error(err);
+      if (!res.headersSent) sendError(res, 500, err.message || 'Could not send the book.');
+    });
   } else if ((req.method === 'POST' || req.method === 'DELETE') && (match = route.match(/^\/book\/([\w-]+)\/cover$/))) {
     const session = sessions.get(match[1]);
     if (!session) return sendError(res, 404, 'This book has expired. Please convert the PDF again.');
@@ -541,7 +645,7 @@ const server = http.createServer((req, res) => {
       handleRetry(res, session, Number(match[3])).catch(fail);
     } else if (req.method === 'POST' && match[4]) {
       if (!session.book) return sendError(res, 409, 'The book is still being converted.');
-      handleRebuild(res, session).catch(fail);
+      handleRebuild(req, res, session).catch(fail);
     } else if (req.method === 'POST' && match[5]) {
       handleText(req, res, session, Number(match[5])).catch(fail);
     } else if ((req.method === 'POST' || req.method === 'DELETE') && match[6]) {

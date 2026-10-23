@@ -8,6 +8,8 @@ const { screenImage } = require('./eink');
 const SCALE = 2; // render resolution: 2 pixels per PDF point (144 dpi)
 const INK = 225; // pixel luminance below this counts as ink
 const MIN_GAP = 45; // points; smaller gaps between text lines are just spacing
+// a picture at least this share of its page's height is a full-page picture
+const FULL_PAGE = 0.6;
 
 const median = arr => {
   const s = [...arr].sort((a, b) => a - b);
@@ -16,13 +18,8 @@ const median = arr => {
 
 // Text block edges and line spacing shared by all pages of the book.
 function measureLayout(pageLines, bodySize) {
-  // body text, plus the smaller text used for notes and captions. Some PDFs
-  // (machine-translated ones) set each block of text in its own size, so text up
-  // to 30% smaller or larger counts too; headings start at 40% larger.
-  const isText = l =>
-    l.size >= Math.min(bodySize - 2.5, bodySize * 0.7) && l.size <= Math.max(bodySize + 1, bodySize * 1.3);
   const fullWidth = median(pageLines.flat().filter(l => Math.abs(l.size - bodySize) <= 1).map(l => l.xEnd - l.x));
-  const isLong = l => isText(l) && l.xEnd - l.x >= fullWidth * 0.6;
+  const { isLong } = layoutFrom({ bodySize, fullWidth });
 
   const tops = [];
   const bottoms = [];
@@ -34,17 +31,32 @@ function measureLayout(pageLines, bodySize) {
     bottoms.push(long[long.length - 1].y);
     for (let i = 1; i < long.length; i++) gaps.push(long[i - 1].y - long[i].y);
   }
-  // a line of real sentences, as opposed to a short label inside a picture
-  const isProse = l => isText(l) && (l.text.match(/\p{L}/gu) || []).length >= 15;
-  return {
-    isText,
-    isLong,
-    isProse,
+  return layoutFrom({
+    bodySize,
+    fullWidth,
     blockTop: median(tops),
     blockBottom: median(bottoms),
     lineGap: median(gaps) || bodySize * 1.4,
-  };
+  });
 }
+
+// The layout from its measures (as measureLayout makes them), with the tests of
+// lines that go with them. A worker thread gets the measures and makes its own.
+function layoutFrom(measures) {
+  const { bodySize, fullWidth } = measures;
+  // body text, plus the smaller text used for notes and captions. Some PDFs
+  // (machine-translated ones) set each block of text in its own size, so text up
+  // to 30% smaller or larger counts too; headings start at 40% larger.
+  const isText = l =>
+    l.size >= Math.min(bodySize - 2.5, bodySize * 0.7) && l.size <= Math.max(bodySize + 1, bodySize * 1.3);
+  const isLong = l => isText(l) && l.xEnd - l.x >= fullWidth * 0.6;
+  // a line of real sentences, as opposed to a short label inside a picture
+  const isProse = l => isText(l) && (l.text.match(/\p{L}/gu) || []).length >= 15;
+  return { ...measures, isText, isLong, isProse };
+}
+
+// The measures of a layout, without its tests, to send to a worker thread.
+const layoutMeasures = ({ isText, isLong, isProse, ...measures }) => measures;
 
 // Vertical ranges (PDF coordinates, top > bottom) with no body text or headings in them.
 function findGaps(lines, layout, bodySize) {
@@ -397,6 +409,33 @@ function sidewaysParts(canvas, parts, screen) {
   });
 }
 
+// The pictures on one page (a pdf.js page), found as `find` says: in the boxes the
+// user drew ('drawn', with `boxes`), anywhere beside the words OCR read ('words'),
+// or in the gaps between paragraphs ('gaps', with `gaps`). `lines` are the page's.
+// A picture filling most of its page also comes turned sideways in 2 and 3 parts
+// (`split`, for buildEpub's pictureParts), so switching between them later needs
+// no converting again. The page is cleaned up after.
+async function pagePictures(page, { find, lines, gaps, boxes }, layout, screen) {
+  const figures =
+    find === 'drawn'
+      ? await cropBoxes(page, boxes, screen)
+      : find === 'words'
+        ? await findPictures(page, lines, layout, screen)
+        : await detectFigures(page, lines, gaps, layout, screen);
+  const pageWidth = page.view[2] - page.view[0];
+  const pageHeight = page.view[3] - page.view[1];
+  page.cleanup();
+  return {
+    pageWidth,
+    pageHeight,
+    figures: figures.map(({ crop, ...fig }) => {
+      const high = fig.top - fig.bottom;
+      const fullPage = high >= pageHeight * FULL_PAGE && high > fig.right - fig.left;
+      return fullPage ? { ...fig, split: { 2: sidewaysParts(crop, 2, screen), 3: sidewaysParts(crop, 3, screen) } } : fig;
+    }),
+  };
+}
+
 async function renderCover(page, screen) {
   return screenImage(await renderPage(page, 1.5), screen);
 }
@@ -413,4 +452,7 @@ async function imageCover(data, screen) {
   return screenImage(image, screen);
 }
 
-module.exports = { measureLayout, findGaps, detectFigures, findPictures, cleanBoxes, cropBoxes, sidewaysParts, renderCover, imageCover, renderPage };
+module.exports = {
+  measureLayout, layoutFrom, layoutMeasures, findGaps, detectFigures, findPictures, pagePictures, cleanBoxes, cropBoxes,
+  sidewaysParts, renderCover, imageCover, renderPage,
+};

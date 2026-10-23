@@ -16,6 +16,7 @@ const pkg = name => path.dirname(require.resolve(`${name}/package.json`));
 const SWAPS = {
   [path.join(root, 'pdf.js')]: path.join(__dirname, 'pdf.js'),
   [path.join(root, 'ocr-platform.js')]: path.join(__dirname, 'ocr-platform.js'),
+  [path.join(root, 'picture-pages.js')]: path.join(__dirname, 'picture-pages.js'),
 };
 const swapPlatform = {
   name: 'swap-platform',

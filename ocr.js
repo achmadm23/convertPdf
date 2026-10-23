@@ -84,9 +84,14 @@ function toBlackAndWhite(canvas) {
   ctx.putImageData(img, 0, 0);
 }
 
-async function pageImage(doc, n, { dpi = DPI, blackAndWhite = false, thumb = false } = {}) {
+// `blank`: boxes (shares of the page from its top left, see figures.js cleanBoxes)
+// painted over in white before the page is read
+async function pageImage(doc, n, { dpi = DPI, blackAndWhite = false, thumb = false, blank = [] } = {}) {
   const page = await doc.getPage(n);
   const canvas = await renderPage(page, dpi / 72);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  for (const b of blank) ctx.fillRect(b.x * canvas.width, b.y * canvas.height, b.w * canvas.width, b.h * canvas.height);
   const height = page.view[3] - page.view[1];
   const width = page.view[2] - page.view[0];
   page.cleanup();
@@ -355,6 +360,61 @@ async function retryPage(doc, n, language) {
   return tries.sort((a, b) => (b.confidence ?? -1) - (a.confidence ?? -1))[0];
 }
 
+// Read a page again with the boxes drawn around its pictures (see figures.js
+// cleanBoxes) painted over in white, so only its text is read. Next to a drawing,
+// Tesseract reads the drawing's strokes as junk words in the lines of text beside
+// it, so those lines look unreadable, or it misses them; without the drawing it
+// reads them like any other text.
+async function readAroundBoxes(doc, n, boxes, language) {
+  const img = await pageImage(doc, n, { blank: boxes });
+  const worker = await createWorker(language);
+  try {
+    return withoutStrays(reading(await recognize(worker, img.image), img), boxes);
+  } finally {
+    await worker.terminate();
+  }
+}
+
+const STRAY = 15; // points: marks this close to a box are bits of its picture left outside it
+
+// A box drawn by hand rarely meets the picture's edge exactly: strokes left just
+// outside it are read as marks with no letters (". | : !") at the start or end of
+// the lines beside it, which then look indented differently and don't join up
+// into paragraphs. Those marks are taken off the lines.
+function withoutStrays(r, boxes) {
+  const { width, height } = r.page;
+  const near = w =>
+    boxes.some(b => {
+      const left = b.x * width, right = (b.x + b.w) * width;
+      const top = height * (1 - b.y), bottom = height * (1 - b.y - b.h);
+      return w.top > bottom && w.bottom < top && w.xEnd > left - STRAY && w.x < right + STRAY;
+    });
+  const hasText = w => /[\p{L}\d]/u.test(w.text);
+  const stray = w => !hasText(w) && near(w);
+  const lines = r.lines.flatMap(l => {
+    const words = [...l.words];
+    while (words.length && stray(words[0])) words.shift();
+    while (words.length && stray(words[words.length - 1])) words.pop();
+    if (words.length === l.words.length) return [l];
+    if (!words.some(hasText)) return [];
+    const text = words.map(w => w.text).join(' ');
+    return [{ ...l, words, text, x: words[0].x, xEnd: words[words.length - 1].xEnd }];
+  });
+  return { ...r, lines, text: lines.map(l => l.text).join('\n') };
+}
+
+// A scanned page's reading (`current`) with boxes drawn around its pictures, or
+// with the pictures found again (`boxes` null). With boxes, its text is read again
+// around them (`readAround(boxes)`, see readAroundBoxes), unless it was typed in by
+// hand; the reading from before is kept with it (`unboxed`) to go back to.
+async function readingWithBoxes(current, boxes, readAround) {
+  const { boxes: old, unboxed, ...reading } = current;
+  const before = reading.manual ? reading : unboxed || reading;
+  if (!boxes) return before;
+  if (!boxes.length || before.manual) return { ...before, boxes };
+  return { ...(await readAround(boxes)), boxes, unboxed: before };
+}
+
 // Mark whole paragraphs that were read far less confidently than the book's
 // typical paragraph, like a letter in a handwriting font, as `unreadable`.
 // Keeping only the lines that happened to pass would leave nonsense text broken
@@ -398,7 +458,10 @@ function normalizeSizes(pages) {
   const chars = new Map();
   for (const l of all) chars.set(l.size, (chars.get(l.size) || 0) + l.text.length);
   const bodySize = [...chars.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  const bodyWidth = median(all.filter(l => l.size === bodySize).map(l => l.xEnd - l.x)) ?? Infinity;
+  // the width of a full line of body text: the upper quarter, not the median, as
+  // pages with a picture beside the text have many short lines in a column
+  const widths = all.filter(l => l.size === bodySize).map(l => l.xEnd - l.x).sort((a, b) => b - a);
+  const bodyWidth = widths[Math.floor(widths.length / 4)] ?? Infinity;
   const centred = centredParagraphs(all);
   const isHeading = l => l.mayBeHeading && (l.xEnd - l.x < bodyWidth * 0.8 || centred.has(l.para));
   for (const [n, lines] of pages) {
@@ -441,4 +504,4 @@ function finishPages(readings) {
   return normalizeSizes(markUnreadable(pages));
 }
 
-module.exports = { recognizePages, retryPage, manualReading, finishPages, LANGUAGES };
+module.exports = { recognizePages, retryPage, readAroundBoxes, readingWithBoxes, manualReading, finishPages, LANGUAGES };

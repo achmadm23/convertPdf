@@ -6,7 +6,7 @@ const { analyzePdf, buildEpub, readerScreen } = require('../index');
 const { openPdf } = require('../pdf');
 const { imageCover, cleanBoxes } = require('../figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('../xtc');
-const { retryPage, manualReading } = require('../ocr');
+const { retryPage, manualReading, readAroundBoxes, readingWithBoxes } = require('../ocr');
 
 const MAX_BYTES = 300 * 1024 * 1024;
 const MAX_BOOKS = 8; // converted books kept, in this page's memory: the page converts several
@@ -103,11 +103,13 @@ function xtcSummary(s) {
 // Convert a PDF file. `xtc` is the XTC settings, or null for an EPUB. Reports
 // progress like the server's stream: onProgress, onSession, and onPage for each
 // scanned page as it's read.
-async function convert(file, { title, author, xtc, device }, { onProgress = () => {}, onSession = () => {}, onPage = () => {} }) {
+async function convert(file, { title, author, xtc, device, firstPageCover }, { onProgress = () => {}, onSession = () => {}, onPage = () => {} }) {
   const pdf = await readFile(file, MAX_BYTES);
   if (pdf.subarray(0, 5).toString() !== '%PDF-') throw new Error('That file is not a PDF.');
   const name = file.name.replace(/\.[^.]*$/, '') || 'book';
-  const s = newSession(pdf, { title: title || undefined, author: author || undefined, name, ...(device && { device }) });
+  const s = newSession(pdf, {
+    title: title || undefined, author: author || undefined, name, ...(device && { device }), ...(firstPageCover && { firstPageCover }),
+  });
   onProgress({ stage: 'text', done: 0, total: 1 });
   if (xtc) {
     onSession({ id: s.id });
@@ -191,23 +193,37 @@ async function setBoxes(id, n, boxes) {
   const current = s.book?.ocr?.pages.get(n);
   if (!current) throw new Error('That page was not read with OCR.');
   if (s.busy) throw new Error('Busy updating the book. Try again in a moment.');
-  const { boxes: old, ...reading } = current;
   const use = boxes && cleanBoxes(boxes);
-  s.book.ocr.pages.set(n, use ? { ...reading, boxes: use } : reading);
+  // the text beside the pictures is read again without them (a few seconds)
+  s.busy = true;
+  let next;
+  try {
+    next = await readingWithBoxes(current, use || null, async around =>
+      readAroundBoxes(await openPdf(s.pdf), n, around, s.book.ocr.language)
+    );
+  } finally {
+    s.busy = false;
+  }
+  s.book.ocr.pages.set(n, next);
   s.improved.add(n);
-  return { drawn: !!use, boxes: use || null, pendingPages: s.improved.size };
+  return { drawn: !!use, boxes: use || null, text: next.text, confidence: next.confidence, pendingPages: s.improved.size };
 }
 
 // Build the book again with the changed pages.
-async function rebuild(id, { onProgress = () => {} } = {}) {
+async function rebuild(id, { onProgress = () => {} } = {}, changes = {}) {
   const s = session(id);
   if (!s.book) throw new Error('The book is still being converted.');
   if (s.busy) throw new Error('Busy reading a page. Try again in a moment.');
+  // page 1 as the cover, its text left out of the book (see server.js handleRebuild)
+  const firstPageCover = typeof changes.firstPageCover === 'boolean' ? changes.firstPageCover : !!s.options.firstPageCover;
+  const options = { ...s.options, firstPageCover };
   s.busy = true;
   try {
-    const book = await analyzePdf(s.pdf, { ...s.options, onProgress, ocr: s.book.ocr });
-    book.fileName = s.book.fileName;
+    const book = await analyzePdf(s.pdf, { ...options, onProgress, ocr: s.book.ocr });
+    Object.assign(book, { fileName: s.book.fileName, title: s.book.title, author: s.book.author });
     s.book = book;
+    s.options = options;
+    if (firstPageCover) s.cover = null;
     s.improved.clear();
     return bookSummary(s);
   } finally {
@@ -297,7 +313,31 @@ async function download(id, pictureParts, pictures) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
+// Upload the finished book to an e-reader on the same Wi-Fi, the way its own file
+// transfer page does (CrossPoint firmware: POST /upload?path=<folder>, field "file").
+// The reader doesn't answer pages from other sites, so the upload is sent blind;
+// a website on https can't reach it at all, which the app (server.js) can.
+async function send(id, { address, folder = '/', name, parts = 1, pictures } = {}) {
+  const s = session(id);
+  const host = String(address || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  if (!/^[\w.-]+(:\d{1,5})?$/.test(host)) throw new Error('Type the reader’s address as it shows it, like 192.168.1.23.');
+  const data = s.xtc ? buildXtc(s.xtc, s.xtcCover) : await epubFile(s, parts, pictures);
+  const fileName = name || (s.xtc ? xtcSummary(s).fileName : s.book.fileName);
+  const form = new FormData();
+  form.append('file', new Blob([data]), fileName);
+  try {
+    await fetch(`http://${host}/upload?path=${encodeURIComponent(folder || '/')}`, { method: 'POST', body: form, mode: 'no-cors' });
+  } catch {
+    throw new Error(
+      location.protocol === 'https:'
+        ? `This website can’t reach the reader at ${host}: browsers block it. Use the convertPdf app to send, or download the book and upload it on the reader’s page.`
+        : `Could not reach the reader at ${host}. Check it is in Wi-Fi file transfer, on the same Wi-Fi as this computer.`
+    );
+  }
+  return { sent: fileName, address: host, folder };
+}
+
 // eslint-disable-next-line no-undef
 const version = async () => __VERSION__;
 
-window.convertPdfApi = { convert, retry, setText, setPicture, setBoxes, rebuild, setCover, setDetails, epub, file, coverUrl, scanUrl, screenUrl, download, version };
+window.convertPdfApi = { convert, retry, setText, setPicture, setBoxes, rebuild, setCover, setDetails, epub, file, coverUrl, scanUrl, screenUrl, download, send, version };
