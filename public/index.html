@@ -87,7 +87,22 @@
   .link { padding: 0; font-size: 13px; font-weight: 500; color: var(--accent); background: none; border: 0; cursor: pointer; text-decoration: underline; }
 
   /* the books */
-  .list-add .btn { width: 100%; height: 44px; }
+  .list-add { display: flex; gap: 8px; }
+  .list-add #addTop { flex: 1 1 auto; height: 44px; }
+  #collapseList svg { transition: transform .15s; }
+  @media (max-width: 760px) { #collapseList { display: none; } }
+  /* the list folded to a strip of covers (not on a phone, where it's above the book) */
+  @media (min-width: 761px) {
+    .list.collapsed { flex: 0 0 64px; max-width: 64px; }
+    .list.collapsed .list-add { flex-direction: column; }
+    .list.collapsed #addTop { width: 44px; height: 44px; padding: 0; align-self: center; }
+    .list.collapsed #collapseList { align-self: center; }
+    .list.collapsed #collapseList svg { transform: rotate(180deg); }
+    .list.collapsed #addTopText, .list.collapsed .list-head, .list.collapsed .list-foot,
+    .list.collapsed .list-empty, .list.collapsed .book-text { display: none; }
+    .list.collapsed .book { justify-content: center; padding: 8px; }
+    .list.collapsed .book.current { padding: 7px; }
+  }
   .list-head { display: flex; flex-direction: column; gap: 8px; }
   .list-head > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .queue-text { font-size: 13px; color: var(--muted); }
@@ -300,7 +315,10 @@
   .keep-all .choice { flex: 0 1 300px; background: var(--field); }
   /* a narrow list of pages, and the page open beside it, in view while the list scrolls */
   .scans-body { display: flex; flex-wrap: wrap; gap: 20px; padding: 16px 24px 28px; align-items: flex-start; }
-  .scan-grid { flex: 1 1 260px; max-width: 320px; min-width: 0; display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 140px); overflow: auto; padding-right: 2px; }
+  .scan-grid {
+    flex: 1 1 260px; max-width: 320px; min-width: 0; position: sticky; top: 12px; display: flex; flex-direction: column; gap: 8px;
+    height: calc(100vh - 24px); overflow: auto; padding: 8px; background: var(--soft); border: 1px solid var(--border); border-radius: 14px;
+  }
   @media (max-width: 900px) { .scan-grid { max-width: none; max-height: 340px; } }
   .scans.only-low .scan-card:not(.checkable), .scans.only-pictures .scan-card:not(.has-pictures) { display: none; }
   .scan-card {
@@ -493,6 +511,9 @@
       <button type="button" class="btn soft" id="addTop">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         <span id="addTopText">Add PDFs</span></button>
+      <button type="button" class="btn icon-btn" id="collapseList" aria-expanded="true" aria-controls="books" aria-label="Hide the list of books" title="Hide the list of books">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg>
+      </button>
     </div>
     <div class="list-head">
       <div><h2 class="panel-title" id="listTitle">PDF books</h2><span class="small mono" id="bookCount">0</span></div>
@@ -1357,6 +1378,7 @@
     const row = b.row;
     if (!row || !row.isConnected) return;
     row.querySelector('.book-title').textContent = bookTitle(b);
+    row.title = `${bookTitle(b)} · ${chipOf(b)[0]}`; // what a folded list shows on a cover
     row.querySelector('.book-sub').textContent = bookSub(b);
     const [text, kind] = chipOf(b);
     const chip = row.querySelector('.chip');
@@ -3787,6 +3809,19 @@
     showSummaries();
     showQueue();
   });
+
+  // The list of books folded to a strip of covers, or open; kept for next time.
+  function foldList(on) {
+    $('listPane').classList.toggle('collapsed', on);
+    const button = $('collapseList');
+    const label = on ? 'Show the list of books' : 'Hide the list of books';
+    button.setAttribute('aria-expanded', String(!on));
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    try { localStorage.setItem('listFolded', on ? '1' : ''); } catch {}
+  }
+  $('collapseList').addEventListener('click', () => foldList(!$('listPane').classList.contains('collapsed')));
+  try { foldList(localStorage.getItem('listFolded') === '1'); } catch {}
 
   // the source chosen last time
   try {
