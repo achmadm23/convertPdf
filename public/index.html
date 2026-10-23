@@ -14,12 +14,12 @@
   @font-face { font-family: 'IBM Plex Mono'; font-weight: 600; src: url(uifonts/ibm-plex-mono-latin-600-normal.woff2) format('woff2'); }
 
   :root {
-    --bg: #E9EBE8; --card: #F7F8F6; --field: #FFFFFF; --text: #15171A; --muted: #555B60;
-    --border: #CDD1CF; --rule: #DDE0DE; --input: #B9BEBC; --seg: #E4E7E5; --stage: #DADDD9;
-    --accent: #1F5FBF; --accent-hover: #174A96; --accent-text: #FFFFFF; --tint: #E3ECF8;
-    --warn-bg: #FBE6CF; --warn-text: #7A3A00; --good-bg: #DCEFE2; --good-text: #1D4F2F;
+    --bg: #F4F5F2; --card: #FFFFFF; --field: #FFFFFF; --soft: #FAFBF9; --text: #17191C; --muted: #5B6168;
+    --border: #E2E4E0; --rule: #E2E4E0; --input: #C9CDC7; --seg: #ECEEEA; --stage: #F4F5F2;
+    --accent: #2457C5; --accent-hover: #1A4296; --accent-text: #FFFFFF; --tint: #E8EEFB; --tint-strong: #F3F6FD;
+    --warn-bg: #FDF0DF; --warn-text: #7A3E00; --good-bg: #E3F2E8; --good-text: #1E5A33;
     --typed-bg: #DBE7F7; --typed-text: #1D3F6E; --kept-bg: #E6DCF2; --kept-text: #4A2F6E;
-    --error: #B3261E; --error-bg: #F9E1DF; --paper: #EAE8E1; --ink: #1A1A1A; --lift: 0 1px 2px rgba(21, 23, 26, .18);
+    --error: #B3261E; --error-bg: #F9E1DF; --paper: #EAE8E1; --ink: #1A1A1A; --lift: 0 1px 2px rgba(23, 25, 28, .14);
     --sans: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
     --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
   }
@@ -28,6 +28,7 @@
   html { color-scheme: light; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); }
   a { color: var(--accent); }
+  a:hover { color: var(--accent-hover); }
   button, input, select, textarea { font: inherit; color: inherit; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .mono { font-family: var(--mono); }
@@ -35,111 +36,107 @@
   .small { font-size: 12px; color: var(--muted); }
   input[type=file] { display: none; }
 
-  /* header */
+  /* header: the name, what is converted (PDFs or web pages), Download all */
   .top {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 24px;
-    padding: 12px 24px; background: var(--card); border-bottom: 1px solid var(--border);
+    padding: 12px 32px; background: var(--card); border-bottom: 1px solid var(--border);
   }
-  .brand { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
-  .brand h1 { margin: 0; font: 600 19px/1.2 var(--mono); letter-spacing: -0.01em; }
+  .top-left, .top-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  .brand h1 { margin: 0; font: 600 20px/1.2 var(--sans); letter-spacing: -0.01em; }
   .brand h1 span { color: var(--accent); }
   .version { padding: 1px 8px; font: 500 12px var(--mono); color: var(--muted); background: var(--seg); border-radius: 10px; }
   .private { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; color: var(--muted); }
-  .top-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-  @media (max-width: 600px) { .top { padding: 12px 16px; } }
-
-  /* what is converted: PDFs or web pages, each with its own books */
-  .sources-bar { display: flex; flex-direction: column; gap: 14px; max-width: 1600px; margin: 0 auto; padding: 20px 24px 0; }
-  @media (max-width: 600px) { .sources-bar { padding: 16px 16px 0; } }
-  .sources { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .sources { display: flex; gap: 4px; padding: 4px; background: var(--seg); border-radius: 10px; }
   .source-tab {
-    flex: 0 1 300px; min-height: 64px; display: flex; align-items: center; gap: 14px; padding: 10px 18px; text-align: left;
-    background: transparent; border: 2px solid var(--border); border-radius: 12px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px;
+    font-size: 14px; font-weight: 500; color: var(--muted); background: transparent; border: 0; border-radius: 7px; cursor: pointer;
   }
-  .source-tab:hover { background: var(--card); }
-  .source-tab[aria-selected="true"] { background: var(--field); border-color: var(--accent); box-shadow: var(--lift); }
-  .source-icon { flex: none; width: 44px; height: 44px; display: grid; place-items: center; font: 600 11px var(--mono); color: var(--muted); background: var(--seg); border-radius: 8px; }
-  .source-tab[aria-selected="true"] .source-icon { color: var(--accent-text); background: var(--accent); }
-  .source-tab > span:nth-child(2) { display: flex; flex-direction: column; gap: 1px; }
-  .source-tab b { font-size: 16px; font-weight: 600; }
-  .source-tab small { font-size: 13px; color: var(--muted); }
-  .source-count { margin-left: auto; padding: 1px 8px; font: 12px var(--mono); color: var(--muted); background: var(--seg); border-radius: 10px; }
+  .source-tab[aria-selected="true"] { color: var(--text); background: var(--card); box-shadow: var(--lift); }
+  .source-count { padding: 0 7px; font: 500 12px var(--mono); color: var(--muted); background: var(--seg); border-radius: 9px; }
+  .source-tab[aria-selected="true"] .source-count { background: var(--bg); }
   .source-count.busy { color: var(--accent); background: var(--tint); }
-  .intro { margin: 0; padding: 10px 14px; font-size: 14px; color: #3B3F43; background: var(--card); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; }
+  @media (max-width: 600px) { .top { padding: 12px 16px; } .private { display: none; } }
 
-  /* three panels: books, preview, settings */
+  /* the page: the books on the left, the book shown beside them */
   .layout {
-    display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px;
-    max-width: 1600px; margin: 0 auto; padding: 16px 24px 40px;
+    display: flex; flex-wrap: wrap; align-items: flex-start; gap: 20px;
+    max-width: 1600px; margin: 0 auto; padding: 20px 32px 48px;
   }
   @media (max-width: 600px) { .layout { padding: 12px 16px 32px; } }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; min-width: 0; }
-  .list { flex: 1 1 280px; max-width: 340px; display: flex; flex-direction: column; }
-  .preview { flex: 999 1 480px; overflow: hidden; }
-  .settings { flex: 1 1 300px; max-width: 380px; overflow: hidden; display: flex; flex-direction: column; }
-  @media (max-width: 760px) { .list, .settings { max-width: none; } }
-  .panel-title { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; min-width: 0; }
+  .list { flex: 1 1 280px; max-width: 320px; display: flex; flex-direction: column; gap: 12px; }
+  .work { flex: 999 1 640px; overflow: hidden; display: flex; flex-direction: column; }
+  @media (max-width: 760px) { .list { max-width: none; } }
+  .panel-title { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 14px;
-    font-size: 14px; font-weight: 500; color: var(--text); text-decoration: none; text-align: center;
-    background: var(--field); border: 1px solid var(--input); border-radius: 8px; cursor: pointer;
+    font-size: 14px; font-weight: 500; color: var(--text); text-decoration: none; text-align: center; white-space: nowrap;
+    background: var(--field); border: 1px solid var(--input); border-radius: 10px; cursor: pointer;
   }
+  .btn:hover:not(:disabled):not(.disabled) { border-color: #A9AEA7; }
   .btn:disabled, .btn.disabled { opacity: .45; cursor: not-allowed; }
   a.btn.disabled { pointer-events: none; }
-  .btn.big { height: 48px; padding: 0 16px; font-size: 15px; font-weight: 600; width: 100%; }
-  .btn.small { height: 32px; padding: 0 10px; font-size: 13px; }
+  .btn.big { height: 44px; padding: 0 20px; font-size: 15px; font-weight: 600; }
+  .btn.small { height: 34px; padding: 0 12px; font-size: 13px; border-radius: 8px; }
   .btn.primary { color: var(--accent-text); background: var(--accent); border-color: var(--accent); font-weight: 600; }
-  .btn.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn.primary:hover:not(:disabled):not(.disabled) { color: var(--accent-text); background: var(--accent-hover); border-color: var(--accent-hover); }
   .btn.soft { font-weight: 600; color: var(--accent); background: var(--tint); border-color: transparent; }
-  .btn.quiet { color: var(--accent); background: transparent; }
+  .btn.quiet { color: var(--accent); background: transparent; border-color: transparent; }
   .link { padding: 0; font-size: 13px; font-weight: 500; color: var(--accent); background: none; border: 0; cursor: pointer; text-decoration: underline; }
 
   /* the books */
-  .list-head { display: flex; flex-direction: column; gap: 8px; padding: 16px 16px 12px; border-bottom: 1px solid var(--rule); }
+  .list-add .btn { width: 100%; height: 44px; }
+  .list-head { display: flex; flex-direction: column; gap: 8px; }
   .list-head > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .queue-text { font-size: 13px; color: var(--muted); }
-  .bar { height: 6px; overflow: hidden; background: var(--rule); border-radius: 3px; }
+  .bar { height: 6px; overflow: hidden; background: var(--seg); border-radius: 3px; }
   .bar.thin { height: 4px; }
   .bar div { width: 0; height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s ease; }
-  .list-empty { margin: 0; padding: 28px 20px; font-size: 13px; color: var(--muted); text-align: center; }
-  .books { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .list-empty { margin: 0; padding: 20px; font-size: 13px; color: var(--muted); text-align: center; }
+  .books { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
   .book {
-    width: 100%; display: flex; align-items: flex-start; gap: 12px; padding: 10px; text-align: left; cursor: pointer;
-    background: transparent; border: 1px solid transparent; border-radius: 10px;
+    width: 100%; display: flex; align-items: flex-start; gap: 12px; padding: 12px; text-align: left; cursor: pointer;
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
   }
-  .book:hover { background: var(--field); }
-  .book.current { background: var(--field); border-color: var(--accent); box-shadow: var(--lift); }
+  .book:hover { border-color: var(--input); }
+  .book.current { padding: 11px; border: 2px solid var(--accent); }
   .thumb {
-    flex: none; width: 30px; height: 46px; display: grid; place-items: center; overflow: hidden;
-    font: 600 14px Georgia, serif; color: #fff; background: #55585C; border-radius: 3px;
+    flex: none; width: 40px; height: 54px; display: grid; place-items: center; overflow: hidden;
+    font: 600 15px var(--sans); color: #fff; background: #55585C; border-radius: 4px;
   }
   .thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .book-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
-  .book-title { font-size: 14px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
+  .book-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 auto; }
+  .book-title { font-size: 14px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
   .book-sub { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
-  .chip { align-self: flex-start; padding: 1px 8px; font: 12px var(--mono); border-radius: 10px; color: var(--muted); background: var(--seg); }
+  .chip { align-self: flex-start; padding: 1px 8px; font: 500 12px var(--mono); border-radius: 10px; color: var(--muted); background: var(--seg); }
   .chip.good { color: var(--good-text); background: var(--good-bg); }
   .chip.warn { color: var(--warn-text); background: var(--warn-bg); }
   .chip.busy { color: var(--accent); background: var(--tint); }
   .chip.bad { color: var(--error); background: var(--error-bg); }
-  .mini { display: block; height: 4px; margin-top: 2px; overflow: hidden; background: var(--stage); border-radius: 2px; }
+  .mini { display: block; height: 4px; margin-top: 2px; overflow: hidden; background: var(--seg); border-radius: 2px; }
   .mini span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
   .drop.over, .field.over textarea { background: var(--tint); border-color: var(--accent); }
-  .list-add { display: flex; padding: 4px 16px 16px; }
-  .list-add .btn { flex: 1 1 auto; }
-  .list-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: auto; padding: 12px 16px 16px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--muted); }
+  .list-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); }
+  .foot-new { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .mini-seg { display: inline-flex; gap: 2px; padding: 2px; background: var(--seg); border-radius: 8px; }
+  .mini-seg input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+  .mini-seg label { padding: 0 8px; font: 500 12px/26px var(--sans); color: var(--muted); border-radius: 6px; cursor: pointer; }
+  .mini-seg input:checked + label { color: var(--text); background: var(--field); box-shadow: var(--lift); }
+  .mini-seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .list.over { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: 12px; }
 
   /* fields */
   .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
-  .field input:not([type=checkbox]), .field select {
+  .field input:not([type=checkbox]), .field select, .start select {
     width: 100%; height: 44px; padding: 0 12px; font-size: 15px; color: var(--text);
-    background: var(--field); border: 1px solid var(--input); border-radius: 8px;
+    background: var(--field); border: 1px solid var(--input); border-radius: 10px;
   }
-  .field select { cursor: pointer; }
+  .field select, .start select { cursor: pointer; }
   .field textarea {
     width: 100%; min-height: 104px; padding: 10px 12px; resize: vertical; font: 13px/1.5 var(--mono); color: var(--text);
-    background: var(--field); border: 1px solid var(--input); border-radius: 8px;
+    background: var(--field); border: 1px solid var(--input); border-radius: 10px;
   }
   .field textarea:disabled { opacity: .6; cursor: not-allowed; }
   .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -165,19 +162,59 @@
   .seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
   .seg input:disabled + label { opacity: .45; cursor: not-allowed; }
 
-  /* the preview panel */
-  .pane-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 14px 20px; border-bottom: 1px solid var(--rule); }
-  .pane-head > div:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .pane-head b { font-size: 16px; font-weight: 600; overflow-wrap: anywhere; }
-  .book-info { margin: 0; font: 12px/1.5 var(--mono); color: var(--muted); }
-  .tabs { display: flex; gap: 4px; padding: 4px; background: var(--seg); border-radius: 10px; }
-  .tabs button {
-    display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; font-size: 14px; font-weight: 500;
-    background: transparent; border: 0; border-radius: 7px; cursor: pointer;
+  /* adding the first books: three steps in one card */
+  .start { flex: 1 1 100%; display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 28px 0 24px; }
+  .start > * { width: 100%; max-width: 760px; }
+  .start-head { display: flex; flex-direction: column; gap: 8px; text-align: center; }
+  .start-head h2 { margin: 0; font-size: 32px; line-height: 1.2; font-weight: 600; letter-spacing: -0.015em; }
+  .intro { margin: 0; font-size: 16px; color: var(--muted); }
+  .start-card { counter-reset: step; display: flex; flex-direction: column; gap: 22px; padding: 28px; }
+  .start-step { display: flex; flex-direction: column; gap: 10px; }
+  .start-step.inline { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+  .start-step.inline select { width: auto; min-width: 240px; }
+  .step-label { font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .step-label::before { counter-increment: step; content: counter(step) ' · '; }
+  .choose { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 600px) { .choose { grid-template-columns: 1fr; } .start-head h2 { font-size: 26px; } .start-card { padding: 20px; } }
+  .choose label { display: flex; gap: 12px; align-items: flex-start; padding: 15px; border: 1px solid var(--input); border-radius: 12px; cursor: pointer; }
+  .choose label:has(input:checked) { padding: 14px; border: 2px solid var(--accent); background: var(--tint-strong); }
+  .choose input { flex: none; width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--accent); }
+  .choose span { display: flex; flex-direction: column; gap: 2px; }
+  .choose b { font-size: 16px; font-weight: 600; }
+  .choose small { font-size: 14px; color: var(--muted); }
+  .drop {
+    display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px 24px; text-align: center;
+    background: #FAFBFD; border: 2px dashed #B9C3D9; border-radius: 14px; transition: background .15s, border-color .15s;
   }
-  .tabs button[aria-selected="true"] { background: var(--field); box-shadow: var(--lift); }
-  .pill { padding: 1px 7px; font: 12px var(--mono); border-radius: 10px; color: var(--warn-text); background: var(--warn-bg); }
-  #status { margin: 0; padding: 8px 20px; min-height: 1.5em; font: 12px/1.5 var(--mono); color: var(--muted); background: var(--field); border-bottom: 1px solid var(--rule); }
+  .drop b { font-size: 18px; font-weight: 600; }
+  .row-end { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+  .start-more { display: flex; justify-content: center; }
+  .hint { margin: 0; font-size: 13px; color: var(--muted); text-align: center; }
+  .facts { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 700px) { .facts { grid-template-columns: 1fr; } }
+  .facts li { display: flex; flex-direction: column; gap: 4px; padding: 16px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+  .facts b { font-size: 14px; font-weight: 600; }
+  .facts span { font-size: 13px; color: var(--muted); }
+
+  /* the book shown: its title and Download, its tabs, changes waiting */
+  .pane-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding: 18px 24px 0; }
+  .pane-head > div:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 280px; }
+  .pane-head h2 { margin: 0; font-size: 22px; line-height: 1.3; font-weight: 600; overflow-wrap: anywhere; }
+  .book-info { margin: 0; font-size: 13px; color: var(--muted); }
+  .get-row { display: flex; gap: 8px; }
+  .tabs { display: flex; gap: 4px; padding: 14px 24px 0; border-bottom: 1px solid var(--rule); overflow-x: auto; }
+  .tabs button {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; font-size: 14px; font-weight: 500;
+    color: var(--muted); background: transparent; border: 0; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap;
+  }
+  .tabs button:hover { color: var(--text); }
+  .tabs button[aria-selected="true"] { font-weight: 600; color: var(--text); border-bottom-color: var(--accent); }
+  .pill { padding: 0 7px; font: 500 12px var(--mono); border-radius: 9px; color: var(--warn-text); background: var(--warn-bg); }
+  .apply-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 24px; font-size: 14px; color: var(--warn-text); background: var(--warn-bg); }
+  .apply-bar span { flex: 1 1 280px; min-width: 0; overflow-wrap: anywhere; }
+  .apply-bar .btn.primary { flex: none; background: var(--warn-text); border-color: var(--warn-text); }
+  .apply-bar .btn.primary:hover:not(:disabled) { background: #5C2E00; border-color: #5C2E00; }
+  #status { margin: 0; padding: 8px 24px; min-height: 1.5em; font: 12px/1.5 var(--mono); color: var(--muted); background: var(--soft); border-bottom: 1px solid var(--rule); }
   #status:empty { display: none; }
   #status.error { color: var(--error); }
   .spinner {
@@ -186,24 +223,14 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } .bar div, .mini span { transition: none; } }
+  .panel { padding: 24px; }
 
-  /* adding the first books */
-  .start { display: flex; flex-direction: column; gap: 22px; padding: 28px; }
-  .drop {
-    display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 44px 24px; text-align: center;
-    background: var(--field); border: 2px dashed var(--input); border-radius: 12px; transition: background .15s, border-color .15s;
-  }
-  .drop b { font-size: 20px; font-weight: 600; }
-  .or { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); }
-  .or::before, .or::after { content: ''; flex: 1 1 auto; height: 1px; background: var(--rule); }
-  .row-end { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
-  .hint { margin: 0; padding: 12px 14px; font-size: 13px; color: var(--muted); background: var(--seg); border-radius: 8px; }
-
-  /* the reader */
-  .stage { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 28px 20px 24px; background: var(--stage); }
+  /* Preview: the reader, and what to check beside it */
+  .stage { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 28px; padding: 28px 24px 32px; }
+  .reader-col { flex: 1 1 340px; display: flex; flex-direction: column; align-items: center; gap: 14px; min-width: 0; }
   .device {
-    width: min(100%, 340px); padding: 18px 18px 40px; background: #26282B; border-radius: 26px;
-    box-shadow: 0 28px 48px -28px rgba(21, 23, 26, .55);
+    width: min(100%, 340px); padding: 18px 18px 40px; background: #2B2E33; border-radius: 26px;
+    box-shadow: 0 28px 48px -28px rgba(23, 25, 28, .55);
   }
   .screen { position: relative; aspect-ratio: 3 / 5; overflow: hidden; background: var(--paper); border-radius: 3px; }
   #viewer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform-origin: 0 0; }
@@ -233,10 +260,22 @@
   .pager-buttons .seg { flex: 1 1 auto; }
   .pager-buttons .seg label { min-height: 32px; padding: 2px 8px; font-size: 13px; }
   .icon-btn { flex: none; width: 44px; height: 44px; padding: 0; }
+  .checks { flex: 1 1 320px; max-width: 440px; display: flex; flex-direction: column; gap: 14px; }
+  .checks h3 { margin: 0; font-size: 17px; font-weight: 600; }
+  .checks ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .checks li { display: flex; align-items: center; gap: 12px; padding: 12px 14px; font-size: 14px; border: 1px solid var(--border); border-radius: 12px; }
+  .check-mark { flex: none; display: grid; place-items: center; width: 24px; height: 24px; font: 600 12px var(--mono); color: var(--muted); background: var(--seg); border-radius: 50%; }
+  .check-mark::before { content: '•'; }
+  .checks li.warn .check-mark { color: var(--warn-text); background: var(--warn-bg); }
+  .checks li.warn .check-mark::before { content: '!'; }
+  .checks li.done .check-mark { color: var(--good-text); background: var(--good-bg); }
+  .checks li.done .check-mark::before { content: '✓'; }
+  .check-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .checks li .btn { flex: none; color: var(--accent); background: var(--tint); border-color: transparent; font-weight: 500; }
 
   /* a book not made yet */
-  .state { min-height: 520px; justify-content: center; }
-  .state-card { width: min(100%, 460px); display: flex; flex-direction: column; gap: 12px; padding: 24px; background: var(--card); border-radius: 12px; }
+  .state { min-height: 520px; align-items: center; }
+  .state-card { width: min(100%, 460px); display: flex; flex-direction: column; gap: 12px; padding: 24px; background: var(--soft); border: 1px solid var(--border); border-radius: 14px; }
   .state-card b { font-size: 16px; font-weight: 600; }
   .state-card .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
   .state-card.bad b { color: var(--error); }
@@ -249,45 +288,58 @@
   .steps li .count { margin-left: auto; font: 500 12px var(--mono); }
   .steps svg { flex: none; }
 
-  /* scanned pages: a card for each, the one clicked open in the page editor */
-  .scans { background: var(--field); }
-  .scans-head {
-    position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px;
-    padding: 12px 20px; background: var(--field); border-bottom: 1px solid var(--rule); font-size: 14px;
-  }
-  .scans-head label { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
-  .scans-head input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
-  .scans-head .rebuild { margin-left: auto; }
-  .keep-all { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; background: var(--seg); border-radius: 8px; }
+  /* Pages: filters, a card for each scanned page, the one clicked open beside them */
+  .scans-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 16px 24px 0; font-size: 14px; }
+  #scanSummary { flex-basis: 100%; font-size: 13px; color: var(--muted); }
+  .filter { position: relative; display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; font-size: 14px; font-weight: 500; background: var(--field); border: 1px solid var(--input); border-radius: 18px; cursor: pointer; }
+  .filter input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+  .filter:has(input:checked) { font-weight: 600; color: #FFFFFF; background: var(--text); border-color: var(--text); }
+  .filter:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .filter:has(input:disabled) { opacity: .45; cursor: not-allowed; }
+  .keep-all { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; background: var(--seg); border-radius: 10px; }
   .keep-all .choice { flex: 0 1 300px; background: var(--field); }
-  .scan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; padding: 16px 20px 20px; max-height: 75vh; overflow: auto; }
+  /* a narrow list of pages, and the page open beside it, in view while the list scrolls */
+  .scans-body { display: flex; flex-wrap: wrap; gap: 20px; padding: 16px 24px 28px; align-items: flex-start; }
+  .scan-grid { flex: 1 1 260px; max-width: 320px; min-width: 0; display: flex; flex-direction: column; gap: 8px; max-height: calc(100vh - 140px); overflow: auto; padding-right: 2px; }
+  @media (max-width: 900px) { .scan-grid { max-width: none; max-height: 340px; } }
   .scans.only-low .scan-card:not(.checkable), .scans.only-pictures .scan-card:not(.has-pictures) { display: none; }
-  .scans-head label:has(input:disabled) { opacity: .45; cursor: not-allowed; }
   .scan-card {
-    display: flex; gap: 12px; padding: 12px; text-align: left; background: var(--field);
-    border: 1px solid var(--rule); border-radius: 10px; cursor: pointer;
+    flex: none; display: flex; gap: 10px; padding: 10px; text-align: left; background: var(--field);
+    border: 1px solid var(--border); border-radius: 12px; cursor: pointer;
   }
   .scan-card:hover { border-color: var(--input); }
-  .scan-card.low { background: color-mix(in srgb, var(--warn-bg) 30%, var(--field)); }
-  .scan-card.current { padding: 11px; border: 2px solid var(--accent); }
-  .scan-card .page-thumb { position: relative; flex: none; width: 70px; align-self: flex-start; }
-  .scan-card .page-thumb img { display: block; width: 100%; height: auto; background: #fff; border: 1px solid var(--rule); }
+  .scan-card.low { background: color-mix(in srgb, var(--warn-bg) 35%, var(--field)); }
+  .scan-card.current { padding: 9px; border: 2px solid var(--accent); }
+  .scan-card .page-thumb { position: relative; flex: none; width: 48px; align-self: flex-start; }
+  .scan-card .page-thumb img { display: block; width: 100%; height: auto; background: #fff; border: 1px solid var(--rule); border-radius: 3px; }
   .scan-card > span:last-child { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .card-head b { font: 500 13px var(--mono); }
-  .excerpt { margin: 0; font: 13px/1.45 Georgia, 'Times New Roman', serif; color: #3B3D40; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .excerpt { margin: 0; font: 13px/1.45 Georgia, 'Times New Roman', serif; color: #3B3D40; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .excerpt.empty { font: italic 13px var(--sans); color: var(--muted); }
   .card-mark { font-size: 12px; font-weight: 500; color: var(--accent); }
   .chip.kept { color: var(--kept-text); background: var(--kept-bg); }
   .chip.typed { color: var(--typed-text); background: var(--typed-bg); }
-  .page-editor .settings-head > div { gap: 12px; }
-  .page-scan { position: relative; }
-  .page-scan img { display: block; width: 100%; height: auto; background: #fff; border: 1px solid var(--rule); }
-  .field textarea.page-text { width: 100%; min-height: 220px; padding: 12px; resize: vertical; font: 14px/1.6 Georgia, 'Times New Roman', serif; color: var(--text); background: var(--field); border: 1px solid var(--input); border-radius: 8px; }
+  .page-editor {
+    flex: 999 1 560px; min-width: 0; position: sticky; top: 12px; display: flex; flex-direction: column; gap: 12px;
+    padding: 16px 18px; background: var(--soft); border: 1px solid var(--border); border-radius: 14px;
+  }
+  .page-editor-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .page-editor-head h3 { margin: 0; font-size: 17px; font-weight: 600; }
+  .page-nav { display: flex; gap: 6px; margin-left: auto; }
+  #pageBody { display: flex; flex-direction: column; gap: 12px; }
+  .page-tools { align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--rule); }
+  /* the scan and its text side by side; the scan as tall as the screen allows */
+  .page-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  @media (max-width: 760px) { .page-cols { grid-template-columns: 1fr; } }
+  .page-scan { position: relative; width: fit-content; max-width: 100%; margin: 0 auto; }
+  .page-scan img { display: block; max-width: 100%; max-height: calc(100vh - 260px); width: auto; height: auto; background: #fff; border: 1px solid var(--rule); border-radius: 4px; }
+  .page-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .field textarea.page-text { width: 100%; min-height: 240px; height: calc(100vh - 470px); max-height: 520px; padding: 12px; resize: vertical; font: 14px/1.6 Georgia, 'Times New Roman', serif; color: var(--text); background: var(--field); border: 1px solid var(--input); border-radius: 10px; }
   .page-note { margin: 0; padding: 10px 12px; font-size: 13px; color: var(--text); background: var(--seg); border-radius: 8px; }
   .page-note.good { color: var(--good-text); background: var(--good-bg); }
   .page-note.bad { color: var(--error); background: var(--error-bg); }
-  .row-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  .row-btns { display: flex; flex-wrap: wrap; gap: 8px; }
   .row-between { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
   .choice { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; background: var(--seg); border-radius: 10px; }
   .choice button { min-height: 36px; font-size: 13px; font-weight: 500; background: transparent; border: 0; border-radius: 7px; cursor: pointer; }
@@ -304,32 +356,48 @@
     font: 600 16px/28px var(--sans); color: var(--accent-text); background: var(--accent); cursor: pointer;
   }
   .box-page .grip { position: absolute; right: -8px; bottom: -8px; width: 16px; height: 16px; border-radius: 3px; background: var(--accent); cursor: nwse-resize; }
-  .list.over { outline: 2px dashed var(--accent); outline-offset: 2px; }
-  dialog { width: min(92vw, 520px); padding: 0; border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--text); }
-  dialog::backdrop { background: rgba(21, 23, 26, .35); }
-  dialog form { display: flex; flex-direction: column; gap: 14px; padding: 20px; }
-  dialog p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
-  /* Download and Send, side by side */
-  .get-row { display: flex; gap: 8px; }
-  .get-row .btn.big { width: auto; }
-  .get-row #download { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; line-height: 46px; }
-  .get-row #send { flex: none; }
 
-  /* the settings: of the book shown, or for new books */
-  .settings-head { display: flex; flex-direction: column; gap: 6px; padding: 18px 20px 14px; border-bottom: 1px solid var(--rule); }
-  .settings-head > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .acc { border-bottom: 1px solid var(--rule); }
-  .acc h2 { margin: 0; }
-  .acc-toggle {
-    width: 100%; min-height: 56px; display: flex; align-items: center; gap: 12px; padding: 10px 20px;
-    text-align: left; background: transparent; border: 0; cursor: pointer;
+  /* Chapters */
+  .chapters-panel { display: flex; justify-content: center; }
+  .chapters-panel > div { width: 100%; max-width: 760px; display: flex; flex-direction: column; gap: 14px; }
+  .toc-pick { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; background: var(--soft); border: 1px solid var(--border); border-radius: 12px; }
+  .toc-pick p { margin: 0; }
+  #tocText { font-size: 14px; color: var(--text); }
+  .toc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .contents-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; color: var(--muted); }
+  .contents-head h3 { margin: 0; font-size: 17px; font-weight: 600; color: var(--text); }
+  #contents { display: flex; flex-direction: column; max-height: 60vh; overflow: auto; background: var(--field); border: 1px solid var(--border); border-radius: 12px; }
+  #contents:empty { display: none; }
+  /* each entry as tall as its title (the list scrolls instead of squeezing them); a long one shows 2 lines */
+  #contents button {
+    flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 8px 16px;
+    font-size: 15px; line-height: 1.35; text-align: left; background: transparent; border: 0; border-top: 1px solid var(--rule); cursor: pointer;
   }
-  .acc-toggle > span { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; }
-  .acc-label { font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
-  .acc-summary { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .acc-toggle svg { flex: none; transition: transform .15s; }
-  .acc-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
-  .acc-body { display: flex; flex-direction: column; gap: 14px; padding: 0 20px 20px; }
+  #contents button span:first-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  #contents button:first-child { border-top: 0; }
+  #contents button:hover { background: var(--soft); }
+  #contents button[aria-current="true"] { font-weight: 600; background: var(--tint); }
+  #contents button span + span { flex: none; font: 500 13px var(--mono); color: var(--muted); }
+  /* a chapter that can be renamed or removed: the entry, then its buttons */
+  #contents .ch-row { flex: none; display: flex; align-items: stretch; border-top: 1px solid var(--rule); }
+  #contents .ch-row:first-child { border-top: 0; }
+  #contents .ch-row > button:first-child { flex: 1 1 auto; min-width: 0; border-top: 0; }
+  #contents .ch-row .ch-edit { flex: none; justify-content: center; width: 44px; min-height: 0; padding: 0; font-size: 16px; color: var(--muted); border-top: 0; }
+  #contents .ch-row .ch-edit:hover { color: var(--text); }
+  #contents .ch-row input { flex: 1 1 auto; min-width: 0; height: 40px; margin: 4px 8px; padding: 0 10px; border: 1px solid var(--input); border-radius: 8px; }
+  #contents.waiting { border-style: dashed; border-color: #D9B98F; }
+  .chapter-add { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; }
+  .chapter-add label { display: flex; align-items: center; gap: 8px; }
+  .chapter-add input { width: 88px; height: 40px; padding: 0 10px; border: 1px solid var(--input); border-radius: 8px; }
+
+  /* Settings: the book's, or the ones for new books */
+  .settings-head { display: flex; flex-direction: column; gap: 6px; padding: 20px 24px 0; }
+  .settings-head > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .settings-head h2 { margin: 0; font-size: 22px; font-weight: 600; }
+  .settings-panel > div { max-width: 640px; display: flex; flex-direction: column; gap: 28px; }
+  .set-group { display: flex; flex-direction: column; gap: 14px; }
+  .set-group h3 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .set-summary { display: none; }
   .cover-pick { display: flex; align-items: center; gap: 14px; border-radius: 10px; transition: background .15s; }
   .cover-pick.over { background: var(--tint); }
   .cover-thumb { flex: none; width: 54px; height: 90px; overflow: hidden; background: #fff; border: 1px solid var(--input); border-radius: 3px; }
@@ -337,83 +405,31 @@
   .cover-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .cover-info { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
   .cover-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
-  .toc-pick { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
-  .toc-pick p { margin: 0; }
-  .toc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  .toc-row label { display: flex; align-items: center; gap: 8px; color: var(--text); }
-  .field .toc-row input { width: 80px; }
-  #contents { display: flex; flex-direction: column; max-height: 320px; overflow: auto; background: var(--field); border: 1px solid var(--rule); border-radius: 8px; }
-  #contents:empty { display: none; }
-  /* each entry as tall as its title (the list scrolls instead of squeezing them); a long one shows 2 lines */
-  #contents button {
-    flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; padding: 8px 12px;
-    font-size: 14px; line-height: 1.35; text-align: left; background: transparent; border: 0; border-top: 1px solid var(--rule); cursor: pointer;
-  }
-  #contents button span:first-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
-  #contents button:first-child { border-top: 0; }
-  #contents button:hover { background: var(--seg); }
-  #contents button[aria-current="true"] { font-weight: 600; background: var(--tint); }
-  #contents button span + span { flex: none; font: 12px var(--mono); color: var(--muted); }
-  /* a chapter that can be renamed or removed: the entry, then its buttons */
-  #contents .ch-row { flex: none; display: flex; align-items: stretch; border-top: 1px solid var(--rule); }
-  #contents .ch-row:first-child { border-top: 0; }
-  #contents .ch-row > button:first-child { flex: 1 1 auto; min-width: 0; border-top: 0; }
-  #contents .ch-row .ch-edit { flex: none; justify-content: center; width: 36px; min-height: 0; padding: 0; color: var(--muted); border-top: 0; }
-  #contents .ch-row .ch-edit:hover { color: var(--text); }
-  #contents .ch-row input { flex: 1 1 auto; min-width: 0; margin: 4px 8px; }
-  #contents.waiting { border-style: dashed; }
-  .chapter-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
-  .chapter-add label { display: flex; align-items: center; gap: 8px; color: var(--text); }
-  .chapter-add input { width: 80px; }
-  .again { display: flex; flex-direction: column; gap: 10px; margin: 16px 20px 0; padding: 12px 14px; background: var(--tint); border-radius: 8px; }
+  .again { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; background: var(--tint); border-radius: 10px; }
   .again p { margin: 0; font-size: 13px; color: var(--accent); }
-  .settings-foot { display: flex; flex-direction: column; gap: 10px; margin-top: auto; padding: 16px 20px 20px; }
-  .facts { margin: 0; padding: 4px 20px 12px; list-style: none; border-top: 1px solid var(--rule); }
-  .facts li { display: flex; flex-direction: column; gap: 2px; padding: 12px 0; }
-  .facts li + li { border-top: 1px solid var(--rule); }
-  .facts b { font-size: 14px; font-weight: 500; }
-  .facts span { font-size: 13px; color: var(--muted); }
+  .settings-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-top: 20px; border-top: 1px solid var(--rule); }
 
-  /* what's left to check in a made book, and changes waiting to go in it */
-  .checks { display: flex; flex-direction: column; gap: 8px; padding: 16px 20px; border-bottom: 1px solid var(--rule); }
-  .checks ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-  .checks li { display: flex; align-items: center; gap: 10px; font-size: 13px; }
-  .check-mark { flex: none; display: grid; place-items: center; width: 20px; height: 20px; font: 600 11px var(--mono); color: var(--muted); background: var(--seg); border-radius: 50%; }
-  .check-mark::before { content: '•'; }
-  .checks li.warn .check-mark { color: var(--warn-text); background: var(--warn-bg); }
-  .checks li.warn .check-mark::before { content: '!'; }
-  .checks li.done .check-mark { color: var(--good-text); background: var(--good-bg); }
-  .checks li.done .check-mark::before { content: '✓'; }
-  .check-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
-  .checks li .btn { flex: none; }
-  .apply-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 20px; font-size: 13px; color: var(--warn-text); background: var(--warn-bg); border-bottom: 1px solid var(--rule); }
-  .apply-bar span { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
-  .apply-bar .btn { flex: none; }
-
-  /* EPUB or XTC, chosen when adding PDFs */
-  .start-format { display: flex; flex-direction: column; gap: 6px; }
-  .start-format > span { font-size: 14px; font-weight: 500; }
-  .list-foot { align-items: center; flex-wrap: wrap; }
-  .foot-new { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-  .mini-seg { display: inline-flex; gap: 2px; padding: 2px; background: var(--seg); border-radius: 8px; }
-  .mini-seg input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
-  .mini-seg label { padding: 0 8px; font: 500 12px/24px var(--sans); color: var(--muted); border-radius: 6px; cursor: pointer; }
-  .mini-seg input:checked + label { color: var(--text); background: var(--field); box-shadow: var(--lift); }
-  .mini-seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 1px; }
+  dialog { width: min(92vw, 520px); padding: 0; border: 1px solid var(--border); border-radius: 16px; background: var(--card); color: var(--text); }
+  dialog::backdrop { background: rgba(23, 25, 28, .35); }
+  dialog form { display: flex; flex-direction: column; gap: 14px; padding: 20px; }
+  dialog p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
 </style>
 </head>
 <body>
 <header class="top">
-  <div class="brand">
-    <h1>convert<span>Pdf</span></h1>
-    <span class="version" id="version" hidden></span>
+  <div class="top-left">
+    <div class="brand"><h1>convert<span>Pdf</span></h1><span class="version" id="version" hidden></span></div>
+    <nav class="sources" role="tablist" aria-label="What you convert">
+      <button type="button" class="source-tab" role="tab" id="srcPdf" data-source="pdf" aria-selected="true">PDFs <span class="source-count" id="countPdf">0</span></button>
+      <button type="button" class="source-tab" role="tab" id="srcWeb" data-source="web" aria-selected="false">Web pages <span class="source-count" id="countWeb">0</span></button>
+    </nav>
+  </div>
+  <div class="top-actions">
     <p class="private">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
       Your files never leave this computer
     </p>
-  </div>
-  <div class="top-actions">
-    <button type="button" class="btn primary" id="downloadAll" disabled>
+    <button type="button" class="btn" id="downloadAll" disabled>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
       <span id="downloadAllText">Download all</span></button>
     <button type="button" class="btn" id="sendAll" disabled hidden>
@@ -422,24 +438,62 @@
   </div>
 </header>
 
-<div class="sources-bar">
-  <nav class="sources" role="tablist" aria-label="What you convert">
-    <button type="button" class="source-tab" role="tab" id="srcPdf" data-source="pdf" aria-selected="true">
-      <span class="source-icon" aria-hidden="true">PDF</span>
-      <span><b>PDF</b><small>Books, documents and scans</small></span>
-      <span class="source-count" id="countPdf">0</span>
-    </button>
-    <button type="button" class="source-tab" role="tab" id="srcWeb" data-source="web" aria-selected="false">
-      <span class="source-icon" aria-hidden="true">WEB</span>
-      <span><b>Web pages</b><small>News articles and other pages</small></span>
-      <span class="source-count" id="countWeb">0</span>
-    </button>
-  </nav>
-  <p class="intro" id="intro"></p>
-</div>
-
 <main class="layout">
-  <section class="card list" aria-label="Books">
+  <!-- nothing added yet: what they're made into, the reader, then the PDFs or links -->
+  <section class="start" id="start" aria-labelledby="startTitle">
+    <div class="start-head">
+      <h2 id="startTitle">Turn PDFs into books for your e-reader</h2>
+      <p class="intro" id="intro"></p>
+    </div>
+    <div class="card start-card">
+      <div class="start-step" id="startFormat">
+        <span class="step-label">Make them into</span>
+        <div class="choose" role="radiogroup" aria-label="Make the PDFs into">
+          <label><input type="radio" name="newFormat" id="newEpub" value="epub" checked><span><b>EPUB</b><small>Text that flows, with chapters. Best for books.</small></span></label>
+          <label><input type="radio" name="newFormat" id="newXtc" value="xtc"><span><b>XTC</b><small>Every page as in the PDF. Best for comics and forms.</small></span></label>
+        </div>
+      </div>
+      <label class="start-step inline"><span class="step-label">For the reader</span>
+        <select id="startDevice">
+          <option value="x4-pro">Xteink X4 Pro · 480 × 800</option>
+          <option value="x4">Xteink X4 · 480 × 800</option>
+          <option value="x3">Xteink X3 · 528 × 792</option>
+        </select>
+      </label>
+      <div class="start-step">
+        <span class="step-label" id="addLabel">Add PDFs</span>
+        <div class="drop" id="drop">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 17v-6"/><path d="M9.5 13.5 12 11l2.5 2.5"/></svg>
+          <b>Drop PDFs here</b>
+          <span class="note">As many as you like, scanned books too · up to 300 MB each</span>
+          <button type="button" class="btn primary big" id="choosePdfs">Choose PDFs</button>
+        </div>
+        <div class="field" id="startLinks" hidden>
+          <label for="links" class="sr-label" style="font-size: 14px; font-weight: 500; color: var(--text)">Links of web pages</label>
+          <textarea id="links" spellcheck="false" placeholder="https://www.bbc.com/indonesia/…, https://nasional.kompas.com/read/…"></textarea>
+          <div class="row-end">
+            <span class="note" id="linksNote">News articles and other pages, one per line or separated by commas. Each link becomes a book.</span>
+            <button type="button" class="btn primary" id="addLinks">Add links</button>
+          </div>
+        </div>
+      </div>
+      <div class="start-more"><button type="button" class="link" id="startMore">More settings for new books</button></div>
+    </div>
+    <ul class="facts" id="facts">
+      <li><b>Converted one by one</b><span>Check each book while the rest are made.</span></li>
+      <li><b>A short list to check</b><span>Chapters, pages read badly, pictures, cover.</span></li>
+      <li><b>Kept for next time</b><span>Close the page; your books and fixes stay.</span></li>
+    </ul>
+    <p class="hint" id="startHint" hidden></p>
+  </section>
+
+  <!-- the books of the source chosen -->
+  <aside class="list" id="listPane" aria-label="Books" hidden>
+    <div class="list-add">
+      <button type="button" class="btn soft" id="addTop">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span id="addTopText">Add PDFs</span></button>
+    </div>
     <div class="list-head">
       <div><h2 class="panel-title" id="listTitle">PDF books</h2><span class="small mono" id="bookCount">0</span></div>
       <div id="queue" hidden>
@@ -450,11 +504,6 @@
     </div>
     <p class="list-empty" id="listEmpty"></p>
     <ol class="books" id="books"></ol>
-    <div class="list-add">
-      <button type="button" class="btn soft" id="addTop">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-        <span id="addTopText">Add PDFs</span></button>
-    </div>
     <div class="list-foot">
       <span class="foot-new"><span>New books</span>
         <span class="mini-seg" id="footFormat" role="radiogroup" aria-label="New PDFs are made into">
@@ -464,54 +513,38 @@
         <span id="defaultsText"></span></span>
       <button type="button" class="link" id="editDefaults">Change</button>
     </div>
-  </section>
+  </aside>
 
-  <section class="card preview" aria-label="Preview">
-    <p id="status" role="status"></p>
-
-    <!-- nothing added yet -->
-    <div class="start" id="start">
-      <div class="drop" id="drop">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--muted)"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 17v-6"/><path d="M9.5 13.5 12 11l2.5 2.5"/></svg>
-        <b>Drop PDFs here</b>
-        <span class="note">As many as you like, scanned books too · up to 300 MB each</span>
-        <button type="button" class="btn soft" id="choosePdfs">Choose PDFs</button>
-      </div>
-      <div class="start-format" id="startFormat">
-        <span>Make them into</span>
-        <div class="seg" role="radiogroup" aria-label="Make the PDFs into">
-          <input type="radio" name="newFormat" id="newEpub" value="epub" checked>
-          <label for="newEpub" class="tall"><b>EPUB</b><small>Text that flows, with chapters</small></label>
-          <input type="radio" name="newFormat" id="newXtc" value="xtc">
-          <label for="newXtc" class="tall"><b>XTC</b><small>Every page as in the PDF</small></label>
-        </div>
-      </div>
-      <div class="field" id="startLinks" hidden>
-        <label for="links" style="font-size: 14px; font-weight: 500; color: var(--text)">Links of web pages</label>
-        <textarea id="links" spellcheck="false" placeholder="https://www.bbc.com/indonesia/…, https://nasional.kompas.com/read/…"></textarea>
-        <div class="row-end">
-          <span class="note" id="linksNote">News articles and other pages, one per line or separated by commas. Each link becomes a book.</span>
-          <button type="button" class="btn primary" id="addLinks">Add links</button>
-        </div>
-      </div>
-      <p class="hint" id="startHint"></p>
+  <!-- the book shown, or the settings for new books -->
+  <section class="card work" id="work" aria-label="The book" hidden>
+    <div class="settings-head" id="settingsHead">
+      <div><h2>Settings for new books</h2><button type="button" class="btn small primary" id="doneDefaults">Done</button></div>
+      <p class="note">Used for each book you add. Every book can be changed on its own afterwards.</p>
     </div>
 
-    <!-- a book -->
     <div id="bookPane" hidden>
       <div class="pane-head">
-        <div><b id="paneTitle"></b><p class="book-info" id="bookInfo"></p></div>
-        <div class="tabs" id="tabs" role="tablist" hidden>
-          <button type="button" role="tab" id="tabBook" aria-selected="true" aria-controls="bookView">Book</button>
-          <button type="button" role="tab" id="tabScans" aria-selected="false" aria-controls="scans">Scanned pages<span class="pill" id="lowCount" hidden></span></button>
+        <div><h2 id="paneTitle"></h2><p class="book-info" id="bookInfo"></p></div>
+        <div class="get-row">
+          <a class="btn big primary disabled" id="download" aria-disabled="true" tabindex="-1">Download</a>
+          <button type="button" class="btn big soft" id="send" disabled hidden title="Send to your reader over Wi-Fi">Send</button>
         </div>
+      </div>
+      <div class="tabs" id="tabs" role="tablist" aria-label="The book">
+        <button type="button" role="tab" id="tabBook" aria-selected="true" aria-controls="bookView">Preview</button>
+        <button type="button" role="tab" id="tabScans" aria-selected="false" aria-controls="scans" hidden>Pages<span class="pill" id="lowCount" hidden></span></button>
+        <button type="button" role="tab" id="tabChapters" aria-selected="false" aria-controls="chaptersPanel" hidden>Chapters</button>
+        <button type="button" role="tab" id="tabSettings" aria-selected="false" aria-controls="settingsPanel">Settings</button>
       </div>
       <div class="apply-bar" id="applyBar" role="status" hidden>
         <span id="applyText"></span>
         <button type="button" class="btn small primary" id="applyBtn">Apply changes</button>
       </div>
+    </div>
+    <p id="status" role="status"></p>
 
-      <div class="stage" id="bookView">
+    <div class="stage" id="bookView" role="tabpanel" aria-labelledby="tabBook" hidden>
+      <div class="reader-col">
         <div class="device" id="reader">
           <div class="screen" id="screen">
             <div class="placeholder" id="placeholder">
@@ -542,315 +575,296 @@
           </div>
         </div>
       </div>
+      <section class="checks" id="checks" aria-labelledby="checksTitle" hidden>
+        <h3 id="checksTitle">Check before you download</h3>
+        <ul id="checkList"></ul>
+      </section>
+    </div>
 
-      <div class="stage state" id="convertingView" hidden>
-        <div class="state-card">
-          <img class="state-pic" alt="" hidden>
-          <b id="convertingTitle">Converting</b>
-          <div class="bar" id="progressBar" role="progressbar" aria-label="Conversion progress"
-               aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressFill"></div></div>
-          <div class="progress-text"><span id="progressLabel">Starting…</span><span id="progressNumbers"></span></div>
-          <ol class="steps" id="steps"></ol>
-          <p class="note">The preview opens as soon as it's ready. You can look at the other books meanwhile, and change this one's settings.</p>
+    <div class="stage state" id="convertingView" hidden>
+      <div class="state-card">
+        <img class="state-pic" alt="" hidden>
+        <b id="convertingTitle">Converting</b>
+        <div class="bar" id="progressBar" role="progressbar" aria-label="Conversion progress"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressFill"></div></div>
+        <div class="progress-text"><span id="progressLabel">Starting…</span><span id="progressNumbers"></span></div>
+        <ol class="steps" id="steps"></ol>
+        <p class="note">The preview opens as soon as it's ready. You can look at the other books meanwhile, and change this one's settings.</p>
+      </div>
+    </div>
+
+    <div class="stage state" id="waitingView" hidden>
+      <div class="state-card">
+        <img class="state-pic" alt="" hidden>
+        <b id="waitingTitle">Waiting</b>
+        <p class="note" id="waitingNote">It's converted after the books before it in the list. Its settings can be changed until then.</p>
+        <div class="buttons"><button type="button" class="btn" id="removeWaiting">Remove from the list</button></div>
+      </div>
+    </div>
+
+    <div class="stage state" id="failedView" hidden>
+      <div class="state-card bad">
+        <img class="state-pic" alt="" hidden>
+        <b id="failedTitle">This book could not be made</b>
+        <p class="note" id="failedReason" style="color: var(--text)"></p>
+        <div class="buttons">
+          <button type="button" class="btn primary" id="retryBook">Try again</button>
+          <button type="button" class="btn" id="removeFailed">Remove</button>
         </div>
       </div>
+    </div>
 
-      <div class="stage state" id="waitingView" hidden>
-        <div class="state-card">
-          <img class="state-pic" alt="" hidden>
-          <b id="waitingTitle">Waiting</b>
-          <p class="note" id="waitingNote">It's converted after the books before it in the list. Its settings can be changed until then.</p>
-          <div class="buttons"><button type="button" class="btn" id="removeWaiting">Remove from the list</button></div>
-        </div>
-      </div>
-
-      <div class="stage state" id="failedView" hidden>
-        <div class="state-card bad">
-          <img class="state-pic" alt="" hidden>
-          <b id="failedTitle">This book could not be made</b>
-          <p class="note" id="failedReason" style="color: var(--text)"></p>
-          <div class="buttons">
-            <button type="button" class="btn primary" id="retryBook">Try again</button>
-            <button type="button" class="btn" id="removeFailed">Remove</button>
+    <div class="scans" id="scans" role="tabpanel" aria-labelledby="tabScans" hidden>
+      <div class="scans-head">
+        <span id="scanSummary"></span>
+        <label class="filter"><input type="checkbox" id="onlyLow"><span>Read at <span class="offer-limit">90</span>% or lower</span></label>
+        <label class="filter" title="Pages with pictures found or drawn, or kept as a picture"><input type="checkbox" id="onlyPictures" disabled><span id="onlyPicturesText">With pictures</span></label>
+        <button type="button" class="btn small" id="keepAll" hidden></button>
+        <button type="button" class="btn small" id="textAll" hidden></button>
+        <div class="keep-all" id="keepAllChoice" hidden>
+          <span id="keepAllText"></span>
+          <div class="choice">
+            <button type="button" data-all-parts="1">Whole</button>
+            <button type="button" data-all-parts="2">2 parts</button>
+            <button type="button" data-all-parts="3">3 parts</button>
           </div>
+          <button type="button" class="btn small" id="keepAllCancel">Cancel</button>
         </div>
       </div>
-
-      <div class="scans" id="scans" role="tabpanel" aria-labelledby="tabScans" hidden>
-        <div class="scans-head">
-          <span id="scanSummary"></span>
-          <label><input type="checkbox" id="onlyLow"><span>Only pages at <span class="offer-limit">90</span>% or lower</span></label>
-          <label title="Pages with pictures found or drawn, or kept as a picture"><input type="checkbox" id="onlyPictures" disabled><span id="onlyPicturesText">Only pages with pictures</span></label>
-          <button type="button" class="btn small" id="keepAll" hidden></button>
-          <button type="button" class="btn small" id="textAll" hidden></button>
-          <div class="keep-all" id="keepAllChoice" hidden>
-            <span id="keepAllText"></span>
-            <div class="choice">
-              <button type="button" data-all-parts="1">Whole</button>
-              <button type="button" data-all-parts="2">2 parts</button>
-              <button type="button" data-all-parts="3">3 parts</button>
-            </div>
-            <button type="button" class="btn small" id="keepAllCancel">Cancel</button>
-          </div>
-        </div>
+      <div class="scans-body">
         <div class="scan-grid" id="scanGrid"></div>
+        <aside class="page-editor" id="pageEditor" aria-label="The page open">
+          <div class="page-editor-head">
+            <h3 id="pageTitle">Page</h3><span class="chip" id="pageChip"></span>
+            <div class="page-nav">
+              <button type="button" class="btn small" id="prevLow"></button>
+              <button type="button" class="btn small" id="nextLow"></button>
+            </div>
+          </div>
+          <p class="note" id="pageEmpty">Click a page to check it here.</p>
+          <div id="pageBody" hidden>
+            <div class="row-btns page-tools" id="boxButtons">
+              <button type="button" class="btn small" id="drawBoxes">Draw pictures</button>
+              <button type="button" class="btn small" id="foundBoxes">Use found pictures</button>
+              <button type="button" class="btn small" id="startChapter" title="Add this page to the book's contents, as the start of a chapter">Add to the contents</button>
+              <button type="button" class="btn small" id="useAsContents" title="Make the book's chapters from this page's table of contents">Use as the Daftar Isi</button>
+            </div>
+            <div class="row-btns page-tools" id="drawButtons" hidden>
+              <button type="button" class="btn small primary" id="saveBoxes">Save pictures</button>
+              <button type="button" class="btn small" id="clearBoxes">Remove all</button>
+              <button type="button" class="btn small" id="cancelBoxes">Cancel</button>
+              <span class="note" id="drawHelp" hidden>Drag across the page to box each picture; drag a box to move it, its corner to resize it, × to remove it.</span>
+            </div>
+            <p class="page-note" id="pageNote" hidden></p>
+            <div class="page-cols">
+              <div class="page-scan" id="pageScan"><img id="pageImg" alt="" draggable="false"></div>
+              <div class="page-side">
+                <div class="field" id="textPart">
+                  <label for="pageText">Text on this page</label>
+                  <textarea class="page-text" id="pageText" spellcheck="true"></textarea>
+                  <span class="small">An empty line between paragraphs. The pictures in the boxes go above or between them, where they are on the page.</span>
+                  <div class="row-btns">
+                    <button type="button" class="btn primary" id="saveText">Save text</button>
+                    <button type="button" class="btn soft" id="readAgain">Read again</button>
+                  </div>
+                </div>
+                <div class="field" id="picturePart" hidden>
+                  <span>This page goes in the book as a picture, instead of its text.</span>
+                  <div class="row-btns"><button type="button" class="btn" id="useText">Use its text</button></div>
+                </div>
+                <fieldset class="group" id="keepPart">
+                  <legend>Or keep the whole page as a picture</legend>
+                  <div class="choice">
+                    <button type="button" data-parts="1">Whole</button>
+                    <button type="button" data-parts="2">2 parts</button>
+                    <button type="button" data-parts="3">3 parts</button>
+                  </div>
+                  <p class="note" style="margin-top: 6px">2 or 3 parts turn it on its side, each part filling the screen, so the text is bigger.</p>
+                </fieldset>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <div class="panel chapters-panel" id="chaptersPanel" role="tabpanel" aria-labelledby="tabChapters" hidden>
+      <div>
+        <div class="toc-pick" id="tocPick" hidden>
+          <p class="note" id="tocText"></p>
+          <div class="toc-row">
+            <button type="button" class="btn small" id="tocRemove" hidden>Make them without it</button>
+            <button type="button" class="btn small" id="tocAuto" hidden>Find the Daftar Isi</button>
+          </div>
+          <p class="note" id="tocMissing" hidden></p>
+        </div>
+        <div class="contents-head"><h3>Contents</h3><span id="contentsNote"></span></div>
+        <nav id="contents" aria-label="Contents"></nav>
+        <p class="note" id="chaptersNote" hidden></p>
+        <div class="chapter-add" id="chapterAdd" hidden>
+          <label>Add page <input type="number" id="chapterPage" min="1" inputmode="numeric"></label>
+          <button type="button" class="btn small soft" id="chapterAddBtn">to the contents</button>
+          <button type="button" class="btn small" id="chaptersFound" hidden>Use the chapters found</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel settings-panel" id="settingsPanel" role="tabpanel" aria-labelledby="tabSettings" hidden>
+      <div>
+        <section class="set-group" id="secDetails">
+          <h3>Details <span class="set-summary" id="sumDetails"></span></h3>
+          <div class="two" id="bodyDetails">
+            <label class="field">Title<input id="title"></label>
+            <label class="field">Author<input id="author"></label>
+          </div>
+        </section>
+
+        <section class="set-group" id="secCover">
+          <h3>Cover <span class="set-summary" id="sumCover"></span></h3>
+          <div id="bodyCover">
+            <div class="cover-pick" id="coverPick">
+              <div class="cover-thumb empty" id="coverThumb"><span>PDF</span><img alt="Chosen cover" hidden></div>
+              <div class="cover-info">
+                <span id="coverName">Taken from the PDF</span>
+                <div class="cover-buttons">
+                  <button type="button" class="btn small" id="coverChoose">Choose image</button>
+                  <button type="button" class="btn small" id="coverFirstPage" hidden>Use page 1</button>
+                  <button type="button" class="btn small" id="coverRemove" hidden>Remove</button>
+                </div>
+              </div>
+            </div>
+            <p class="note" id="coverNote" style="margin-top: 8px">JPEG, PNG or WebP. Drawn for the reader’s screen in 4 shades of gray.</p>
+          </div>
+        </section>
+
+        <section class="set-group" id="secOutput">
+          <h3>Output <span class="set-summary" id="sumOutput"></span></h3>
+          <div class="set-group" id="bodyOutput">
+            <div class="seg" role="radiogroup" aria-label="Output">
+              <input type="radio" name="format" id="formatEpub" value="epub" checked>
+              <label for="formatEpub" class="tall"><b>EPUB</b><small>Any e-reader</small></label>
+              <input type="radio" name="format" id="formatXtc" value="xtc">
+              <label for="formatXtc" class="tall"><b>XTC</b><small id="xtcSmall">Pages as in the PDF</small></label>
+            </div>
+            <p class="note" id="formatNote"></p>
+            <!-- XTC: every PDF page drawn as a picture for the reader's screen -->
+            <div class="reader-xtc" id="xtcSettings" hidden>
+              <fieldset class="group">
+                <legend>Shades</legend>
+                <div class="seg">
+                  <input type="radio" name="xtcGrays" id="grays0" value="0" checked>
+                  <label for="grays0">Black and white</label>
+                  <input type="radio" name="xtcGrays" id="grays1" value="1">
+                  <label for="grays1">4 grays</label>
+                </div>
+                <p class="note" id="graysNote" style="margin-top: 4px"></p>
+              </fieldset>
+              <fieldset class="group">
+                <legend>Pages</legend>
+                <div class="seg">
+                  <input type="radio" name="xtcOrientation" id="sideways" value="landscape" checked>
+                  <label for="sideways">Sideways</label>
+                  <input type="radio" name="xtcOrientation" id="upright" value="portrait">
+                  <label for="upright">Upright</label>
+                </div>
+                <p class="note" id="pagesNote" style="margin-top: 4px"></p>
+              </fieldset>
+              <label class="field" id="xtcSplitField">Cut each page into
+                <select id="xtcSplit">
+                  <option value="overlap">3 or more overlapping parts</option>
+                  <option value="half">2 halves</option>
+                  <option value="none">Don't cut</option>
+                </select>
+              </label>
+              <details class="more">
+                <summary>More settings</summary>
+                <div>
+                  <label class="field">Dithering
+                    <select id="xtcDithering">
+                      <option value="atkinson">Atkinson (lighter, good for text)</option>
+                      <option value="floyd">Floyd-Steinberg</option>
+                      <option value="sierra-lite">Sierra Lite</option>
+                      <option value="ordered">Ordered (patterned)</option>
+                      <option value="none">None</option>
+                    </select>
+                  </label>
+                  <label class="field">Contrast
+                    <select id="xtcContrast">
+                      <option value="0">None</option>
+                      <option value="2">Light</option>
+                      <option value="4">Medium</option>
+                      <option value="6">Strong</option>
+                      <option value="8">Maximum</option>
+                    </select>
+                  </label>
+                  <div class="two">
+                    <label class="field">Trim sides
+                      <select id="xtcCropX"><option value="0">0%</option><option value="5">5%</option><option value="10">10%</option><option value="15">15%</option><option value="20">20%</option></select>
+                    </label>
+                    <label class="field">Trim top, bottom
+                      <select id="xtcCropY"><option value="0">0%</option><option value="5">5%</option><option value="10">10%</option><option value="15">15%</option><option value="20">20%</option></select>
+                    </label>
+                  </div>
+                  <label class="check"><input type="checkbox" id="xtcCoverPage" checked>First page is the cover: whole and upright</label>
+                  <label class="check"><input type="checkbox" id="xtcFlip">Turn sideways pages the other way</label>
+                </div>
+              </details>
+            </div>
+          </div>
+        </section>
+
+        <section class="set-group" id="secReader">
+          <h3>Reader and pictures <span class="set-summary" id="sumReader"></span></h3>
+          <div class="set-group" id="bodyReader">
+            <label class="field">Reader
+              <select id="device">
+                <option value="x4">Xteink X4 · 480 × 800</option>
+                <option value="x4-pro" selected>Xteink X4 Pro · 480 × 800</option>
+                <option value="x3">Xteink X3 · 528 × 792</option>
+              </select>
+            </label>
+            <p class="note" id="deviceNote">Pictures and the cover are drawn for this screen, and the preview shows the book at its size.</p>
+            <fieldset class="group" id="layoutField">
+              <legend>Pictures</legend>
+              <div class="seg">
+                <input type="radio" name="pictureLayout" id="picturesInline" value="inline" checked>
+                <label for="picturesInline">In the text</label>
+                <input type="radio" name="pictureLayout" id="picturesPage" value="page">
+                <label for="picturesPage">On their own page</label>
+              </div>
+              <p class="note" id="layoutNote" style="margin-top: 4px"></p>
+            </fieldset>
+            <fieldset class="group" id="partsField">
+              <legend>Full-page pictures</legend>
+              <div class="seg">
+                <input type="radio" name="pictureTurn" id="pictureSideways" value="sideways">
+                <label for="pictureSideways">Sideways</label>
+                <input type="radio" name="pictureTurn" id="pictureUpright" value="upright" checked>
+                <label for="pictureUpright">Upright</label>
+              </div>
+              <p class="note" id="partsNote" style="margin-top: 4px"></p>
+            </fieldset>
+            <label class="field" id="pictureSplitField">Cut each picture into
+              <select id="pictureSplit">
+                <option value="3">3 overlapping parts</option>
+                <option value="2">2 halves</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <div class="again" id="again" hidden>
+          <p>Another reader or output: the book is converted again to use it.</p>
+          <button type="button" class="btn primary" id="againBtn">Convert this book again</button>
+        </div>
+
+        <div class="settings-foot" id="bookFoot" hidden>
+          <button type="button" class="btn" id="useForAll">Use these settings for all books</button>
+          <button type="button" class="link" id="removeBook">Remove this book from the list</button>
+        </div>
       </div>
     </div>
   </section>
-
-  <aside class="card settings page-editor" id="pageEditor" aria-label="The page open" hidden>
-    <div class="settings-head">
-      <div><h2 class="panel-title" id="pageTitle">Page</h2><span class="chip" id="pageChip"></span></div>
-    </div>
-    <p class="note" id="pageEmpty" style="padding: 18px 20px">Click a page to check it here.</p>
-    <div class="acc-body" id="pageBody" style="padding-top: 16px" hidden>
-      <p class="page-note" id="pageNote" hidden></p>
-      <div class="page-scan" id="pageScan"><img id="pageImg" alt="" draggable="false"></div>
-      <p class="note" id="drawHelp" hidden>Drag across the page to draw a box around each picture. Drag a box to move it, or its corner to resize it; × removes it. What's inside the boxes goes in the book as pictures, and the text outside them stays text.</p>
-      <div class="row-btns" id="boxButtons">
-        <button type="button" class="btn small" id="drawBoxes">Draw a box</button>
-        <button type="button" class="btn small" id="foundBoxes">Use found pictures</button>
-        <button type="button" class="btn small" id="startChapter" title="Add this page to the book's contents, as the start of a chapter">Add to the contents</button>
-        <button type="button" class="btn small" id="useAsContents" title="Make the book's chapters from this page's table of contents">Use as the Daftar Isi</button>
-      </div>
-      <div class="row-btns" id="drawButtons" hidden>
-        <button type="button" class="btn small primary" id="saveBoxes">Save pictures</button>
-        <button type="button" class="btn small" id="clearBoxes">Remove all</button>
-        <button type="button" class="btn small" id="cancelBoxes">Cancel</button>
-      </div>
-      <div class="field" id="textPart">
-        <label for="pageText">Text of the page in the book</label>
-        <textarea class="page-text" id="pageText" spellcheck="true"></textarea>
-        <span class="small">An empty line between paragraphs. The pictures in the boxes go above or between them, where they are on the page.</span>
-        <div class="row-btns">
-          <button type="button" class="btn primary" id="saveText">Save text</button>
-          <button type="button" class="btn" id="readAgain">Read again</button>
-        </div>
-      </div>
-      <div class="field" id="picturePart" hidden>
-        <span>This page goes in the book as a picture, instead of its text.</span>
-        <div class="row-btns"><button type="button" class="btn" id="useText">Use its text</button></div>
-      </div>
-      <fieldset class="group" id="keepPart">
-        <legend>Or keep the whole page as a picture</legend>
-        <div class="choice">
-          <button type="button" data-parts="1">Whole</button>
-          <button type="button" data-parts="2">2 parts</button>
-          <button type="button" data-parts="3">3 parts</button>
-        </div>
-        <p class="note" style="margin-top: 6px">2 or 3 parts turn it on its side, each part filling the screen, so the text is bigger.</p>
-      </fieldset>
-      <div class="row-between">
-        <button type="button" class="btn small" id="prevLow"></button>
-        <button type="button" class="btn small" id="nextLow"></button>
-      </div>
-    </div>
-  </aside>
-
-  <aside class="card settings" id="settingsAside" aria-label="Settings">
-    <div class="settings-head" id="settingsHead">
-      <div><h2 class="panel-title">For new books</h2><button type="button" class="btn small" id="doneDefaults" hidden>Done</button></div>
-      <p class="note">Used for each book you add. Every book can be changed on its own afterwards.</p>
-    </div>
-
-    <section class="checks" id="checks" aria-labelledby="checksTitle" hidden>
-      <h2 class="panel-title" id="checksTitle">Check before you download</h2>
-      <ul id="checkList"></ul>
-    </section>
-
-    <section class="acc" id="secDetails">
-      <h2><button type="button" class="acc-toggle" aria-expanded="true" aria-controls="bodyDetails" data-section="details">
-        <span><span class="acc-label">Details</span><span class="acc-summary" id="sumDetails"></span></span>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-      </button></h2>
-      <div class="acc-body" id="bodyDetails">
-        <label class="field">Title<input id="title"></label>
-        <label class="field">Author<input id="author"></label>
-        <div class="field"><span>Contents <span id="contentsNote"></span></span>
-          <div class="toc-pick" id="tocPick" hidden>
-            <p class="note" id="tocText"></p>
-            <div class="toc-row">
-              <button type="button" class="btn small" id="tocRemove" hidden>Remove</button>
-              <button type="button" class="btn small" id="tocAuto" hidden>Find it</button>
-            </div>
-            <p class="note" id="tocMissing" hidden></p>
-          </div>
-          <nav id="contents" aria-label="Contents"></nav>
-          <p class="note" id="chaptersNote" hidden></p>
-          <div class="chapter-add" id="chapterAdd" hidden>
-            <label>Add page <input type="number" id="chapterPage" min="1" inputmode="numeric"></label>
-            <button type="button" class="btn small" id="chapterAddBtn">to the contents</button>
-            <button type="button" class="btn small" id="chaptersFound" hidden>Use the chapters found</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="acc" id="secCover">
-      <h2><button type="button" class="acc-toggle" aria-expanded="false" aria-controls="bodyCover" data-section="cover">
-        <span><span class="acc-label">Cover</span><span class="acc-summary" id="sumCover"></span></span>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-      </button></h2>
-      <div class="acc-body" id="bodyCover" hidden>
-        <div class="cover-pick" id="coverPick">
-          <div class="cover-thumb empty" id="coverThumb"><span>PDF</span><img alt="Chosen cover" hidden></div>
-          <div class="cover-info">
-            <span id="coverName">Taken from the PDF</span>
-            <div class="cover-buttons">
-              <button type="button" class="btn small" id="coverChoose">Choose image</button>
-              <button type="button" class="btn small" id="coverFirstPage" hidden>Use page 1</button>
-              <button type="button" class="btn small" id="coverRemove" hidden>Remove</button>
-            </div>
-          </div>
-        </div>
-        <p class="note" id="coverNote">JPEG, PNG or WebP. Drawn for the reader’s screen in 4 shades of gray.</p>
-      </div>
-    </section>
-
-    <section class="acc" id="secOutput">
-      <h2><button type="button" class="acc-toggle" aria-expanded="false" aria-controls="bodyOutput" data-section="output">
-        <span><span class="acc-label">Output</span><span class="acc-summary" id="sumOutput"></span></span>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-      </button></h2>
-      <div class="acc-body" id="bodyOutput" hidden>
-        <div class="seg" role="radiogroup" aria-label="Output">
-          <input type="radio" name="format" id="formatEpub" value="epub" checked>
-          <label for="formatEpub" class="tall"><b>EPUB</b><small>Any e-reader</small></label>
-          <input type="radio" name="format" id="formatXtc" value="xtc">
-          <label for="formatXtc" class="tall"><b>XTC</b><small id="xtcSmall">Pages as in the PDF</small></label>
-        </div>
-        <p class="note" id="formatNote"></p>
-        <!-- XTC: every PDF page drawn as a picture for the reader's screen -->
-        <div class="reader-xtc" id="xtcSettings" hidden>
-          <fieldset class="group">
-            <legend>Shades</legend>
-            <div class="seg">
-              <input type="radio" name="xtcGrays" id="grays0" value="0" checked>
-              <label for="grays0">Black and white</label>
-              <input type="radio" name="xtcGrays" id="grays1" value="1">
-              <label for="grays1">4 grays</label>
-            </div>
-            <p class="note" id="graysNote" style="margin-top: 4px"></p>
-          </fieldset>
-          <fieldset class="group">
-            <legend>Pages</legend>
-            <div class="seg">
-              <input type="radio" name="xtcOrientation" id="sideways" value="landscape" checked>
-              <label for="sideways">Sideways</label>
-              <input type="radio" name="xtcOrientation" id="upright" value="portrait">
-              <label for="upright">Upright</label>
-            </div>
-            <p class="note" id="pagesNote" style="margin-top: 4px"></p>
-          </fieldset>
-          <label class="field" id="xtcSplitField">Cut each page into
-            <select id="xtcSplit">
-              <option value="overlap">3 or more overlapping parts</option>
-              <option value="half">2 halves</option>
-              <option value="none">Don't cut</option>
-            </select>
-          </label>
-          <details class="more">
-            <summary>More settings</summary>
-            <div>
-              <label class="field">Dithering
-                <select id="xtcDithering">
-                  <option value="atkinson">Atkinson (lighter, good for text)</option>
-                  <option value="floyd">Floyd-Steinberg</option>
-                  <option value="sierra-lite">Sierra Lite</option>
-                  <option value="ordered">Ordered (patterned)</option>
-                  <option value="none">None</option>
-                </select>
-              </label>
-              <label class="field">Contrast
-                <select id="xtcContrast">
-                  <option value="0">None</option>
-                  <option value="2">Light</option>
-                  <option value="4">Medium</option>
-                  <option value="6">Strong</option>
-                  <option value="8">Maximum</option>
-                </select>
-              </label>
-              <div class="two">
-                <label class="field">Trim sides
-                  <select id="xtcCropX"><option value="0">0%</option><option value="5">5%</option><option value="10">10%</option><option value="15">15%</option><option value="20">20%</option></select>
-                </label>
-                <label class="field">Trim top, bottom
-                  <select id="xtcCropY"><option value="0">0%</option><option value="5">5%</option><option value="10">10%</option><option value="15">15%</option><option value="20">20%</option></select>
-                </label>
-              </div>
-              <label class="check"><input type="checkbox" id="xtcCoverPage" checked>First page is the cover: whole and upright</label>
-              <label class="check"><input type="checkbox" id="xtcFlip">Turn sideways pages the other way</label>
-            </div>
-          </details>
-        </div>
-      </div>
-    </section>
-
-    <section class="acc" id="secReader">
-      <h2><button type="button" class="acc-toggle" aria-expanded="false" aria-controls="bodyReader" data-section="reader">
-        <span><span class="acc-label">Reader and pictures</span><span class="acc-summary" id="sumReader"></span></span>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-      </button></h2>
-      <div class="acc-body" id="bodyReader" hidden>
-        <label class="field">Reader
-          <select id="device">
-            <option value="x4">Xteink X4 · 480 × 800</option>
-            <option value="x4-pro" selected>Xteink X4 Pro · 480 × 800</option>
-            <option value="x3">Xteink X3 · 528 × 792</option>
-          </select>
-        </label>
-        <p class="note" id="deviceNote">Pictures and the cover are drawn for this screen, and the preview shows the book at its size.</p>
-        <fieldset class="group" id="layoutField">
-          <legend>Pictures</legend>
-          <div class="seg">
-            <input type="radio" name="pictureLayout" id="picturesInline" value="inline" checked>
-            <label for="picturesInline">In the text</label>
-            <input type="radio" name="pictureLayout" id="picturesPage" value="page">
-            <label for="picturesPage">On their own page</label>
-          </div>
-          <p class="note" id="layoutNote" style="margin-top: 4px"></p>
-        </fieldset>
-        <fieldset class="group" id="partsField">
-          <legend>Full-page pictures</legend>
-          <div class="seg">
-            <input type="radio" name="pictureTurn" id="pictureSideways" value="sideways">
-            <label for="pictureSideways">Sideways</label>
-            <input type="radio" name="pictureTurn" id="pictureUpright" value="upright" checked>
-            <label for="pictureUpright">Upright</label>
-          </div>
-          <p class="note" id="partsNote" style="margin-top: 4px"></p>
-        </fieldset>
-        <label class="field" id="pictureSplitField">Cut each picture into
-          <select id="pictureSplit">
-            <option value="3">3 overlapping parts</option>
-            <option value="2">2 halves</option>
-          </select>
-        </label>
-      </div>
-    </section>
-
-    <div class="again" id="again" hidden>
-      <p>Another reader or output: the book is converted again to use it.</p>
-      <button type="button" class="btn primary" id="againBtn">Convert this book again</button>
-    </div>
-
-    <div class="settings-foot" id="bookFoot" hidden>
-      <button type="button" class="btn quiet" id="useForAll">Use these settings for all books</button>
-      <span class="small" style="text-align: center">Title, author and cover stay each book’s own.</span>
-      <div class="get-row">
-        <a class="btn big primary disabled" id="download" aria-disabled="true" tabindex="-1">Download</a>
-        <button type="button" class="btn big soft" id="send" disabled hidden title="Send to your reader over Wi-Fi">Send</button>
-      </div>
-      <button type="button" class="link" id="removeBook" style="align-self: center">Remove from the list</button>
-    </div>
-
-    <ul class="facts" id="facts">
-      <li><b>Real paragraphs and chapters</b><span>Headers, footers and page numbers removed.</span></li>
-      <li><b>Scanned pages read for you</b><span>Built-in OCR for English and Indonesian.</span></li>
-      <li><b>News articles as books</b><span>Only the article: no menus, ads or “Read also”.</span></li>
-      <li><b>Pictures as full e-ink pages</b><span>Sized for your reader’s screen, in 4 shades of gray.</span></li>
-    </ul>
-  </aside>
 </main>
 
 <dialog id="linksDialog" aria-labelledby="linksDialogTitle">
@@ -1383,6 +1397,7 @@
     const xtcNext = defaultsBy.pdf.format === 'xtc';
     $(xtcNext ? 'footXtc' : 'footEpub').checked = true;
     $(xtcNext ? 'newXtc' : 'newEpub').checked = true;
+    $('startDevice').value = d.device;
     // each source's tab says how many books it has, and whether one is being made
     for (const [kind, id] of [['pdf', 'countPdf'], ['web', 'countWeb']]) {
       const count = $(id);
@@ -1599,7 +1614,7 @@
         const low = b.meta.lowPages;
         showStatus(opened ? 'Opened again, with its pages and your changes as you left them.' + note :
           (low
-            ? `Done in ${b.took}. ${low} scanned ${low === 1 ? 'page was' : 'pages were'} read at ${b.scan.limit}% or lower: check them in Scanned pages.`
+            ? `Done in ${b.took}. ${low} scanned ${low === 1 ? 'page was' : 'pages were'} read at ${b.scan.limit}% or lower: check them in Pages.`
             : `Done in ${b.took}. Check the preview, then download.`) + note
         );
       }
@@ -1617,13 +1632,17 @@
   const SOURCES = {
     pdf: {
       title: 'PDF books',
-      intro: 'PDFs into EPUB or XTC books. Text is rebuilt into paragraphs and chapters, scanned pages are read with OCR, and XTC draws every page as it looks in the PDF.',
+      heading: 'Turn PDFs into books for your e-reader',
+      add: 'Add PDFs',
+      intro: 'Real chapters and paragraphs, scanned pages read for you, pictures sized for the screen.',
       empty: 'Every PDF you add gets its own line here, with its progress. Click one to preview and change it.',
       hint: 'Drop as many PDFs as you like: they start converting as soon as they’re added, one after another. You can preview and change each one while the rest are still being made.',
       forAll: 'Use these settings for all PDF books',
     },
     web: {
       title: 'Web page books',
+      heading: 'Turn web pages into books for your e-reader',
+      add: 'Add links',
       intro: 'Links of news articles and other web pages into EPUB books: only the article, with its pictures and captions, no menus, ads or “Read also”. Each link becomes a book.',
       empty: 'Every link you add gets its own line here, with its progress. Click one to preview and change it.',
       hint: 'The links start converting as soon as they’re added, one after another. You can preview and change each book while the rest are still being made.',
@@ -1649,6 +1668,8 @@
     const s = SOURCES[source];
     for (const tab of document.querySelectorAll('.source-tab')) tab.setAttribute('aria-selected', String(tab.dataset.source === source));
     $('intro').textContent = s.intro;
+    $('startTitle').textContent = s.heading;
+    $('addLabel').textContent = s.add;
     $('listTitle').textContent = s.title;
     $('listEmpty').textContent = s.empty;
     $('startHint').textContent = s.hint;
@@ -1673,13 +1694,22 @@
     renderBooks();
   }
 
-  let viewTab = 'book'; // the book, or its scanned pages
+  let viewTab = 'book'; // the book's tab: 'book' (Preview), 'scans' (Pages), 'chapters', 'settings'
   let userPickedTab = false; // once the reader picks a tab, new pages don't switch it
+
+  // The start (no book yet), or the books beside the book shown, or the settings
+  // for new books (Change under the list).
+  function showLayout() {
+    $('start').hidden = !!current || editingDefaults;
+    $('listPane').hidden = !sourceBooks().length;
+    $('work').hidden = !current && !editingDefaults;
+    $('settingsHead').hidden = !editingDefaults;
+    $('bookPane').hidden = !current || editingDefaults;
+  }
 
   function showPane() {
     const b = current;
-    $('start').hidden = !!b;
-    $('bookPane').hidden = !b;
+    showLayout();
     const ready = !!b && b.state === 'ready';
     const changed = bookId !== (ready ? b.id : null);
     bookId = ready ? b.id : null;
@@ -1696,7 +1726,7 @@
       }
     }
     updateDownload();
-    if (!b) return;
+    if (!b) return showTab('book');
     $('paneTitle').textContent = bookTitle(b);
     showBookInfo();
     $('convertingTitle').textContent = b.kind === 'web' ? 'Reading the web page' : 'Converting';
@@ -1706,8 +1736,7 @@
     showStatePicture(b);
     showApply();
     scans.show(b);
-    if (!b.scan || !b.scan.pages.size) viewTab = 'book';
-    else if (changed && !userPickedTab) viewTab = b.state === 'converting' ? 'scans' : 'book';
+    if (changed && !userPickedTab) viewTab = b.state === 'converting' && b.scan && b.scan.pages.size ? 'scans' : 'book';
     showTab(viewTab, changed);
   }
 
@@ -1721,28 +1750,39 @@
     }
   }
 
+  // One of the book's tabs: Preview (the book, or how far it's got), Pages (its
+  // scanned pages, while it's made too), Chapters (once it's made) and Settings.
+  // The settings for new books show Settings alone.
   function showTab(which, fresh = false) {
-    viewTab = which;
-    const b = current;
-    const scansShown = which === 'scans';
-    $('tabBook').setAttribute('aria-selected', String(!scansShown));
-    $('tabScans').setAttribute('aria-selected', String(scansShown));
-    $('scans').hidden = !scansShown;
+    const b = editingDefaults ? null : current;
     const state = b ? b.state : '';
-    $('bookView').hidden = scansShown || state !== 'ready';
-    $('convertingView').hidden = scansShown || state !== 'converting';
-    $('waitingView').hidden = scansShown || state !== 'waiting';
-    $('failedView').hidden = scansShown || state !== 'failed';
-    $('settingsAside').hidden = scansShown;
-    $('pageEditor').hidden = !scansShown;
-    if (scansShown) scans.openFirst();
-    if (fresh) previewStale = true; // another book: its preview is drawn when its Book tab is shown
-    if (!scansShown && state === 'ready' && previewStale) {
+    const hasScans = !!(b && b.scan && b.scan.pages.size);
+    if (which === 'scans' && !hasScans) which = 'book';
+    if (which === 'chapters' && state !== 'ready') which = 'book';
+    viewTab = which;
+    $('tabScans').hidden = !hasScans;
+    $('tabChapters').hidden = state !== 'ready';
+    for (const [id, name] of [['tabBook', 'book'], ['tabScans', 'scans'], ['tabChapters', 'chapters'], ['tabSettings', 'settings']]) {
+      $(id).setAttribute('aria-selected', String(which === name));
+    }
+    const preview = !!b && which === 'book';
+    $('bookView').hidden = !preview || state !== 'ready';
+    $('convertingView').hidden = !preview || state !== 'converting';
+    $('waitingView').hidden = !preview || state !== 'waiting';
+    $('failedView').hidden = !preview || state !== 'failed';
+    $('scans').hidden = !b || which !== 'scans';
+    $('chaptersPanel').hidden = !b || which !== 'chapters';
+    $('settingsPanel').hidden = !(editingDefaults || (b && which === 'settings'));
+    if (b && which === 'scans') scans.openFirst();
+    if (fresh) previewStale = true; // another book: its preview is drawn when its Preview tab is shown
+    if (preview && state === 'ready' && previewStale) {
       openPreview(false).catch(() => showStatus('The preview could not be shown.', { error: true }));
     }
+    paintScreenBusy();
   }
-  $('tabBook').addEventListener('click', () => { userPickedTab = true; showTab('book'); });
-  $('tabScans').addEventListener('click', () => { userPickedTab = true; showTab('scans'); });
+  for (const [id, name] of [['tabBook', 'book'], ['tabScans', 'scans'], ['tabChapters', 'chapters'], ['tabSettings', 'settings']]) {
+    $(id).addEventListener('click', () => { userPickedTab = true; showTab(name); });
+  }
 
   function showBookInfo() {
     const b = current;
@@ -1767,28 +1807,9 @@
   }
 
   // ---------- the settings panel ----------
-  const openSections = new Set(['details']);
-  for (const toggle of document.querySelectorAll('.acc-toggle')) {
-    toggle.addEventListener('click', () => {
-      const key = toggle.dataset.section;
-      if (openSections.has(key)) openSections.delete(key);
-      else openSections.add(key);
-      showSections();
-    });
-  }
-  function showSections() {
-    for (const toggle of document.querySelectorAll('.acc-toggle')) {
-      // folded until opened, but all open while the settings for new books are changed
-      const on = openSections.has(toggle.dataset.section) || editingDefaults;
-      toggle.setAttribute('aria-expanded', String(on));
-      $(toggle.getAttribute('aria-controls')).hidden = !on;
-    }
-  }
-
   function renderSettings() {
     const b = editingDefaults ? null : current;
-    $('settingsHead').hidden = !!b;
-    $('doneDefaults').hidden = !(editingDefaults && current);
+    showLayout();
     $('secDetails').hidden = $('secCover').hidden = !b;
     $('bookFoot').hidden = !b;
     $('facts').hidden = sourceBooks().length > 0;
@@ -1802,7 +1823,6 @@
       showCover();
     }
     showToc();
-    showSections();
     showSummaries();
     showAgain();
     showApply();
@@ -2004,10 +2024,12 @@
     }
   }
 
+  // the tab where a check is made: Chapters (the Daftar Isi) or Settings (the cover)
   function openSection(key, focus) {
-    openSections.add(key);
-    showSections();
-    $(focus || (key === 'cover' ? 'secCover' : 'secDetails')).scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    userPickedTab = true;
+    showTab(key === 'cover' ? 'settings' : 'chapters');
+    const el = $(focus || (key === 'cover' ? 'secCover' : 'tocPick'));
+    if (el && !el.hidden) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
   function openScans(which) {
     userPickedTab = true;
@@ -2051,14 +2073,15 @@
   }
   for (const id of ['bodyReader', 'bodyOutput']) $(id).addEventListener('change', settingsChanged);
 
-  $('editDefaults').addEventListener('click', () => {
-    editingDefaults = true;
+  // the settings for new books: Change under the list, or More settings on the start
+  function editDefaults(on) {
+    editingDefaults = on;
     renderSettings();
-  });
-  $('doneDefaults').addEventListener('click', () => {
-    editingDefaults = false;
-    renderSettings();
-  });
+    showPane();
+  }
+  $('editDefaults').addEventListener('click', () => editDefaults(true));
+  $('startMore').addEventListener('click', () => editDefaults(true));
+  $('doneDefaults').addEventListener('click', () => editDefaults(false));
 
   // the reader and output settings for every book of the source: those already made with others are converted again
   $('useForAll').addEventListener('click', () => {
@@ -2317,7 +2340,7 @@
   // How to choose the chapters when the Daftar Isi wasn't found: its page picked in
   // the page editor (scanned books), or the chapters made one by one.
   const pickHint = b => (b.scan && b.scan.pages.size
-    ? 'If it has one, open its page in Scanned pages and click Use as the Daftar Isi, or choose the chapters yourself below.'
+    ? 'If it has one, open its page in Pages and click Use as the Daftar Isi, or choose the chapters yourself below.'
     : 'You can choose the chapters yourself below.');
 
   // Make the chapters from the Daftar Isi on `pages` (page numbers of the PDF), from
@@ -2584,7 +2607,7 @@
       // pages with pictures are known once the book is made (and after each update)
       const withPictures = [...r.pages.values()].filter(hasPictures).length;
       $('onlyPictures').disabled = !r.done;
-      $('onlyPicturesText').textContent = r.done ? `Only pages with pictures · ${withPictures}` : 'Only pages with pictures';
+      $('onlyPicturesText').textContent = r.done ? `With pictures · ${withPictures}` : 'With pictures';
       // every page read at offerPicture or lower as a picture at once, or their text again
       const toKeep = keepable(r).length;
       const kept = keptAll(r).length;
@@ -2710,6 +2733,7 @@
       $('pageBody').hidden = !p;
       $('pageChip').hidden = !p;
       $('pageTitle').textContent = p ? `Page ${open}` : 'Page';
+      $('prevLow').hidden = $('nextLow').hidden = !p;
       if (!p) return;
       const [text, kind] = badge(r, p);
       $('pageChip').textContent = text;
@@ -2750,7 +2774,6 @@
       if (fresh || document.activeElement !== $('pageText')) $('pageText').value = p.text || '';
       $('readAgain').hidden = p.manual;
       for (const btn of $('pageBody').querySelectorAll('button')) {
-        if (btn.closest('.row-between')) continue;
         btn.disabled = !ready;
         btn.title = waitTitle;
       }
@@ -2768,8 +2791,9 @@
       const low = lowPages(r);
       const prev = [...low].reverse().find(n => n < open);
       const next = low.find(n => n > open);
-      $('prevLow').textContent = prev ? `← p. ${prev}` : '← No low page before';
-      $('nextLow').textContent = next ? `Next low page: p. ${next} →` : 'No low page after →';
+      $('prevLow').textContent = prev ? `‹ p. ${prev}` : '‹';
+      $('prevLow').title = prev ? `The page to check before: p. ${prev}` : 'No page to check before this one';
+      $('nextLow').textContent = next ? `Next to check: p. ${next} ›` : 'None left to check';
       $('prevLow').disabled = !prev;
       $('nextLow').disabled = !next;
       $('prevLow').onclick = () => prev && openPage(prev);
@@ -2978,11 +3002,11 @@
         });
         if (b === shown) {
           renderCard(b, page.n);
-          if ($('tabs').hidden) {
-            $('tabs').hidden = false;
+          if ($('tabScans').hidden) {
+            $('tabScans').hidden = false;
             if (!userPickedTab && b === current) showTab('scans');
           }
-          if (open === null && !$('pageEditor').hidden) this.openFirst();
+          if (open === null && !$('scans').hidden) this.openFirst();
         }
         updateCounts(b);
       },
@@ -3014,7 +3038,7 @@
         cards.clear();
         grid.innerHTML = '';
         const has = !!(b && b.scan && b.scan.pages.size);
-        $('tabs').hidden = !has;
+        $('tabScans').hidden = !has;
         renderEditor();
         if (!has) return;
         for (const n of [...b.scan.pages.keys()].sort((x, y) => x - y)) renderCard(b, n);
@@ -3167,10 +3191,12 @@
     const ready = !!bookId;
     if (ready) {
       download.href = api.downloadUrl ? api.downloadUrl(bookId, isXtc(), pictureParts(), pictureLayout()) : '#';
-      download.textContent = `Download ${bookMeta.fileName}`;
+      download.textContent = `Download ${(bookMeta.fileName.match(/\.(\w+)$/) || [, 'book'])[1].toUpperCase()}`;
+      download.title = bookMeta.fileName;
     } else {
       download.removeAttribute('href');
-      download.textContent = current && current.state === 'failed' ? 'Not made' : 'Download when it’s made';
+      download.textContent = 'Download';
+      download.title = current && current.state === 'failed' ? 'This book could not be made' : 'Ready to download once the book is made';
     }
     $('send').disabled = !ready || sending || !api.send;
     download.classList.toggle('disabled', !ready);
@@ -3754,6 +3780,13 @@
   for (const input of document.querySelectorAll('input[name="newFormat"], input[name="footFormat"]')) {
     input.addEventListener('change', () => setNewFormat(input.value));
   }
+  $('startDevice').addEventListener('change', () => {
+    defaultsBy[source].device = $('startDevice').value;
+    saveDefaults();
+    if (editingDefaults || !current) writeForm(defaultsBy[source], source === 'web');
+    showSummaries();
+    showQueue();
+  });
 
   // the source chosen last time
   try {
