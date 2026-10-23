@@ -6,7 +6,7 @@ const { analyzePdf, buildEpub, readerScreen, contentsPagesFrom } = require('../i
 const { openPdf } = require('../pdf');
 const { imageCover, cleanBoxes } = require('../figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('../xtc');
-const { retryPage, manualReading, readAroundBoxes, readingWithBoxes } = require('../ocr');
+const { retryPage, manualReading, readAroundBoxes, readingWithBoxes, packReadings, unpackReadings } = require('../ocr');
 
 const MAX_BYTES = 300 * 1024 * 1024;
 const MAX_BOOKS = 8; // converted books kept, in this page's memory: the page converts several
@@ -24,7 +24,7 @@ const objectUrl = (data, type) => URL.createObjectURL(new Blob([data], { type })
 function newSession(pdf, options) {
   const id = crypto.randomUUID();
   const session = {
-    id, pdf, options, thumbnails: new Map(), book: null, cover: null, xtc: null, xtcCover: null,
+    id, pdf, options, thumbnails: new Map(), scans: new Map(), book: null, cover: null, xtc: null, xtcCover: null,
     busy: false, improved: new Set(), screen: null,
   };
   sessions.set(id, session);
@@ -101,12 +101,33 @@ function xtcSummary(s) {
   };
 }
 
+// A scanned page as the page lists it (as server.js pageSummary).
+function pageSummary(n, r) {
+  return {
+    n, confidence: r.confidence ?? null, text: r.text || '',
+    ...(r.manual && { manual: true }), ...(r.picture && { picture: true, pictureParts: r.pictureParts || 1 }),
+  };
+}
+
+// The scan of a page read with OCR: kept (to save with the book) and shown.
+function keepScan(s, n, jpeg) {
+  s.scans.set(n, jpeg);
+  s.thumbnails.set(n, objectUrl(jpeg, 'image/jpeg'));
+}
+
 // Convert a PDF file. `xtc` is the XTC settings, or null for an EPUB. Reports
 // progress like the server's stream: onProgress, onSession, and onPage for each
-// scanned page as it's read.
-async function convert(file, { title, author, xtc, device, firstPageCover, contentsPages }, { onProgress = () => {}, onSession = () => {}, onPage = () => {} }) {
+// scanned page as it's read. `readings`: the book's pages as read before (see
+// readings), to open it again without reading them again.
+async function convert(file, { title, author, xtc, device, firstPageCover, contentsPages, readings }, { onProgress = () => {}, onSession = () => {}, onPage = () => {} }) {
   const pdf = await readFile(file, MAX_BYTES);
   if (pdf.subarray(0, 5).toString() !== '%PDF-') throw new Error('That file is not a PDF.');
+  let saved = null;
+  try {
+    if (readings) saved = unpackReadings(readings);
+  } catch {
+    throw new Error('The saved pages could not be read.');
+  }
   const name = file.name.replace(/\.[^.]*$/, '') || 'book';
   const s = newSession(pdf, {
     title: title || undefined, author: author || undefined, name, ...(device && { device }), ...(firstPageCover && { firstPageCover }),
@@ -119,17 +140,29 @@ async function convert(file, { title, author, xtc, device, firstPageCover, conte
     return xtcSummary(s);
   }
   onSession({ id: s.id, lowConfidence: LOW_CONFIDENCE, pictureBelow: PICTURE_BELOW, offerPicture: OFFER_PICTURE });
+  // pages read before are listed at once, as they were left
+  for (const [n, jpeg] of saved?.thumbs || []) keepScan(s, n, jpeg);
+  for (const [n, r] of saved?.ocr?.pages || []) onPage(pageSummary(n, r));
   const book = await analyzePdf(pdf, {
     ...s.options,
+    ...(saved?.ocr && { ocr: saved.ocr }),
     onProgress,
     onOcrPage: (n, { confidence, text, thumbnail }) => {
-      s.thumbnails.set(n, objectUrl(thumbnail, 'image/jpeg'));
+      keepScan(s, n, thumbnail);
       onPage({ n, confidence, text });
     },
   });
   book.fileName = name + '.epub';
   s.book = book;
   return bookSummary(s);
+}
+
+// The book's scanned pages as read, with every change made to them, as text to keep
+// (see ocr.js packReadings); or their scans (`part` 'scans'). Null without scanned pages.
+async function readings(id, part = 'pages') {
+  const s = session(id);
+  if (!s.book?.ocr) return null;
+  return part === 'scans' ? packReadings(null, s.scans) : packReadings(s.book.ocr);
 }
 
 // Read one scanned page again with other settings; keep the new reading if it's better.
@@ -348,4 +381,4 @@ async function send(id, { address, folder = '/', name, parts = 1, pictures } = {
 // eslint-disable-next-line no-undef
 const version = async () => __VERSION__;
 
-window.convertPdfApi = { convert, retry, setText, setPicture, setBoxes, rebuild, setCover, setDetails, epub, file, coverUrl, scanUrl, screenUrl, download, send, version };
+window.convertPdfApi = { convert, readings, retry, setText, setPicture, setBoxes, rebuild, setCover, setDetails, epub, file, coverUrl, scanUrl, screenUrl, download, send, version };

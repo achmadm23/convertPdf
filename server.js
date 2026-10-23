@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const { analyzePdf, buildEpub, openPdf, readerScreen, contentsPagesFrom } = require('./index');
 const { imageCover, cleanBoxes } = require('./figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('./xtc');
-const { retryPage, manualReading, readAroundBoxes, readingWithBoxes } = require('./ocr');
+const { retryPage, manualReading, readAroundBoxes, readingWithBoxes, packReadings, unpackReadings } = require('./ocr');
 const { parseLinks, readWebPages, previewLink } = require('./web');
 
 const { version } = require('./package.json');
@@ -26,6 +26,8 @@ const MAX_BOXES_BYTES = 16 * 1024; // the boxes drawn around a page's pictures
 const MAX_DETAILS_BYTES = 16 * 1024; // a book's title and author
 const MAX_LINKS_BYTES = 64 * 1024; // the links of web pages to convert, and their book's details
 const MAX_SEND_BYTES = 4 * 1024; // where to send a book: the reader's address and folder
+const MAX_READINGS_BYTES = 300 * 1024 * 1024; // a book's scanned pages as read, kept by the page (see ocr.js packReadings)
+const READINGS_KEPT = 10 * 60 * 1000; // readings sent ahead of their PDF wait this long for it
 const SEND_TIMEOUT = 10 * 60 * 1000; // the reader takes in a file slowly over Wi-Fi
 
 const page = path.join(__dirname, 'public', 'index.html');
@@ -64,6 +66,45 @@ function newSession(pdf, options) {
   return session;
 }
 
+// A book opened again keeps its scanned pages' reading from before (the page keeps
+// it, see GET /book/<id>/readings): it's sent first (POST /readings) and its PDF
+// then names it (X-Readings), so the pages aren't read again.
+const uploadedReadings = new Map(); // token → { readings: unpackReadings' result, timer }
+
+function takeReadings(token) {
+  const kept = uploadedReadings.get(token);
+  if (!kept) throw new Error('The saved pages were not found. Please add the PDF again.');
+  clearTimeout(kept.timer);
+  uploadedReadings.delete(token);
+  return kept.readings;
+}
+
+async function handleReadingsUpload(req, res) {
+  let readings;
+  try {
+    readings = unpackReadings((await readBody(req, MAX_READINGS_BYTES)).toString('utf8'));
+  } catch (err) {
+    return sendError(res, 400, err instanceof SyntaxError ? 'The saved pages could not be read.' : err.message);
+  }
+  const token = crypto.randomUUID();
+  uploadedReadings.set(token, { readings, timer: setTimeout(() => uploadedReadings.delete(token), READINGS_KEPT) });
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ token }));
+}
+
+// GET /book/<id>/readings: the book's scanned pages as read, with every change made
+// to them, for the page to keep; or their scans, with ?part=scans. Nothing (204) for
+// a book with no scanned pages.
+function handleReadings(res, session, scans) {
+  const ocr = session.book?.ocr;
+  if (!ocr) {
+    res.writeHead(204);
+    return res.end();
+  }
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(scans ? packReadings(null, session.thumbnails) : packReadings(ocr));
+}
+
 function readBody(req, maxBytes = MAX_BYTES) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -95,6 +136,15 @@ function sendError(res, status, message) {
 function sendFile(res, file, type, cache = 'max-age=86400') {
   res.writeHead(200, { 'Content-Type': type, 'Cache-Control': cache });
   fs.createReadStream(file).pipe(res);
+}
+
+// A scanned page as the page lists it: how well it was read, its text, and what was
+// done to it (typed in, kept as a picture).
+function pageSummary(n, r) {
+  return {
+    n, confidence: r.confidence ?? null, text: r.text || '',
+    ...(r.manual && { manual: true }), ...(r.picture && { picture: true, pictureParts: r.pictureParts || 1 }),
+  };
 }
 
 // Answer with a stream of JSON lines: progress updates, then {result} or {error}.
@@ -199,6 +249,12 @@ async function handleConvert(req, res) {
   } catch (err) {
     return sendError(res, 400, err.message);
   }
+  let saved = null; // the book opened again: its pages as read before
+  try {
+    if (header(req, 'x-readings')) saved = takeReadings(header(req, 'x-readings'));
+  } catch (err) {
+    return sendError(res, 400, err.message);
+  }
   const session = newSession(pdf, {
     title: header(req, 'x-title'), author: header(req, 'x-author'), name, ...(device && { device }),
     ...(header(req, 'x-first-page-cover') === '1' && { firstPageCover: true }),
@@ -227,8 +283,12 @@ async function handleConvert(req, res) {
       session: { id: session.id, lowConfidence: LOW_CONFIDENCE, pictureBelow: PICTURE_BELOW, offerPicture: OFFER_PICTURE },
     });
     const started = Date.now();
+    // pages read before are listed at once, as they were left
+    for (const [n, jpeg] of saved?.thumbs || []) session.thumbnails.set(n, jpeg);
+    for (const [n, r] of saved?.ocr?.pages || []) send({ page: pageSummary(n, r) });
     const book = await analyzePdf(pdf, {
       ...session.options,
+      ...(saved?.ocr && { ocr: saved.ocr }),
       onProgress,
       onOcrPage: (n, { confidence, text, thumbnail }) => {
         session.thumbnails.set(n, thumbnail);
@@ -600,6 +660,20 @@ const server = http.createServer((req, res) => {
     sendFile(res, page, 'text/html; charset=utf-8', 'no-cache');
   } else if (req.method === 'POST' && route === '/convert') {
     handleConvert(req, res);
+  } else if (req.method === 'POST' && route === '/readings') {
+    handleReadingsUpload(req, res).catch(err => {
+      console.error(err);
+      if (!res.headersSent) sendError(res, 500, 'Could not keep the saved pages.');
+    });
+  } else if (req.method === 'GET' && (match = route.match(/^\/book\/([\w-]+)\/readings$/))) {
+    const session = sessions.get(match[1]);
+    if (!session) return sendError(res, 404, 'This book has expired. Please convert it again.');
+    try {
+      handleReadings(res, session, url.searchParams.get('part') === 'scans');
+    } catch (err) {
+      console.error(err);
+      sendError(res, 500, 'Could not save the pages.');
+    }
   } else if (req.method === 'POST' && route === '/links/preview') {
     handlePreview(req, res).catch(err => {
       console.error(err);

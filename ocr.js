@@ -504,4 +504,65 @@ function finishPages(readings) {
   return normalizeSizes(markUnreadable(pages));
 }
 
-module.exports = { recognizePages, retryPage, readAroundBoxes, readingWithBoxes, manualReading, finishPages, LANGUAGES };
+// A book's scanned pages as read (its `ocr`, with every change made to them) and
+// their scans (thumbs: page → JPEG), as text to keep: the page keeps it to open
+// the book again later without reading its pages again. A paragraph's lines share
+// one object, which plain JSON would copy for each line, so they're numbered.
+// Either can be left out (null): the scans don't change, so they're kept once,
+// and the readings again after each change. unpackReadings takes several packs,
+// one per line.
+const PACK_VERSION = 1;
+
+function packReadings(ocr, thumbs) {
+  const packReading = r => {
+    const paras = [];
+    const index = new Map();
+    const lines = list => list && list.map(l => {
+      if (!index.has(l.para)) index.set(l.para, paras.push(l.para) - 1);
+      return { ...l, para: index.get(l.para) };
+    });
+    return { ...r, lines: lines(r.lines), ocrLines: lines(r.ocrLines), unboxed: r.unboxed && packReading(r.unboxed), paras };
+  };
+  return JSON.stringify({
+    v: PACK_VERSION,
+    ...(ocr && { language: ocr.language, pages: [...ocr.pages].map(([n, r]) => [n, packReading(r)]) }),
+    ...(thumbs && { thumbs: [...thumbs].map(([n, jpeg]) => [n, Buffer.from(jpeg).toString('base64')]) }),
+  });
+}
+
+// The `ocr` (null without readings) and thumbs from packReadings' text, or several
+// packs one per line. Throws if it isn't that.
+function unpackReadings(text) {
+  const packs = String(text).split('\n').filter(Boolean).map(line => {
+    const data = JSON.parse(line);
+    if (data?.v !== PACK_VERSION) throw new Error('The saved pages could not be read.');
+    return data;
+  });
+  const readings = packs.find(p => Array.isArray(p.pages));
+  const thumbs = packs.find(p => Array.isArray(p.thumbs));
+  const pageNumber = n => {
+    if (!Number.isInteger(n) || n < 1) throw new Error('The saved pages could not be read.');
+    return n;
+  };
+  const unpackReading = r => {
+    const ok = r && Array.isArray(r.lines) && Array.isArray(r.paras) && Number.isFinite(r.page?.width) && Number.isFinite(r.page?.height);
+    if (!ok) throw new Error('The saved pages could not be read.');
+    const { paras, ...reading } = r;
+    const lines = list => list && list.map(l => ({ ...l, para: paras[l.para] || { confidence: 0, lines: 1, words: 0 } }));
+    const out = { ...reading, lines: lines(r.lines) };
+    if (r.ocrLines) out.ocrLines = lines(r.ocrLines);
+    else delete out.ocrLines;
+    if (r.unboxed) out.unboxed = unpackReading(r.unboxed);
+    else delete out.unboxed;
+    return out;
+  };
+  return {
+    ocr: readings ? {
+      language: LANGUAGES[readings.language] ? readings.language : undefined,
+      pages: new Map(readings.pages.map(([n, r]) => [pageNumber(n), unpackReading(r)])),
+    } : null,
+    thumbs: new Map((thumbs ? thumbs.thumbs : []).map(([n, b64]) => [pageNumber(n), Buffer.from(String(b64), 'base64')])),
+  };
+}
+
+module.exports = { recognizePages, retryPage, readAroundBoxes, readingWithBoxes, manualReading, finishPages, packReadings, unpackReadings, LANGUAGES };
