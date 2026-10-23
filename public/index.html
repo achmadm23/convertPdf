@@ -261,7 +261,8 @@
   .keep-all { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; background: var(--seg); border-radius: 8px; }
   .keep-all .choice { flex: 0 1 300px; background: var(--field); }
   .scan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; padding: 16px 20px 20px; max-height: 75vh; overflow: auto; }
-  .scans.only-low .scan-card:not(.checkable) { display: none; }
+  .scans.only-low .scan-card:not(.checkable), .scans.only-pictures .scan-card:not(.has-pictures) { display: none; }
+  .scans-head label:has(input:disabled) { opacity: .45; cursor: not-allowed; }
   .scan-card {
     display: flex; gap: 12px; padding: 12px; text-align: left; background: var(--field);
     border: 1px solid var(--rule); border-radius: 10px; cursor: pointer;
@@ -515,6 +516,7 @@
         <div class="scans-head">
           <span id="scanSummary"></span>
           <label><input type="checkbox" id="onlyLow"><span>Only pages at <span class="offer-limit">90</span>% or lower</span></label>
+          <label title="Pages with pictures found or drawn, or kept as a picture"><input type="checkbox" id="onlyPictures" disabled><span id="onlyPicturesText">Only pages with pictures</span></label>
           <button type="button" class="btn small" id="keepAll" hidden></button>
           <button type="button" class="btn small" id="textAll" hidden></button>
           <button type="button" class="btn primary rebuild" id="rebuild" hidden></button>
@@ -1923,6 +1925,10 @@
       count.hidden = !low;
       count.textContent = `${low} low`;
       summary.textContent = `${r.pages.size}${r.total ? ` of ${r.total}` : ''} pages read` + (low ? ` · ${low} at ${r.limit}% or lower` : '');
+      // pages with pictures are known once the book is made (and after each update)
+      const withPictures = [...r.pages.values()].filter(hasPictures).length;
+      $('onlyPictures').disabled = !r.done;
+      $('onlyPicturesText').textContent = r.done ? `Only pages with pictures · ${withPictures}` : 'Only pages with pictures';
       rebuildBtn.hidden = !r.pending;
       rebuildBtn.textContent = `Update the book with ${r.pending} changed ${r.pending === 1 ? 'page' : 'pages'}`;
       rebuildBtn.disabled = r.busy;
@@ -1980,6 +1986,11 @@
     $('textAll').addEventListener('click', () => changeAll(keptAll(shown.scan), false));
 
     // a page's card: made the first time, then brought up to date
+    // a page with pictures: found or drawn on it, or the whole page kept as one
+    function hasPictures(p) {
+      return !!p.picture || (p.boxes || []).length > 0;
+    }
+
     function renderCard(b, n) {
       if (b !== shown) return;
       const r = b.scan;
@@ -2000,6 +2011,7 @@
       }
       card.classList.toggle('low', !p.picture && !p.manual && isLow(r, p.confidence));
       card.classList.toggle('checkable', p.manual || p.picture || canBePicture(r, p.confidence));
+      card.classList.toggle('has-pictures', hasPictures(p));
       card.classList.toggle('current', n === open);
       card.setAttribute('aria-current', String(n === open));
       card.querySelector('b').textContent = `p. ${n}`;
@@ -2294,6 +2306,7 @@
     }
 
     $('onlyLow').addEventListener('change', e => $('scans').classList.toggle('only-low', e.target.checked));
+    $('onlyPictures').addEventListener('change', e => $('scans').classList.toggle('only-pictures', e.target.checked));
 
     return {
       lowCount,

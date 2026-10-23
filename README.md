@@ -87,7 +87,7 @@ When a book looks right, click **Download** under its settings. **Download all**
 
 The page works offline: its fonts are served by the converter.
 
-For scanned books, a **Scanned pages** tab above the preview shows a card for each page as OCR reads it, even while the book is being converted: its scan, how well it was read, and the start of its text. Pages read at 75% or lower are marked; tick **Only pages at 90% or lower** to see just the ones worth checking. While the pages are shown, the right column is the **page editor**: click a card to open its page there, with its scan larger. Once the conversion has finished, it can:
+For scanned books, a **Scanned pages** tab above the preview shows a card for each page as OCR reads it, even while the book is being converted: its scan, how well it was read, and the start of its text. Pages read at 75% or lower are marked; tick **Only pages at 90% or lower** to see just the ones worth checking. Once the book is made, **Only pages with pictures** shows just the pages with pictures found or drawn on them, or kept as a picture, with how many there are; both can be ticked together. While the pages are shown, the right column is the **page editor**: click a card to open its page there, with its scan larger. Once the conversion has finished, it can:
 
 - **Text of the page:** correct the text or type it yourself, looking at the scan above it, then **Save text**. Leave an empty line between paragraphs. Your text is used instead of what OCR read, and the page stays editable.
 - **Read again** reads the page with other settings (higher resolution, black and white, the page as one block of text) and keeps the best reading if it's better than the first.
