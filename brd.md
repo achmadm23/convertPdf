@@ -89,7 +89,7 @@ flowchart TD
     pictures --> write["Write the EPUB<br/><small>chapters, contents and cover</small>"]
     write --> preview["Preview, change the cover<br/><small>the book updates in about 1 second</small>"]
     preview -- "if scanned" --> fix["Fix flagged scanned pages<br/><small>Retry, Edit text, Draw a box or Keep as picture</small>"]
-    fix -- "Update the book" --> write
+    fix -- "Apply changes" --> write
     preview --> download["Download the EPUB<br/><small>enabled once conversion finishes</small>"]
 ```
 
@@ -107,7 +107,7 @@ flowchart LR
 
 ## 6. Functional requirements
 
-52 requirements, 17 of them Must, define what version 1.3.0 delivers; priorities use MoSCoW.
+54 requirements, 17 of them Must, define what version 1.3.0 delivers; priorities use MoSCoW.
 
 | ID | Area | Requirement | Priority |
 | --- | --- | --- | --- |
@@ -163,6 +163,8 @@ flowchart LR
 | FR-51 | Pictures | Put an EPUB's pictures in the text, the text above and below each one (top and bottom), a picture that doesn't fit in the rest of a screen going to the top of the next, or each picture on a page of its own that it fills; in the text by default, one setting for each book changed without converting again, pictures turned sideways always pages of their own; `--pictures inline|page` on the command line | Should |
 | FR-52 | Books | Show each book in the list with its cover once it's made (the picture chosen, the one from the PDF or the article, or an XTC book's first page), a book without one with its letter; show a link's article title (without the site's name after it) and main picture as soon as it's added, read quickly from the page before the book is made, in the list and on the waiting and converting screens | Should |
 | FR-53 | Chapters | Make an EPUB's chapters from the book's own table of contents (Daftar Isi), found by itself in the first 20 and last 10 pages (the page with the most entries, at least 5, their page numbers going up, and the pages after it that carry on its list; used when 3 or more entries are placed and 2 or more of their titles are headings in the book), or its PDF page given in Details or chosen in the page editor (Use as the Daftar Isi), or none (Remove; Find it looks again): each entry's title and printed page number (a title wrapped onto two lines joined, dot leaders and dashes left out) make a chapter starting on that page, found from the page numbers printed on the pages (counted from the nearest page that shows one, so unnumbered and front pages don't matter) and checked against the headings of the pages close by, or, with no page numbers, from the headings alone; the title printed at the top of the chapter's page is left out, the table of contents page leaves the book, entries not found are listed, and Remove goes back to the chapters found | Should |
+| FR-54 | Books | Keep the books in the list in the browser (IndexedDB): each one's PDF, settings, cover picture, and its scanned pages as read with every change made to them (their scans kept once, the readings again a moment after each change); when the page is opened again, make them again from those without reading their pages again, in the list's order ("Opening", "Opened again … as you left them"); a book being read with OCR when the page closed starts again; Remove deletes it from the browser too; if the browser can't keep them, say so and ask before leaving with books not downloaded | Should |
+| FR-55 | Books | Put every change that builds a made book again (pages changed in the page editor, page 1 as the cover, the Daftar Isi, another reader for an EPUB of a PDF) in one bar above the book that says what's waiting, applied together with Apply changes (or first by Download and Download all), the book's line saying "Ready · changes to apply"; show a made book's checklist above its settings (chapters and where they come from, pages read badly, pages with pictures, the cover), each a click from where it's checked and ticked once clicked; choose EPUB or XTC for new PDFs in the box they're dropped on and under the list; the settings folded until opened | Should |
 
 ## 7. Non-functional requirements
 
@@ -200,8 +202,8 @@ The product assumes a single user on one computer, converting one book at a time
 
 **Constraints**
 
-- Web app only: converted books live in memory and are lost when the server restarts
-- Website: converted books live in the browser tab and are lost when it's closed; big scanned books are limited by the device's memory
+- Web app only: converted books live in memory and are lost when the server restarts; the page makes them again from what the browser kept (FR-54)
+- Website: converted books live in the browser tab; closed or reloaded, the page makes them again from what the browser kept (FR-54), within the browser's storage; big scanned books are limited by the device's memory
 - The exe is not code-signed, so Windows SmartScreen and some antivirus tools warn on first run
 - The exe runs only on the platform it was built on (Windows x64); other platforms need a source install
 - If ports 3000 to 3010 are all busy, the app cannot start
@@ -272,7 +274,7 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 
 | Version | Date | What changed |
 | --- | --- | --- |
-| v1.3.0 | 2026-10-22 | Many books at once: choose PDF or Web pages first, then add as many PDFs or links as you like, converted one after another in a list, each previewed, changed and downloaded on its own, or all in one zip; web pages (news articles such as BBC or Kompas) become EPUBs with only the article, its pictures and captions; the page slider stops at every screen of the book and lands on the one chosen; scanned pages as cards with a page editor beside them, and every page read at 90% or lower kept as a picture at once; an EPUB's pictures in the text, with the text above and below them, or on pages of their own; links shown with their article's title and picture as soon as they're added, and each book with its cover; loading and book updates shown on the reader; ConvertPdf.exe built with Node.js 24.22.1, which fixes the Brotli decoder bug CVE-2026-111497; pictures found on several pages at once in the app; Use page 1 as the cover, its text left out; boxes drawn on a scanned page read its text again without the pictures, so a column of text beside a drawing comes out as paragraphs; scanned pages filtered to those with pictures; chapters from the book's own Daftar Isi, found by itself and matched by its page numbers; Download puts changed pages in first; a new reader for an EPUB keeps the pages' reading and changes; a warning before leaving with unsaved books (FR-26, FR-42, FR-46 to FR-53, NFR-16) |
+| v1.3.0 | 2026-10-22 | Many books at once: choose PDF or Web pages first, then add as many PDFs or links as you like, converted one after another in a list, each previewed, changed and downloaded on its own, or all in one zip; web pages (news articles such as BBC or Kompas) become EPUBs with only the article, its pictures and captions; the page slider stops at every screen of the book and lands on the one chosen; scanned pages as cards with a page editor beside them, and every page read at 90% or lower kept as a picture at once; an EPUB's pictures in the text, with the text above and below them, or on pages of their own; links shown with their article's title and picture as soon as they're added, and each book with its cover; loading and book updates shown on the reader; ConvertPdf.exe built with Node.js 24.22.1, which fixes the Brotli decoder bug CVE-2026-111497; pictures found on several pages at once in the app; Use page 1 as the cover, its text left out; boxes drawn on a scanned page read its text again without the pictures, so a column of text beside a drawing comes out as paragraphs; scanned pages filtered to those with pictures; chapters from the book's own Daftar Isi, found by itself and matched by its page numbers; Download puts changed pages in first; a new reader for an EPUB keeps the pages' reading and changes; books kept in the browser and opened again after a reload without reading their pages again; changes waiting in one Apply changes bar; a checklist before downloading; EPUB or XTC chosen when adding PDFs, settings folded (FR-26, FR-42, FR-46 to FR-55, NFR-16) |
 | v1.2.4 | 2026-10-19 | Draw a box on scanned pages: the pictures found are marked on each page's scan, and boxes can be drawn, moved, resized or removed around them, the text outside staying text (FR-46); chapter titles of up to 3 centred lines on scanned pages are found, so chapters with a wrapped title no longer go missing (FR-06) |
 | v1.2.3 | 2026-10-19 | Pictures found anywhere on scanned pages, beside the text too; full-page pictures Sideways or Upright, as for XTC; a Portrait / Landscape preview, landscape laying the book out wide; flat mid-grays in pictures no longer print white (FR-43 to FR-45) |
 | v1.2.2 | 2026-10-19 | EPUB pictures and the preview sized for the chosen reader (X4 Pro by default); full-page pictures whole or in 2 or 3 sideways parts; a slider stop for every picture page (FR-41 to FR-43) |
