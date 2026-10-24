@@ -388,6 +388,20 @@ async function cropBoxes(page, boxes, screen) {
     .sort((a, b) => b.top - a.top);
 }
 
+// A picture turned by `degrees` (90, 180 or 270, clockwise), as the user turned it;
+// 0 leaves it as it is.
+function turned(canvas, degrees = 0) {
+  const d = ((degrees % 360) + 360) % 360;
+  if (!d) return canvas;
+  const across = d === 90 || d === 270;
+  const out = createCanvas(across ? canvas.height : canvas.width, across ? canvas.width : canvas.height);
+  const ctx = out.getContext('2d');
+  ctx.translate(out.width / 2, out.height / 2);
+  ctx.rotate((d * Math.PI) / 180);
+  ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+  return out;
+}
+
 // A tall picture (a whole page kept as a picture) turned on its side and cut
 // into parts, each a picture of its own that fills the e-reader's screen, so its
 // text comes out bigger. As in an XTC book: 2 parts are halves, 3 parts are
@@ -415,7 +429,8 @@ function sidewaysParts(canvas, parts, screen) {
 // A picture filling most of its page also comes turned sideways in 2 and 3 parts
 // (`split`, for buildEpub's pictureParts), so switching between them later needs
 // no converting again. The page is cleaned up after.
-async function pagePictures(page, { find, lines, gaps, boxes }, layout, screen) {
+// `turns`: the pictures the user turned, by their number on the page ({ 1: 90 }).
+async function pagePictures(page, { find, lines, gaps, boxes, turns = {} }, layout, screen) {
   const figures =
     find === 'drawn'
       ? await cropBoxes(page, boxes, screen)
@@ -428,9 +443,14 @@ async function pagePictures(page, { find, lines, gaps, boxes }, layout, screen) 
   return {
     pageWidth,
     pageHeight,
-    figures: figures.map(({ crop, ...fig }) => {
+    figures: figures.map(({ crop, ...fig }, j) => {
+      // turned as the user turned it (its place on the page stays where it was found)
+      if (turns[j]) {
+        crop = turned(crop, turns[j]);
+        fig = { ...fig, data: screenImage(crop, screen) };
+      }
       const high = fig.top - fig.bottom;
-      const fullPage = high >= pageHeight * FULL_PAGE && high > fig.right - fig.left;
+      const fullPage = high >= pageHeight * FULL_PAGE && crop.height > crop.width;
       return fullPage ? { ...fig, split: { 2: sidewaysParts(crop, 2, screen), 3: sidewaysParts(crop, 3, screen) } } : fig;
     }),
   };
@@ -454,5 +474,5 @@ async function imageCover(data, screen) {
 
 module.exports = {
   measureLayout, layoutFrom, layoutMeasures, findGaps, detectFigures, findPictures, pagePictures, cleanBoxes, cropBoxes,
-  sidewaysParts, renderCover, imageCover, renderPage,
+  sidewaysParts, renderCover, imageCover, renderPage, turned,
 };

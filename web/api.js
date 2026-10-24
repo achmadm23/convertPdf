@@ -2,7 +2,7 @@
 // server.js does for the app, done here without a server. public/index.html uses
 // it when this file is loaded (window.convertPdfApi); web/build.js bundles it.
 
-const { analyzePdf, newBookCache, buildEpub, readerScreen, contentsPagesFrom, chapterStartsFrom } = require('../index');
+const { analyzePdf, newBookCache, buildEpub, readerScreen, contentsPagesFrom, chapterStartsFrom, looksFrom } = require('../index');
 const { openPdf } = require('../pdf');
 const { imageCover, cleanBoxes } = require('../figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('../xtc');
@@ -269,6 +269,8 @@ async function rebuild(id, { onProgress = () => {} } = {}, changes = {}) {
   // the chapters chosen by the user ([{ page, title }]), or the ones found again (null)
   if (changes.chapterStarts === null) delete options.chapterStarts;
   else if (changes.chapterStarts !== undefined) options.chapterStarts = chapterStartsFrom(changes.chapterStarts);
+  // the pictures turned and sized by the user ({} or null: as they were found)
+  if (changes.looks !== undefined) options.looks = looksFrom(changes.looks);
   if (changes.device !== undefined) {
     readerScreen(changes.device); // a reader there is, or this says which there are
     options.device = changes.device; // its pictures are drawn again for this reader's screen

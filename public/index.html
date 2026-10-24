@@ -1861,7 +1861,10 @@
       b.id = meta.id;
       b.meta = meta;
       // the chapters chosen by the user (opened again, or converted again): built in at once
-      if (!web && !xtc && b.chapterStarts) b.meta = await api.rebuild(b.id, {}, { chapterStarts: b.chapterStarts });
+      // the chapters chosen and the pictures turned or sized by the user (converted again): built in at once
+      if (!web && !xtc && (b.chapterStarts || b.looks)) {
+        b.meta = await api.rebuild(b.id, {}, { ...(b.chapterStarts && { chapterStarts: b.chapterStarts }), ...(b.looks && { looks: b.looks }) });
+      }
       progress.update({ stage: 'done' });
       if (b.cover) {
         try {
@@ -2227,7 +2230,7 @@
   const hasChange = (b, key) => !!(b && b.next && key in b.next);
   // the setting as it will be: waiting, or as the book is made (contentsPages null: looked for)
   // (chapterStarts null: the chapters found)
-  const LISTS = ['contentsPages', 'chapterStarts'];
+  const LISTS = ['contentsPages', 'chapterStarts', 'looks'];
   const wanted = (b, key) => (hasChange(b, key) ? b.next[key] : LISTS.includes(key) ? b[key] ?? null : !!b[key]);
   const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
   const joinList = list => (list.length > 1 ? `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}` : list[0] || '');
@@ -2258,6 +2261,7 @@
       list.push(c === null ? 'the chapters found again' : `your ${c.length} ${c.length === 1 ? 'chapter' : 'chapters'}`);
     }
     if (changeKind(b) === 'reader') list.push(`the book drawn for the ${deviceName(b.settings.device)}`);
+    if (hasChange(b, 'looks')) list.push('pictures turned or resized');
     return list;
   }
 
@@ -2305,6 +2309,7 @@
     if ('firstPageCover' in next) changes.firstPageCover = next.firstPageCover;
     if ('contentsPages' in next) changes.contentsPages = next.contentsPages;
     if ('chapterStarts' in next) changes.chapterStarts = next.chapterStarts;
+    if ('looks' in next) changes.looks = next.looks;
     const device = changeKind(b) === 'reader' ? b.settings.device : null;
     if (device) changes.device = device;
     const what = pendingList(b);
@@ -2315,6 +2320,7 @@
       }
       if ('contentsPages' in changes) b.contentsPages = changes.contentsPages === null ? undefined : changes.contentsPages;
       if ('chapterStarts' in changes) b.chapterStarts = changes.chapterStarts || undefined;
+      if ('looks' in changes) b.looks = changes.looks || undefined;
       if (device) b.converted = madeWith({ ...b.settings, device });
       // a setting changed again meanwhile still waits
       for (const key of Object.keys(next)) if (b.next && same(b.next[key], next[key])) delete b.next[key];
@@ -4331,7 +4337,13 @@
     if (!doc.getElementById('fixStyle')) {
       const style = doc.createElement('style');
       style.id = 'fixStyle';
-      style.textContent = '.fixable { cursor: text; outline: none; border-bottom: 1px dashed rgba(201, 136, 58, .75); }' +
+      style.textContent = '.pickable { cursor: pointer; } .pickable:hover { outline: 2px dashed rgba(240, 178, 90, .8); outline-offset: 2px; }' +
+        ' .pic-frame { position: relative; } .pic-tools { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); z-index: 5;' +
+        ' display: flex; align-items: center; gap: 4px; padding: 4px; white-space: nowrap; background: rgba(19, 20, 23, .92); border-radius: 18px; text-indent: 0; }' +
+        ' .pic-tools button { width: 30px; height: 30px; padding: 0; color: #ECE7DE; background: #2C2F35; border: 0; border-radius: 15px;' +
+        ' font: 600 15px/30px system-ui, sans-serif; cursor: pointer; } .pic-tools button:hover:not(:disabled) { color: #131417; background: #F0B25A; }' +
+        ' .pic-tools button:disabled { opacity: .35; cursor: default; } .pic-tools-note { padding: 0 6px; font: 600 11px system-ui, sans-serif; color: #F0B25A; }' +
+        ' .fixable { cursor: text; outline: none; border-bottom: 1px dashed rgba(201, 136, 58, .75); }' +
         ' .fixable:hover { background: rgba(240, 178, 90, .12); } .fixable:focus { background: rgba(240, 178, 90, .24); border-bottom-color: #C9883A; }';
       doc.head.append(style);
       const fixable = e => e.target && e.target.closest && e.target.closest('.fixable');
@@ -4371,7 +4383,20 @@
       };
       doc.addEventListener('keydown', keys, true);
       doc.addEventListener('keyup', keys, true);
+      // a picture clicked: its bar (pictureTools); a click elsewhere puts the bar away
+      doc.addEventListener('click', e => {
+        const img = e.target.closest && e.target.closest('img[data-pdfpage]');
+        const bar = doc.getElementById('picTools');
+        if (img && canLook()) showPictureTools(img);
+        else if (bar && !e.target.closest('.pic-tools')) bar.remove();
+      });
     }
+    // the turn a picture was drawn with (the bar shows the change from it at once)
+    for (const img of doc.querySelectorAll('img[data-pdfpage]')) {
+      img.dataset.turnedAs = (current && current.looks && current.looks[`${img.dataset.pdfpage}:${img.dataset.pic}`]?.rotate) || 0;
+      img.classList.toggle('pickable', canLook());
+    }
+    if (!canLook()) doc.getElementById('picTools')?.remove();
     const on = viewTab === 'scans';
     let page = null;
     for (const el of doc.body.querySelectorAll('.pdfp, p, h3')) {
@@ -4388,6 +4413,84 @@
       } else el.removeAttribute('contenteditable');
     }
   }
+  // How a picture looks in the book, as the user set it: { rotate, size } (see index.js
+  // looksFrom), kept by "page:number"; the steps − and + take its width through.
+  const SIZES = [25, 40, 55, 70, 85, 100];
+  // a made book of a PDF: its pictures can be turned and sized on the book (in the preview, or beside its PDF page)
+  const canLook = () => !!current && current.kind === 'pdf' && current.state === 'ready';
+  const lookOf = (b, page, pic) => (wanted(b, 'looks') || {})[`${page}:${pic}`] || {};
+  function setLook(b, page, pic, look) {
+    const looks = { ...(wanted(b, 'looks') || {}) };
+    const key = `${page}:${pic}`;
+    const rotate = ((look.rotate || 0) % 360 + 360) % 360;
+    const size = look.size && look.size < 100 ? look.size : 0;
+    if (rotate || size) looks[key] = { ...(rotate && { rotate }), ...(size && { size }) };
+    else delete looks[key];
+    setChange(b, 'looks', Object.keys(looks).length ? looks : null);
+  }
+
+  // A picture of the book clicked gets a bar on it: ↺ ↻ turn it a
+  // quarter, − + make it smaller or bigger (a share of the screen's width), ↺0 puts it
+  // back as found. It's shown so at once; the book goes in again a moment later.
+  function pictureTools(doc) {
+    let bar = doc.getElementById('picTools');
+    if (!bar) {
+      bar = doc.createElement('div');
+      bar.id = 'picTools';
+      bar.className = 'pic-tools';
+      bar.contentEditable = 'false';
+      bar.innerHTML = [['left', '↺', 'Turn left'], ['right', '↻', 'Turn right'], ['smaller', '−', 'Smaller'], ['bigger', '+', 'Bigger'], ['reset', '⟲', 'As it was found']]
+        .map(([act, label, title]) => `<button type="button" data-act="${act}" title="${title}" aria-label="${title}">${label}</button>`).join('') +
+        '<span class="pic-tools-note"></span>';
+      bar.addEventListener('click', e => {
+        const btn = e.target.closest('button');
+        if (btn && bar.target) changePicture(bar.target, btn.dataset.act, bar);
+        e.stopPropagation();
+      });
+    }
+    return bar;
+  }
+  function showPictureTools(img) {
+    const b = current;
+    if (!b || !img) return;
+    const bar = pictureTools(img.ownerDocument);
+    bar.target = img;
+    // on the picture's frame, at its top
+    const frame = img.parentElement;
+    frame.classList.add('pic-frame');
+    frame.append(bar);
+    paintPictureTools(bar, lookOf(b, img.dataset.pdfpage, img.dataset.pic));
+  }
+  function paintPictureTools(bar, look) {
+    const size = look.size || 100;
+    bar.querySelector('[data-act="smaller"]').disabled = size <= SIZES[0];
+    bar.querySelector('[data-act="bigger"]').disabled = size >= 100;
+    bar.querySelector('[data-act="reset"]').disabled = !look.rotate && !look.size;
+    bar.querySelector('.pic-tools-note').textContent = `${look.rotate ? `${look.rotate}° · ` : ''}${size}%`;
+  }
+  function changePicture(img, act, bar) {
+    const b = current;
+    const page = Number(img.dataset.pdfpage), pic = Number(img.dataset.pic);
+    const look = { ...lookOf(b, page, pic) };
+    const size = look.size || 100;
+    if (act === 'left') look.rotate = (look.rotate || 0) - 90;
+    if (act === 'right') look.rotate = (look.rotate || 0) + 90;
+    if (act === 'smaller') look.size = [...SIZES].reverse().find(v => v < size) || SIZES[0];
+    if (act === 'bigger') look.size = SIZES.find(v => v > size) || 100;
+    if (act === 'reset') {
+      look.rotate = 0;
+      look.size = 0;
+    }
+    look.rotate = ((look.rotate || 0) % 360 + 360) % 360;
+    setLook(b, page, pic, look);
+    // shown so at once, until the book comes back with it
+    const turn = look.rotate - (Number(img.dataset.turnedAs) || 0);
+    img.style.transform = turn ? `rotate(${turn}deg)` : '';
+    img.style.width = look.size && look.size < 100 ? `${look.size}%` : '';
+    paintPictureTools(bar, look);
+    showStatus(`Picture ${pic + 1} of page ${page}: ${look.rotate ? `turned ${look.rotate}°, ` : ''}${look.size && look.size < 100 ? `${look.size}% wide` : 'full width'}. It goes in the book in a moment.`);
+  }
+
   function editableBookNow() {
     if (rendition) for (const contents of rendition.getContents()) editableBook(contents);
   }

@@ -6,7 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const JSZip = require('jszip');
-const { measureLayout, layoutMeasures, findGaps, detectFigures, sidewaysParts, renderCover, imageCover } = require('./figures');
+const { measureLayout, layoutMeasures, findGaps, detectFigures, sidewaysParts, renderCover, imageCover, turned } = require('./figures');
+const { screenImage } = require('./eink');
 const { findPagePictures } = require('./picture-pages');
 const { recognizePages, finishPages, LANGUAGES } = require('./ocr');
 const { openPdf } = require('./pdf');
@@ -221,7 +222,8 @@ function linesToBlocks(lines, bodySize) {
 // cache: an object (newBookCache) kept with the book and passed to each rebuild of the
 // same PDF: its pages' text and the pictures found on them are kept in it, so a rebuild
 // only draws again the pages whose pictures could come out otherwise.
-async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: previous, onOcrPage, screen, firstPageCover = false, contentsPages, cache } = {}) {
+// looks: how the user turned and sized pictures (see looksFrom), by "page:number".
+async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: previous, onOcrPage, screen, firstPageCover = false, contentsPages, cache, looks = {} } = {}) {
   const doc = await openPdf(buffer);
 
   let meta = {};
@@ -357,13 +359,21 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   const pictureBoxes = {};
   // the pages are searched several at once (picture-pages.js), then their
   // pictures go in the text page by page, in order
-  const tasks = candidates.map(n =>
-    drawn(n)
-      ? { n, find: 'drawn', boxes: drawn(n) }
-      : readWords.has(n)
-        ? { n, find: 'words', lines: layoutLines[n - 1] }
-        : { n, find: 'gaps', lines: pageLines[n - 1], gaps: findGaps(pageLines[n - 1], layout, bodySize) }
-  );
+  // the pictures of page n the user turned, by their number on it
+  const turnsOf = n => Object.fromEntries(Object.entries(looks)
+    .filter(([key, look]) => look.rotate && Number(key.split(':')[0]) === n)
+    .map(([key, look]) => [Number(key.split(':')[1]), look.rotate]));
+  const tasks = candidates.map(n => {
+    const turns = turnsOf(n);
+    return {
+      ...(drawn(n)
+        ? { n, find: 'drawn', boxes: drawn(n) }
+        : readWords.has(n)
+          ? { n, find: 'words', lines: layoutLines[n - 1] }
+          : { n, find: 'gaps', lines: pageLines[n - 1], gaps: findGaps(pageLines[n - 1], layout, bodySize) }),
+      ...(Object.keys(turns).length && { turns }),
+    };
+  });
   // pages searched before with the same lines, gaps or boxes keep what was found
   const found = new Map();
   const keys = new Map();
@@ -396,11 +406,13 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
         w: share((f.right - f.left) / pageWidth), h: share((f.top - f.bottom) / pageHeight),
       }));
     }
-    for (const fig of figures) {
+    for (const [j, fig] of figures.entries()) {
       const name = `img${images.length + 1}.png`;
       // a portrait picture filling most of its page also comes turned sideways in
-      // 2 or 3 parts (buildEpub's pictureParts, see figures.js pagePictures)
-      images.push({ name, data: fig.data, ...(fig.split && { split: fig.split }) });
+      // 2 or 3 parts (buildEpub's pictureParts, see figures.js pagePictures); each
+      // picture knows its page and number there, and the size the user gave it
+      const size = looks[`${n}:${j}`]?.size;
+      images.push({ name, data: fig.data, page: n, pic: j, ...(size && { size }), ...(fig.split && { split: fig.split }) });
       // text shown inside the cropped picture is dropped; anything outside it stays.
       // Text typed in by hand all stays: it isn't where it was on the page
       const lines = ocr?.pages.get(n)?.manual
@@ -418,18 +430,22 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   // upright or turned sideways and cut into 2 or 3 parts
   for (const n of picturePages) {
     const parts = pictureParts(n);
-    const picture = await kept(`whole:${n}`, parts, async () => {
+    const turn = looks[`${n}:0`]?.rotate || 0; // the whole page is its one picture
+    const picture = await kept(`whole:${n}`, [parts, turn], async () => {
       const page = await doc.getPage(n);
       const height = page.view[3] - page.view[1];
       const [found] = await detectFigures(page, [], [{ top: height, bottom: 0 }], layout, screen);
       page.cleanup();
-      return found ? { top: found.top, parts: parts > 1 ? sidewaysParts(found.crop, parts, screen) : [found.data] } : null;
+      if (!found) return null;
+      const crop = turned(found.crop, turn);
+      return { top: found.top, parts: parts > 1 ? sidewaysParts(crop, parts, screen) : [turn ? screenImage(crop, screen) : found.data] };
     });
     onProgress({ stage: 'pictures', done: Math.min(++rendered, renders), total: renders });
     if (!picture) continue; // a blank page
     pageLines[n - 1] = picture.parts.map((data, i) => {
       const name = `img${images.length + 1}.png`;
-      images.push({ name, data, ...(parts > 1 && { sideways: true }) });
+      const size = looks[`${n}:0`]?.size;
+      images.push({ name, data, page: n, pic: 0, ...(size && parts === 1 && { size }), ...(parts > 1 && { sideways: true }) });
       return { image: name, y: picture.top - i };
     });
   }
@@ -437,6 +453,20 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   const startsLow = lowStartPages(pageLines, layoutLines, layout);
   const pages = pageLines.map(lines => linesToBlocks(lines, bodySize));
   return { pages, images, cover, startsLow, ocr, pictureBoxes, printed, contentsLines, title: meta.Title, author: meta.Author };
+}
+
+// How the user turned and sized pictures, as sent by the web app, made safe: by
+// "page:number" (number: the picture's place among its page's, from 0), a turn of 90,
+// 180 or 270 degrees clockwise and a width of 20 to 100 (% of the screen's).
+function looksFrom(value) {
+  const looks = {};
+  for (const [key, look] of Object.entries(value || {}).slice(0, 5000)) {
+    if (!/^\d{1,5}:\d{1,3}$/.test(key) || !look || typeof look !== 'object') continue;
+    const rotate = [90, 180, 270].includes(look.rotate) ? look.rotate : 0;
+    const size = Number.isInteger(look.size) && look.size >= 20 && look.size < 100 ? look.size : 0;
+    if (rotate || size) looks[key] = { ...(rotate && { rotate }), ...(size && { size }) };
+  }
+  return looks;
 }
 
 // What a book's rebuilds keep of the work done on its PDF (see extractPdf's `cache`):
@@ -784,7 +814,16 @@ ${body}
 // on their side (`sideways`, image names) are always pages of their own, marked
 // "sideways", which a preview can use to show them turned.
 // Where a PDF page starts, an empty marker (pdfp12 for page 12) goes before its first block.
-function chapterFiles(ch, number, sideways = new Set(), inline = false) {
+// Each picture is tagged with its PDF page and its number there (`info`: name → { page,
+// pic, size }), so the web app can turn and size it, and shown at the width chosen (size,
+// a share of the screen's width).
+function chapterFiles(ch, number, sideways = new Set(), inline = false, info = new Map()) {
+  const img = (name, alt = '') => {
+    const p = info.get(name);
+    const tags = p ? ` data-pdfpage="${p.page}" data-pic="${p.pic}"` : '';
+    const width = p && p.size ? ` style="width: ${p.size}%"` : '';
+    return `<img src="images/${name}" alt="${alt}"${tags}${width}/>`;
+  };
   const parts = [];
   let pageBefore = null;
   const marker = b => {
@@ -803,11 +842,11 @@ function chapterFiles(ch, number, sideways = new Set(), inline = false) {
   return parts.map((part, k) => {
     const name = k ? `chapter${number}-${k + 1}.xhtml` : `chapter${number}.xhtml`;
     if (part.image) {
-      const body = `${marker(part)}    <img src="images/${part.image}" alt=""/>`;
+      const body = `${marker(part)}    ${img(part.image)}`;
       return { name, sections: [], xhtml: xhtmlFile(ch.title, body, sideways.has(part.image) ? 'picture sideways' : 'picture') };
     }
     const lines = part.blocks.map(b => marker(b) + (
-      b.image ? `    <div class="pic"><img src="images/${b.image}" alt=""/></div>`
+      b.image ? `    <div class="pic">${img(b.image)}</div>`
       : b.heading ? `    <h3 id="${b.id}">${escapeXml(b.text)}</h3>` : `    <p>${escapeXml(b.text)}</p>`
     ));
     if (part === titled) lines.unshift(`    <h2>${escapeXml(ch.title)}</h2>`);
@@ -887,8 +926,9 @@ body.picture img, body.cover img { width: auto; height: auto; max-width: 100%; m
     spine.push('    <itemref idref="cover"/>');
   }
   const sideways = new Set(images.filter(img => img.sideways).map(img => img.name));
+  const info = new Map(images.filter(img => img.page).map(img => [img.name, img]));
   chapters.forEach((ch, i) => {
-    const files = chapterFiles(ch, i + 1, sideways, pictures === 'inline');
+    const files = chapterFiles(ch, i + 1, sideways, pictures === 'inline', info);
     files.forEach((file, k) => {
       const id = k ? `ch${i + 1}-${k + 1}` : `ch${i + 1}`;
       zip.file(`OEBPS/${file.name}`, file.xhtml);
@@ -1120,7 +1160,7 @@ async function writeWebPages(opts) {
   if (!made) process.exitCode = 1;
 }
 
-module.exports = { convertPdfToEpub, analyzePdf, newBookCache, buildEpub, extractPdf, openPdf, cleanPages, buildChapters, readerScreen, contentsPagesFrom, chapterStartsFrom };
+module.exports = { convertPdfToEpub, analyzePdf, newBookCache, looksFrom, buildEpub, extractPdf, openPdf, cleanPages, buildChapters, readerScreen, contentsPagesFrom, chapterStartsFrom };
 
 if (require.main === module) {
   main().catch(err => {
