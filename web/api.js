@@ -125,7 +125,12 @@ function keepScan(s, n, jpeg) {
 // progress like the server's stream: onProgress, onSession, and onPage for each
 // scanned page as it's read. `readings`: the book's pages as read before (see
 // readings), to open it again without reading them again.
-async function convert(file, { title, author, xtc, device, firstPageCover, contentsPages, readings }, { onProgress = () => {}, onSession = () => {}, onPage = () => {} }) {
+async function convert(file, { title, author, xtc, device, firstPageCover, contentsPages, readings }, { onProgress: report = () => {}, onSession = () => {}, onPage = () => {}, signal }) {
+  // a book paused while it's made (signal aborted) stops at the conversion's next step
+  const onProgress = update => {
+    if (signal && signal.aborted) throw new Error('Stopped: the book was paused.');
+    report(update);
+  };
   const pdf = await readFile(file, MAX_BYTES);
   if (pdf.subarray(0, 5).toString() !== '%PDF-') throw new Error('That file is not a PDF.');
   let saved = null;

@@ -333,6 +333,7 @@ async function recognizePages(doc, pageNumbers, { language, onProgress = () => {
         .addJob('recognize', img.image, {}, { blocks: true, text: false })
         .then(({ data }) => finished(n, data, img))
         .finally(() => pending.delete(job));
+      job.catch(() => {}); // its failure is seen by the race or Promise.all below
       pending.add(job);
     }
     await Promise.all(pending);

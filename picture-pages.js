@@ -45,6 +45,9 @@ async function findPagePictures(pdf, doc, tasks, layout, screen, onPage = () => 
 
   const queue = [...tasks];
   const redo = []; // pages a worker couldn't do, done here after
+  // onPage can throw (a conversion stopped at its next step): in a worker's message
+  // nothing would catch it, so it ends the work here and is thrown below
+  let stopped = null;
   const run = () =>
     new Promise(resolve => {
       const worker = new Worker(__filename, {
@@ -74,7 +77,14 @@ async function findPagePictures(pdf, doc, tasks, layout, screen, onPage = () => 
           redo.push(task);
         } else {
           results.set(task.n, withBuffers(result));
-          onPage();
+          try {
+            onPage();
+          } catch (err) {
+            stopped = stopped || err;
+            queue.length = 0;
+            task = null;
+            return finish();
+          }
         }
         next();
       });
@@ -93,6 +103,7 @@ async function findPagePictures(pdf, doc, tasks, layout, screen, onPage = () => 
       worker.once('online', next);
     });
   await Promise.all(Array.from({ length: count }, run));
+  if (stopped) throw stopped;
   // pages no worker got to (they all stopped) and the ones that failed in one
   for (const task of [...redo, ...queue.splice(0)]) await here(task);
   return results;

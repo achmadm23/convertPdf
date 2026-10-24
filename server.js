@@ -154,9 +154,15 @@ function pageSummary(n, r) {
 async function streamJob(res, run) {
   res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache' });
   const send = obj => res.write(JSON.stringify(obj) + '\n');
+  // the page stopped waiting (a book paused while it's made): the work stops at its next step
+  let stopped = false;
+  res.on('close', () => {
+    if (!res.writableEnded) stopped = true;
+  });
   let lastSent = 0;
   let lastStage = null;
   const onProgress = ({ stage, done, total }) => {
+    if (stopped) throw new Error('Stopped: the page stopped waiting for it.');
     // at most a few updates a second, but always the first and last of each stage
     const now = Date.now();
     if (stage === lastStage && done !== total && now - lastSent < 200) return;
@@ -167,6 +173,7 @@ async function streamJob(res, run) {
   try {
     send({ result: await run(send, onProgress) });
   } catch (err) {
+    if (stopped) return console.log('Stopped a conversion: its page paused it.');
     console.error(err);
     send({ error: err.message || 'Conversion failed.' });
   }
