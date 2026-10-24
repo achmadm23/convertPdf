@@ -4343,6 +4343,9 @@
         ' .pic-tools button { width: 30px; height: 30px; padding: 0; color: #ECE7DE; background: #2C2F35; border: 0; border-radius: 15px;' +
         ' font: 600 15px/30px system-ui, sans-serif; cursor: pointer; } .pic-tools button:hover:not(:disabled) { color: #131417; background: #F0B25A; }' +
         ' .pic-tools button:disabled { opacity: .35; cursor: default; } .pic-tools-note { padding: 0 6px; font: 600 11px system-ui, sans-serif; color: #F0B25A; }' +
+        ' .pic-picked { outline: 2px solid #F0B25A; outline-offset: 2px; }' +
+        ' .pic-grip { position: absolute; z-index: 6; width: 16px; height: 16px; margin: -8px 0 0 -8px; background: #F0B25A;' +
+        ' border: 2px solid #131417; border-radius: 50%; touch-action: none; } .pic-grip.left { cursor: nesw-resize; } .pic-grip.right { cursor: nwse-resize; }' +
         ' .fixable { cursor: text; outline: none; border-bottom: 1px dashed rgba(201, 136, 58, .75); }' +
         ' .fixable:hover { background: rgba(240, 178, 90, .12); } .fixable:focus { background: rgba(240, 178, 90, .24); border-bottom-color: #C9883A; }';
       doc.head.append(style);
@@ -4388,7 +4391,11 @@
         const img = e.target.closest && e.target.closest('img[data-pdfpage]');
         const bar = doc.getElementById('picTools');
         if (img && canLook()) showPictureTools(img);
-        else if (bar && !e.target.closest('.pic-tools')) bar.remove();
+        else if (bar && !e.target.closest('.pic-tools, .pic-grip')) {
+          bar.remove();
+          for (const grip of bar.grips || []) grip.remove();
+          for (const picked of doc.querySelectorAll('.pic-picked')) picked.classList.remove('pic-picked');
+        }
       });
     }
     // the turn a picture was drawn with (the bar shows the change from it at once)
@@ -4396,7 +4403,10 @@
       img.dataset.turnedAs = (current && current.looks && current.looks[`${img.dataset.pdfpage}:${img.dataset.pic}`]?.rotate) || 0;
       img.classList.toggle('pickable', canLook());
     }
-    if (!canLook()) doc.getElementById('picTools')?.remove();
+    if (!canLook()) {
+      doc.getElementById('picTools')?.remove();
+      doc.querySelectorAll('.pic-grip').forEach(grip => grip.remove());
+    }
     const on = viewTab === 'scans';
     let page = null;
     for (const el of doc.body.querySelectorAll('.pdfp, p, h3')) {
@@ -4414,8 +4424,7 @@
     }
   }
   // How a picture looks in the book, as the user set it: { rotate, size } (see index.js
-  // looksFrom), kept by "page:number"; the steps − and + take its width through.
-  const SIZES = [25, 40, 55, 70, 85, 100];
+  // looksFrom), kept by "page:number".
   // a made book of a PDF: its pictures can be turned and sized on the book (in the preview, or beside its PDF page)
   const canLook = () => !!current && current.kind === 'pdf' && current.state === 'ready';
   const lookOf = (b, page, pic) => (wanted(b, 'looks') || {})[`${page}:${pic}`] || {};
@@ -4429,9 +4438,10 @@
     setChange(b, 'looks', Object.keys(looks).length ? looks : null);
   }
 
-  // A picture of the book clicked gets a bar on it: ↺ ↻ turn it a
-  // quarter, − + make it smaller or bigger (a share of the screen's width), ↺0 puts it
-  // back as found. It's shown so at once; the book goes in again a moment later.
+  // A picture of the book clicked is picked: outlined, with a handle on each bottom
+  // corner to drag it bigger or smaller (from its middle, as it's centred: 20 to 100% of
+  // the screen's width), and a bar on it: ↺ ↻ turn it a quarter, ⟲ puts it back as it was
+  // found. It's shown so at once; the book goes in again a moment later.
   function pictureTools(doc) {
     let bar = doc.getElementById('picTools');
     if (!bar) {
@@ -4439,7 +4449,7 @@
       bar.id = 'picTools';
       bar.className = 'pic-tools';
       bar.contentEditable = 'false';
-      bar.innerHTML = [['left', '↺', 'Turn left'], ['right', '↻', 'Turn right'], ['smaller', '−', 'Smaller'], ['bigger', '+', 'Bigger'], ['reset', '⟲', 'As it was found']]
+      bar.innerHTML = [['left', '↺', 'Turn left'], ['right', '↻', 'Turn right'], ['reset', '⟲', 'As it was found']]
         .map(([act, label, title]) => `<button type="button" data-act="${act}" title="${title}" aria-label="${title}">${label}</button>`).join('') +
         '<span class="pic-tools-note"></span>';
       bar.addEventListener('click', e => {
@@ -4447,36 +4457,87 @@
         if (btn && bar.target) changePicture(bar.target, btn.dataset.act, bar);
         e.stopPropagation();
       });
+      // the handles, dragged out or in to size the picture
+      bar.grips = ['left', 'right'].map(side => {
+        const grip = doc.createElement('span');
+        grip.className = `pic-grip ${side}`;
+        grip.title = 'Drag to make the picture bigger or smaller';
+        grip.addEventListener('pointerdown', e => dragSize(e, bar, grip));
+        grip.addEventListener('click', e => e.stopPropagation());
+        return grip;
+      });
     }
     return bar;
   }
   function showPictureTools(img) {
     const b = current;
     if (!b || !img) return;
-    const bar = pictureTools(img.ownerDocument);
+    const doc = img.ownerDocument;
+    const bar = pictureTools(doc);
+    for (const other of doc.querySelectorAll('.pic-picked')) other.classList.remove('pic-picked');
     bar.target = img;
-    // on the picture's frame, at its top
+    img.classList.add('pic-picked');
+    // on the picture's frame: the bar at its top, the handles at its bottom corners
     const frame = img.parentElement;
     frame.classList.add('pic-frame');
-    frame.append(bar);
+    frame.append(bar, ...bar.grips);
     paintPictureTools(bar, lookOf(b, img.dataset.pdfpage, img.dataset.pic));
   }
-  function paintPictureTools(bar, look) {
-    const size = look.size || 100;
-    bar.querySelector('[data-act="smaller"]').disabled = size <= SIZES[0];
-    bar.querySelector('[data-act="bigger"]').disabled = size >= 100;
-    bar.querySelector('[data-act="reset"]').disabled = !look.rotate && !look.size;
-    bar.querySelector('.pic-tools-note').textContent = `${look.rotate ? `${look.rotate}° · ` : ''}${size}%`;
+  // the picture's size as it's shown now: a share of its frame's width
+  const shownSize = img => Math.round((img.getBoundingClientRect().width / img.parentElement.clientWidth) * 100);
+  function placeGrips(bar) {
+    const img = bar.target;
+    if (!img) return;
+    const [left, right] = bar.grips;
+    const bottom = img.offsetTop + img.offsetHeight;
+    left.style.left = `${img.offsetLeft}px`;
+    right.style.left = `${img.offsetLeft + img.offsetWidth}px`;
+    left.style.top = right.style.top = `${bottom}px`;
   }
-  function changePicture(img, act, bar) {
+  function paintPictureTools(bar, look, size = null) {
+    bar.querySelector('[data-act="reset"]').disabled = !look.rotate && !look.size;
+    const shown = size ?? (look.size || (bar.target ? shownSize(bar.target) : 100));
+    bar.querySelector('.pic-tools-note').textContent = `${look.rotate ? `${look.rotate}° · ` : ''}${shown}%`;
+    placeGrips(bar);
+  }
+  // A handle dragged: the picture follows, as wide as twice the handle's distance from
+  // its middle; let go, that width is kept (100%: as wide as the screen, its own size).
+  function dragSize(e, bar, grip) {
+    const img = bar.target;
+    if (!img || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const frame = img.parentElement;
+    const look = lookOf(current, img.dataset.pdfpage, img.dataset.pic);
+    let size = shownSize(img);
+    try {
+      grip.setPointerCapture(e.pointerId); // the drag follows the pointer off the handle
+    } catch {}
+    const move = ev => {
+      const box = img.getBoundingClientRect();
+      const middle = box.left + box.width / 2;
+      size = Math.max(20, Math.min(100, Math.round((Math.abs(ev.clientX - middle) * 2 / frame.clientWidth) * 100)));
+      img.style.width = `${size}%`;
+      img.style.maxWidth = '100%';
+      paintPictureTools(bar, look, size);
+    };
+    const up = () => {
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      grip.removeEventListener('pointercancel', up);
+      changePicture(img, 'size', bar, size);
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+    grip.addEventListener('pointercancel', up);
+  }
+  function changePicture(img, act, bar, size = null) {
     const b = current;
     const page = Number(img.dataset.pdfpage), pic = Number(img.dataset.pic);
     const look = { ...lookOf(b, page, pic) };
-    const size = look.size || 100;
     if (act === 'left') look.rotate = (look.rotate || 0) - 90;
     if (act === 'right') look.rotate = (look.rotate || 0) + 90;
-    if (act === 'smaller') look.size = [...SIZES].reverse().find(v => v < size) || SIZES[0];
-    if (act === 'bigger') look.size = SIZES.find(v => v > size) || 100;
+    if (act === 'size') look.size = size >= 100 ? 0 : size;
     if (act === 'reset') {
       look.rotate = 0;
       look.size = 0;
@@ -4486,9 +4547,9 @@
     // shown so at once, until the book comes back with it
     const turn = look.rotate - (Number(img.dataset.turnedAs) || 0);
     img.style.transform = turn ? `rotate(${turn}deg)` : '';
-    img.style.width = look.size && look.size < 100 ? `${look.size}%` : '';
+    img.style.width = look.size ? `${look.size}%` : '';
     paintPictureTools(bar, look);
-    showStatus(`Picture ${pic + 1} of page ${page}: ${look.rotate ? `turned ${look.rotate}°, ` : ''}${look.size && look.size < 100 ? `${look.size}% wide` : 'full width'}. It goes in the book in a moment.`);
+    showStatus(`Picture ${pic + 1} of page ${page}: ${look.rotate ? `turned ${look.rotate}°, ` : ''}${look.size ? `${look.size}% wide` : 'its own size'}. It goes in the book in a moment.`);
   }
 
   function editableBookNow() {
