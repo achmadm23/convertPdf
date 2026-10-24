@@ -71,7 +71,8 @@ function decodeHtml({ data, type }) {
 }
 
 // The best file of a picture for the reader's screen: in a srcset, the smallest
-// one at least as wide as the screen is tall (so a turned picture still fills it).
+// one at least as wide as the screen is tall (so a turned picture still fills it),
+// or as its pictures may be for any reader.
 function pictureSource(img, base, screen) {
   const candidates = [img, ...(img.parentNode?.nodeName === 'PICTURE' ? img.parentNode.querySelectorAll('source') : [])]
     .flatMap(el => [el.getAttribute('srcset'), el.getAttribute('data-srcset')])
@@ -85,7 +86,7 @@ function pictureSource(img, base, screen) {
   let src;
   if (candidates.length) {
     candidates.sort((a, b) => a.width - b.width);
-    src = (candidates.find(c => c.width >= screen.height) || candidates[candidates.length - 1]).src;
+    src = (candidates.find(c => c.width >= (screen.pictures || screen).height) || candidates[candidates.length - 1]).src;
   } else {
     // lazy-loaded pictures keep the real file in data-src, and a placeholder in src
     src = [img.getAttribute('data-src'), img.getAttribute('src')].find(s => s && !s.startsWith('data:'));

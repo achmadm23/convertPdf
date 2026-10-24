@@ -464,7 +464,7 @@ async function handleRebuild(req, res, session) {
     if (changes.chapterStarts === null) delete options.chapterStarts;
     else if (changes.chapterStarts !== undefined) options.chapterStarts = chapterStartsFrom(changes.chapterStarts);
     if (changes.device !== undefined) {
-      if (!DEVICES[changes.device]) throw new Error(`Unknown reader "${changes.device}".`);
+      readerScreen(changes.device); // a reader there is, or this says which there are
       options.device = changes.device; // its pictures are drawn again for this reader's screen
     }
   } catch (err) {

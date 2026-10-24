@@ -7,7 +7,7 @@ Convert PDFs into EPUB e-books. It works on normal PDFs and on scanned books, wi
 - splits the book into its real chapters, with section headings in the table of contents
 - keeps the pictures (photos, charts, diagrams) where they appear in the text, and uses a picture-only first page as the cover
 - lets you use a picture of your own as the cover instead
-- puts the pictures in the text, with the text above and below each one, or each on a page of its own that it fills; the cover and pages kept as a picture fill a page, all in the 4 shades of gray of an e-ink screen, sized for your reader: 480 x 800 for the Xteink X4 and X4 Pro, 528 x 792 for the X3
+- puts the pictures in the text, with the text above and below each one, or each on a page of its own that it fills; the cover and pages kept as a picture fill a page, all in the 4 shades of gray of an e-ink screen, sized for your reader: 480 x 800 for the Xteink X4 and X4 Pro, 528 x 792 for the X3; for a Kindle, a Kobo or a phone they're kept full size, in color when they have it
 - leaves the font to the e-reader, so the book reads in the font and size you choose there
 - reads scanned pages with built-in OCR (English and Indonesian), with nothing extra to install
 - can also make an XTC book for Xteink X3, X4 and X4 Pro readers, with every page drawn for the reader's screen (see [Xteink books](#xteink-books-xtc))
@@ -93,7 +93,7 @@ On **Preview**, a book that's ready is shown on an e-reader laid out at your rea
 1. **Details:** the title and author, taken from the PDF or the article if you leave them blank. A change goes in the book at once.
 2. **Cover:** a picture of your own (JPEG, PNG or WebP, up to 20 MB), or drop one on it. It replaces the cover taken from the PDF or the article; **Remove** goes back to it. For an EPUB of a PDF, **Use page 1** makes the PDF's first page the cover, whatever is on it, and leaves its text out of the book. **Remove** puts page 1's text back.
 3. **Output:** an EPUB for any e-reader, or for a PDF an XTC book for an Xteink reader ([Xteink books](#xteink-books-xtc)), with its settings. Web pages always become an EPUB.
-4. **Reader and pictures:** your e-reader (Xteink X4 Pro, X4 or X3). An EPUB's pictures and cover are drawn for its screen. **Pictures** puts them **In the text**, with the text above and below each one (a picture that doesn't fit in the rest of a screen goes at the top of the next), or each **On their own page**, filling it. **Full-page pictures** chooses how portrait pictures that fill most of their page go in the book: upright, or turned on their side and cut into **2** or **3 parts** that each fill the screen, as in an XTC book. Changing it updates the book at once.
+4. **Reader and pictures:** your e-reader (Xteink X4 / X4 Pro, X3, or Kindle, Kobo or phone). An EPUB's pictures and cover are drawn for an Xteink's screen; for a Kindle, a Kobo or a phone they're kept full size (up to 1240 x 1680), in color when they have it and in smooth grays otherwise, for the reader to fit to its own screen, and the preview shows a typical 3 : 4 screen. XTC books are for Xteink readers only. **Pictures** puts them **In the text**, with the text above and below each one (a picture that doesn't fit in the rest of a screen goes at the top of the next), or each **On their own page**, filling it. **Full-page pictures** chooses how portrait pictures that fill most of their page go in the book: upright, or turned on their side and cut into **2** or **3 parts** that each fill the screen, as in an XTC book. Changing it updates the book at once.
 
 **Changes wait in one bar.** Changes that build a made book again wait in a bar above it, which says what's waiting ("1 changed page, page 1 as the cover and the book drawn for the Xteink X3"), until you click **Apply changes**: pages changed in Pages, **Use page 1**, the chapters and the Daftar Isi, and another reader for an EPUB of a PDF. They all go in at once, in under a minute, because the pages aren't read again, so your changes to scanned pages stay. **Download** (and **Download all**) applies them first, so the file always has them. The title, author, a cover picture and full-page pictures change the book at once.
 
@@ -150,14 +150,14 @@ Details:
 ## Command line
 
 ```
-node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--device x4|x4-pro|x3] [--picture-parts 2|3] [--pictures inline|page] [--ocr-lang code]
+node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--device x4|x4-pro|x3|any] [--picture-parts 2|3] [--pictures inline|page] [--ocr-lang code]
 ```
 
 If you leave out `output.epub`, the EPUB is saved next to the PDF with the same name.
 
 `--cover` uses a picture (JPEG, PNG or WebP) as the book's cover instead of the PDF's first page.
 
-`--device` sizes the book's pictures and cover for that e-reader's screen: `x4` and `x4-pro` (480 x 800, the default) or `x3` (528 x 792).
+`--device` sizes the book's pictures and cover for that e-reader's screen: `x4` and `x4-pro` (480 x 800, the default) or `x3` (528 x 792); `any` (a Kindle, a Kobo or a phone) keeps them full size (up to 1240 x 1680), in color when they have it, for the reader to fit to its own screen.
 
 `--picture-parts 2` or `3` turns full-page portrait pictures on their side and cuts them into 2 or 3 parts that each fill the screen.
 
@@ -173,7 +173,7 @@ node index.js book.pdf book.epub --title "My Book" --author "Jane Doe" --cover c
 For web pages, give their links instead of a PDF, separated by spaces or commas. Each one becomes a book of its own, made one after another and named after its article. With one link, `output.epub` is the file; with several, the output is a folder for the books. Without it, they're saved in the current folder. A link that can't be read is skipped and the others are still made.
 
 ```
-node index.js https://... [more links] [output.epub, or a folder for several] [--title ...] [--author ...] [--cover image] [--device x4|x4-pro|x3]
+node index.js https://... [more links] [output.epub, or a folder for several] [--title ...] [--author ...] [--cover image] [--device x4|x4-pro|x3|any]
 node index.js https://www.bbc.com/indonesia/vert-cap-43738523
 node index.js https://www.bbc.com/indonesia/...,https://nasional.kompas.com/read/... news
 ```

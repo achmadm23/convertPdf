@@ -58,8 +58,10 @@ function dither(gray, width, height) {
   return out;
 }
 
-// 8-bit grayscale PNG, which every e-reader can show
-function encodePng(pixels, width, height) {
+// 8-bit grayscale PNG, which every e-reader can show; with `channels` 3, a color one.
+// `up`: each row stored as its change from the row above, which packs smooth pictures
+// (photos, not dithered dots) much smaller.
+function encodePng(pixels, width, height, { channels = 1, up = false } = {}) {
   const chunk = (type, data) => {
     const head = Buffer.alloc(8);
     head.writeUInt32BE(data.length, 0);
@@ -72,11 +74,18 @@ function encodePng(pixels, width, height) {
   header.writeUInt32BE(width, 0);
   header.writeUInt32BE(height, 4);
   header[8] = 8; // bits per pixel
-  header[9] = 0; // grayscale
-  const rows = Buffer.alloc((width + 1) * height);
+  header[9] = channels === 3 ? 2 : 0; // color or grayscale
+  const line = width * channels;
+  const rows = Buffer.alloc((line + 1) * height);
   for (let y = 0; y < height; y++) {
-    rows[y * (width + 1)] = 0; // no filter
-    rows.set(pixels.subarray(y * width, (y + 1) * width), y * (width + 1) + 1);
+    const at = y * (line + 1);
+    const row = pixels.subarray(y * line, (y + 1) * line);
+    if (!up || y === 0) rows.set(row, at + 1); // no filter
+    else {
+      rows[at] = 2; // Up
+      const above = pixels.subarray((y - 1) * line, y * line);
+      for (let x = 0; x < line; x++) rows[at + 1 + x] = (row[x] - above[x]) & 255;
+    }
   }
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
@@ -86,8 +95,10 @@ function encodePng(pixels, width, height) {
   ]);
 }
 
-// A canvas (or image) as a PNG that fills the reader's screen.
+// A canvas (or image) as a PNG that fills the reader's screen. A screen with
+// `pictures` (any reader: a Kindle, a Kobo or a phone) gets a full picture instead.
 function screenImage(source, screen = SCREEN) {
+  if (screen.pictures) return fullImage(source, screen.pictures);
   const scale = Math.min(screen.width / source.width, screen.height / source.height);
   const width = Math.max(1, Math.round(source.width * scale));
   const height = Math.max(1, Math.round(source.height * scale));
@@ -109,6 +120,48 @@ function screenImage(source, screen = SCREEN) {
     gray[p] = Math.min(255, Math.max(0, ((gray[p] - black) * 255) / (white - black)));
   }
   return encodePng(dither(gray, width, height), width, height);
+}
+
+// A picture for a reader whose screen isn't known: as large as it is, up to `box`,
+// for each reader to shrink to its own screen; in color if it has any, else in
+// smooth grays with the paper made white, never dithered.
+function fullImage(source, box) {
+  const scale = Math.min(1, box.width / source.width, box.height / source.height);
+  const width = Math.max(1, Math.round(source.width * scale));
+  const height = Math.max(1, Math.round(source.height * scale));
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(source, 0, 0, width, height);
+
+  const rgba = ctx.getImageData(0, 0, width, height).data;
+  const count = width * height;
+  // colored: enough pixels far from gray (a yellowed scan's paper isn't)
+  let colored = 0;
+  for (let i = 0; i < rgba.length; i += 4) {
+    const r = rgba[i], g = rgba[i + 1], b = rgba[i + 2];
+    if (Math.max(r, g, b) - Math.min(r, g, b) > 48) colored++;
+  }
+  if (colored > count * 0.01) {
+    const rgb = new Uint8Array(count * 3);
+    for (let i = 0, p = 0; i < rgba.length; i += 4, p += 3) {
+      rgb[p] = rgba[i];
+      rgb[p + 1] = rgba[i + 1];
+      rgb[p + 2] = rgba[i + 2];
+    }
+    return encodePng(rgb, width, height, { channels: 3, up: true });
+  }
+  const gray = new Float32Array(count);
+  for (let i = 0, p = 0; p < count; i += 4, p++) {
+    gray[p] = 0.299 * rgba[i] + 0.587 * rgba[i + 1] + 0.114 * rgba[i + 2];
+  }
+  const { black, white } = toneRange(gray);
+  const pixels = new Uint8Array(count);
+  for (let p = 0; p < count; p++) pixels[p] = Math.min(255, Math.max(0, Math.round(((gray[p] - black) * 255) / (white - black))));
+  return encodePng(pixels, width, height, { up: true });
 }
 
 module.exports = { screenImage, encodePng };

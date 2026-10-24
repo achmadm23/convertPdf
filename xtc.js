@@ -11,7 +11,7 @@ const { openPdf } = require('./pdf');
 const { encodeXtg, encodeXth, decodePage, buildXtcFile } = require('./xtcfile');
 
 const DEVICES = {
-  x4: { name: 'Xteink X4', width: 480, height: 800 },
+  x4: { name: 'Xteink X4 / X4 Pro', width: 480, height: 800 },
   'x4-pro': { name: 'Xteink X4 Pro', width: 480, height: 800 },
   x3: { name: 'Xteink X3', width: 528, height: 792 },
 };

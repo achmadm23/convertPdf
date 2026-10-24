@@ -880,11 +880,21 @@ ${spine.join('\n')}
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
-// The screen of an e-reader in DEVICES (xtc.js). The book's pictures and cover
-// are drawn to fill it: 480 x 800 for the Xteink X4 and X4 Pro, 528 x 792 for the X3.
+// The readers an EPUB can be made for: the Xteink ones in DEVICES (xtc.js), whose
+// screens its pictures and cover are drawn to fill (480 x 800 for the X4 and X4 Pro,
+// 528 x 792 for the X3), and any other (a Kindle, a Kobo or a phone), whose pictures
+// are kept full size (`pictures`, see screenImage) for it to fit to its own screen.
+// Its `width` and `height` are a typical screen's shape, for the preview and for
+// cutting full-page pictures in sideways parts.
+const READERS = {
+  ...DEVICES,
+  any: { name: 'Kindle, Kobo or phone', width: 600, height: 800, pictures: { width: 1240, height: 1680 } },
+};
+
+// The screen of a reader in READERS.
 function readerScreen(device = 'x4') {
-  const screen = DEVICES[device];
-  if (!screen) throw new Error(`Unknown device "${device}". Available: ${Object.keys(DEVICES).join(', ')}.`);
+  const screen = READERS[device];
+  if (!screen) throw new Error(`Unknown device "${device}". Available: ${Object.keys(READERS).join(', ')}.`);
   return screen;
 }
 
@@ -952,7 +962,7 @@ async function main() {
   const [input, output] = opts.positional;
   if (!input) {
     console.error(
-      'Usage: node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--device x4|x4-pro|x3] [--picture-parts 2|3] [--pictures inline|page] [--ocr-lang code]'
+      'Usage: node index.js input.pdf [output.epub] [--title "Title"] [--author "Author"] [--cover image] [--device x4|x4-pro|x3|any] [--picture-parts 2|3] [--pictures inline|page] [--ocr-lang code]'
     );
     console.error('Web pages (news articles), a book for each link: node index.js https://... [more links] [output.epub, or a folder for several] [--title ...] [--author ...] [--cover image] [--device ...]');
     console.error(

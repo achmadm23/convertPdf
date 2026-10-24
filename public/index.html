@@ -474,9 +474,9 @@
       </div>
       <label class="start-step inline"><span class="step-label">For the reader</span>
         <select id="startDevice">
-          <option value="x4-pro">Xteink X4 Pro · 480 × 800</option>
-          <option value="x4">Xteink X4 · 480 × 800</option>
+          <option value="x4">Xteink X4 / X4 Pro · 480 × 800</option>
           <option value="x3">Xteink X3 · 528 × 792</option>
+          <option value="any">Kindle, Kobo or phone · any screen</option>
         </select>
       </label>
       <div class="start-step">
@@ -840,9 +840,9 @@
           <div class="set-group" id="bodyReader">
             <label class="field">Reader
               <select id="device">
-                <option value="x4">Xteink X4 · 480 × 800</option>
-                <option value="x4-pro" selected>Xteink X4 Pro · 480 × 800</option>
+                <option value="x4" selected>Xteink X4 / X4 Pro · 480 × 800</option>
                 <option value="x3">Xteink X3 · 528 × 792</option>
+                <option value="any">Kindle, Kobo or phone · any screen</option>
               </select>
             </label>
             <p class="note" id="deviceNote">Pictures and the cover are drawn for this screen, and the preview shows the book at its size.</p>
@@ -1186,13 +1186,19 @@
   // for next time). The reader and the output are used when a book is converted:
   // changing them converts it again. Full-page pictures change an EPUB at once.
   const DEFAULTS = {
-    format: 'epub', device: 'x4-pro', parts: 1, pictures: 'inline',
+    format: 'epub', device: 'x4', parts: 1, pictures: 'inline',
     xtc: { grays: false, orientation: 'landscape', split: 'overlap', dithering: 'atkinson', contrast: '0', cropX: '0', cropY: '0', firstPageIsCover: true, flip: false },
   };
   const XTC_SELECTS = { split: 'xtcSplit', dithering: 'xtcDithering', contrast: 'xtcContrast', cropX: 'xtcCropX', cropY: 'xtcCropY' };
   const XTC_CHECKS = { firstPageIsCover: 'xtcCoverPage', flip: 'xtcFlip' };
   const clone = s => JSON.parse(JSON.stringify(s));
   // settings a book is converted with (full-page pictures aren't: they change an EPUB as it's shown)
+  // The reader settings `s` can have: the X4 Pro is drawn for as the X4 (the same
+  // screen), and an XTC book is for an Xteink, never any reader.
+  function fitReader(s) {
+    if (s.device === 'x4-pro' || (s.device === 'any' && s.format === 'xtc')) s.device = 'x4';
+    return s;
+  }
   const madeWith = s => JSON.stringify({ format: s.format, device: s.device, ...(s.format === 'xtc' && { xtc: s.xtc }) });
 
   // the settings for new books, of each source (web pages are always an EPUB)
@@ -1204,6 +1210,8 @@
     }
   } catch {}
   defaultsBy.web.format = 'epub';
+  fitReader(defaultsBy.pdf);
+  fitReader(defaultsBy.web);
   const saveDefaults = () => {
     try {
       localStorage.setItem('defaults', JSON.stringify(defaultsBy.pdf));
@@ -1251,6 +1259,10 @@
     $('partsField').hidden = xtc;
     $('pictureSplitField').hidden = xtc || parts === 1;
     $('deviceNote').hidden = xtc;
+    showReaders($('device'), xtc);
+    $('deviceNote').textContent = $('device').value === 'any'
+      ? 'Pictures and the cover are kept full size, in color when they have it, for the reader to fit to its own screen. The preview shows a typical one.'
+      : 'Pictures and the cover are drawn for this screen, and the preview shows the book at its size.';
     $('xtcSettings').hidden = !xtc;
     $('formatNote').textContent = xtc
       ? 'Every page drawn for the reader’s screen, exactly as it looks in the PDF.'
@@ -1269,6 +1281,11 @@
       : 'Each page whole. Text is as small as the page is wide.';
   }
 
+  // the readers a list offers: any reader only for an EPUB
+  function showReaders(select, xtc) {
+    const any = select.querySelector('option[value="any"]');
+    any.hidden = any.disabled = xtc;
+  }
   const deviceName = id => $('device').querySelector(`option[value="${id}"]`).textContent.split(' · ')[0];
   const outputSummary = s =>
     s.format === 'xtc'
@@ -1420,6 +1437,7 @@
     const xtcNext = defaultsBy.pdf.format === 'xtc';
     $(xtcNext ? 'footXtc' : 'footEpub').checked = true;
     $(xtcNext ? 'newXtc' : 'newEpub').checked = true;
+    showReaders($('startDevice'), source === 'pdf' && d.format === 'xtc');
     $('startDevice').value = d.device;
     // each source's tab says how many books it has, and whether one is being made
     for (const [kind, id] of [['pdf', 'countPdf'], ['web', 'countWeb']]) {
@@ -1437,6 +1455,7 @@
   function newBook(fields) {
     const settings = clone(defaultsBy[fields.kind]);
     if (fields.kind === 'web') settings.format = 'epub';
+    fitReader(settings);
     return { key: nextKey++, settings, title: '', author: '', cover: null, coverUrl: null, state: 'waiting', meta: null, id: null, scan: null, error: null, ...fields };
   }
 
@@ -2071,6 +2090,7 @@
     showFormNotes();
     if (editingDefaults || !current) {
       if (source === 'web') s.format = 'epub';
+      $('device').value = fitReader(s).device;
       defaultsBy[source] = s;
       saveDefaults();
       showSummaries();
@@ -2079,6 +2099,7 @@
     }
     const b = current;
     if (b.kind === 'web') s.format = 'epub';
+    $('device').value = fitReader(s).device;
     // full-page pictures and where pictures go change the EPUB as it's made from the book
     const partsChanged = s.parts !== b.settings.parts || s.pictures !== b.settings.pictures;
     const readerBefore = changeKind(b) === 'reader';
@@ -2197,6 +2218,7 @@
     firstPage.disabled = b.state === 'converting';
     $('coverNote').textContent = b.settings.format === 'xtc'
       ? 'Replaces the first page, drawn for the reader’s screen.'
+      : b.settings.device === 'any' ? 'JPEG, PNG or WebP. Kept full size, in color when it has it.'
       : 'JPEG, PNG or WebP. Drawn for the reader’s screen in 4 shades of gray.';
   }
 
@@ -3810,6 +3832,7 @@
   // EPUB or XTC for the PDFs added next: chosen in the start box or under the list
   function setNewFormat(format) {
     defaultsBy.pdf.format = format;
+    fitReader(defaultsBy.pdf);
     saveDefaults();
     if (source === 'pdf' && (editingDefaults || !current)) writeForm(defaultsBy.pdf, false);
     showSummaries();
@@ -3855,7 +3878,7 @@
       const b = newBook({ kind: r.kind, file: r.file, link: r.link || undefined });
       Object.assign(b, {
         key: r.key,
-        settings: { ...clone(DEFAULTS), ...r.settings, xtc: { ...DEFAULTS.xtc, ...(r.settings && r.settings.xtc) } },
+        settings: fitReader({ ...clone(DEFAULTS), ...r.settings, xtc: { ...DEFAULTS.xtc, ...(r.settings && r.settings.xtc) } }),
         title: r.title || '', author: r.author || '',
         firstPageCover: !!r.firstPageCover, contentsPages: r.contentsPages === null ? undefined : r.contentsPages,
         chapterStarts: r.chapterStarts || undefined,

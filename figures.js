@@ -437,7 +437,7 @@ async function pagePictures(page, { find, lines, gaps, boxes }, layout, screen) 
 }
 
 async function renderCover(page, screen) {
-  return screenImage(await renderPage(page, 1.5), screen);
+  return screenImage(await renderPage(page, screen && screen.pictures ? 2.5 : 1.5), screen);
 }
 
 // A cover from a picture file (JPEG, PNG, WebP, GIF, ...) chosen by the user,
