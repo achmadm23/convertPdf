@@ -783,11 +783,18 @@ ${body}
 // like a page of an XTC book. The title goes above the first text. Pictures turned
 // on their side (`sideways`, image names) are always pages of their own, marked
 // "sideways", which a preview can use to show them turned.
+// Where a PDF page starts, an empty marker (pdfp12 for page 12) goes before its first block.
 function chapterFiles(ch, number, sideways = new Set(), inline = false) {
   const parts = [];
+  let pageBefore = null;
+  const marker = b => {
+    if (!b.pdfPage || b.pdfPage === pageBefore) return '';
+    pageBefore = b.pdfPage;
+    return `    <div id="pdfp${b.pdfPage}" class="pdfp"></div>\n`;
+  };
   ch.blocks.forEach((b, i) => {
     const last = parts[parts.length - 1];
-    if (b.image && !(inline && !sideways.has(b.image))) parts.push({ image: b.image });
+    if (b.image && !(inline && !sideways.has(b.image))) parts.push({ image: b.image, pdfPage: b.pdfPage });
     else if (last && !last.image) last.blocks.push({ ...b, id: `s${i}` });
     else parts.push({ blocks: [{ ...b, id: `s${i}` }] });
   });
@@ -796,13 +803,13 @@ function chapterFiles(ch, number, sideways = new Set(), inline = false) {
   return parts.map((part, k) => {
     const name = k ? `chapter${number}-${k + 1}.xhtml` : `chapter${number}.xhtml`;
     if (part.image) {
-      const body = `    <img src="images/${part.image}" alt=""/>`;
+      const body = `${marker(part)}    <img src="images/${part.image}" alt=""/>`;
       return { name, sections: [], xhtml: xhtmlFile(ch.title, body, sideways.has(part.image) ? 'picture sideways' : 'picture') };
     }
-    const lines = part.blocks.map(b =>
+    const lines = part.blocks.map(b => marker(b) + (
       b.image ? `    <div class="pic"><img src="images/${b.image}" alt=""/></div>`
       : b.heading ? `    <h3 id="${b.id}">${escapeXml(b.text)}</h3>` : `    <p>${escapeXml(b.text)}</p>`
-    );
+    ));
     if (part === titled) lines.unshift(`    <h2>${escapeXml(ch.title)}</h2>`);
     const sections = part.blocks.filter(b => b.heading).map(b => ({ href: `${name}#${b.id}`, text: b.text }));
     return { name, sections, xhtml: xhtmlFile(ch.title, lines.join('\n')) };
@@ -956,6 +963,9 @@ function readerScreen(device = 'x4') {
 async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', device = 'x4', onProgress, ...ocrOptions } = {}) {
   const extracted = await extractPdf(pdfBuffer, onProgress, { ...ocrOptions, screen: readerScreen(device) });
   const pages = cleanPages(extracted.pages);
+  // each block knows the PDF page it comes from, so the EPUB can mark where every page
+  // starts (see chapterFiles) and the web app can turn its preview to a page
+  pages.forEach((blocks, i) => { for (const b of blocks) b.pdfPage = i + 1; });
   // chapters from the book's own table of contents, whose pages then leave the book
   // (the EPUB has its own): the pages asked for, or the ones found, used only if
   // enough of their titles are headings in the book; else the chapters found as usual

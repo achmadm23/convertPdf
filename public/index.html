@@ -14,18 +14,19 @@
   @font-face { font-family: 'IBM Plex Mono'; font-weight: 600; src: url(uifonts/ibm-plex-mono-latin-600-normal.woff2) format('woff2'); }
 
   :root {
-    --bg: #F4F5F2; --card: #FFFFFF; --field: #FFFFFF; --soft: #FAFBF9; --text: #17191C; --muted: #5B6168;
-    --border: #E2E4E0; --rule: #E2E4E0; --input: #C9CDC7; --seg: #ECEEEA; --stage: #F4F5F2;
-    --accent: #2457C5; --accent-hover: #1A4296; --accent-text: #FFFFFF; --tint: #E8EEFB; --tint-strong: #F3F6FD;
-    --warn-bg: #FDF0DF; --warn-text: #7A3E00; --good-bg: #E3F2E8; --good-text: #1E5A33;
-    --typed-bg: #DBE7F7; --typed-text: #1D3F6E; --kept-bg: #E6DCF2; --kept-text: #4A2F6E;
-    --error: #B3261E; --error-bg: #F9E1DF; --paper: #EAE8E1; --ink: #1A1A1A; --lift: 0 1px 2px rgba(23, 25, 28, .14);
+    --bg: #131417; --card: #1C1E22; --field: #24272C; --soft: #191B1F; --text: #ECE7DE; --muted: #A39D93;
+    --border: #2C2E33; --rule: #2C2E33; --input: #3A3D43; --seg: #24272C; --stage: #131417;
+    --accent: #F0B25A; --accent-hover: #FFC57A; --accent-text: #131417; --tint: rgba(240, 178, 90, .14); --tint-strong: rgba(240, 178, 90, .2);
+    --warn-bg: #3A2D17; --warn-text: #F4C27E; --good-bg: #1D3326; --good-text: #9AD3AC;
+    --typed-bg: #1E2E44; --typed-text: #A9C6EE; --kept-bg: #302440; --kept-text: #CDB5EC;
+    --error: #FF8A80; --error-bg: #3A1F1D; --paper: #EDE6D8; --ink: #2A2620; --lift: 0 1px 2px rgba(0, 0, 0, .4);
     --sans: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
     --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+    --serif: Georgia, 'Times New Roman', serif;
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  html { color-scheme: light; }
+  html { color-scheme: dark; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--sans); }
   a { color: var(--accent); }
   a:hover { color: var(--accent-hover); }
@@ -36,12 +37,15 @@
   .small { font-size: 12px; color: var(--muted); }
   input[type=file] { display: none; }
 
-  /* header: the name, what is converted (PDFs or web pages), Download all */
+  /* header: the name, the book shown in the middle, Download and Send */
   .top {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 24px;
-    padding: 12px 32px; background: var(--card); border-bottom: 1px solid var(--border);
+    padding: 14px 28px; background: var(--bg);
   }
-  .top-left, .top-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; }
+  .top-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .top-book { flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .top-book h2 { margin: 0; font: 600 20px/1.3 var(--serif); overflow-wrap: anywhere; }
+  .top-book .book-info { text-align: center; }
   .brand { display: flex; align-items: baseline; gap: 10px; }
   .brand h1 { margin: 0; font: 600 20px/1.2 var(--sans); letter-spacing: -0.01em; }
   .brand h1 span { color: var(--accent); }
@@ -56,18 +60,9 @@
   .source-count { padding: 0 7px; font: 500 12px var(--mono); color: var(--muted); background: var(--seg); border-radius: 9px; }
   .source-tab[aria-selected="true"] .source-count { background: var(--bg); }
   .source-count.busy { color: var(--accent); background: var(--tint); }
-  @media (max-width: 600px) { .top { padding: 12px 16px; } .private { display: none; } }
+  @media (max-width: 600px) { .top { padding: 12px 16px; } .private { display: none; } .top-book { order: 3; flex-basis: 100%; } }
 
-  /* the page: the books on the left, the book shown beside them */
-  .layout {
-    display: flex; flex-wrap: wrap; align-items: flex-start; gap: 20px;
-    max-width: 1600px; margin: 0 auto; padding: 20px 32px 48px;
-  }
-  @media (max-width: 600px) { .layout { padding: 12px 16px 32px; } }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; min-width: 0; }
-  .list { flex: 1 1 280px; max-width: 320px; display: flex; flex-direction: column; gap: 12px; }
-  .work { flex: 999 1 640px; overflow: hidden; display: flex; flex-direction: column; }
-  @media (max-width: 760px) { .list { max-width: none; } }
   .panel-title { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 
   .btn {
@@ -75,7 +70,7 @@
     font-size: 14px; font-weight: 500; color: var(--text); text-decoration: none; text-align: center; white-space: nowrap;
     background: var(--field); border: 1px solid var(--input); border-radius: 10px; cursor: pointer;
   }
-  .btn:hover:not(:disabled):not(.disabled) { border-color: #A9AEA7; }
+  .btn:hover:not(:disabled):not(.disabled) { border-color: var(--muted); }
   .btn:disabled, .btn.disabled { opacity: .45; cursor: not-allowed; }
   a.btn.disabled { pointer-events: none; }
   .btn.big { height: 44px; padding: 0 20px; font-size: 15px; font-weight: 600; }
@@ -199,7 +194,7 @@
   .choose small { font-size: 14px; color: var(--muted); }
   .drop {
     display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px 24px; text-align: center;
-    background: #FAFBFD; border: 2px dashed #B9C3D9; border-radius: 14px; transition: background .15s, border-color .15s;
+    background: var(--soft); border: 2px dashed #4A4D53; border-radius: 14px; transition: background .15s, border-color .15s;
   }
   .drop b { font-size: 18px; font-weight: 600; }
   .row-end { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
@@ -227,8 +222,8 @@
   .pill { padding: 0 7px; font: 500 12px var(--mono); border-radius: 9px; color: var(--warn-text); background: var(--warn-bg); }
   .apply-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 24px; font-size: 14px; color: var(--warn-text); background: var(--warn-bg); }
   .apply-bar span { flex: 1 1 280px; min-width: 0; overflow-wrap: anywhere; }
-  .apply-bar .btn.primary { flex: none; background: var(--warn-text); border-color: var(--warn-text); }
-  .apply-bar .btn.primary:hover:not(:disabled) { background: #5C2E00; border-color: #5C2E00; }
+  .apply-bar .btn.primary { flex: none; color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
+  .apply-bar .btn.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
   #status { margin: 0; padding: 8px 24px; min-height: 1.5em; font: 12px/1.5 var(--mono); color: var(--muted); background: var(--soft); border-bottom: 1px solid var(--rule); }
   #status:empty { display: none; }
   #status.error { color: var(--error); }
@@ -308,7 +303,7 @@
   #scanSummary { flex-basis: 100%; font-size: 13px; color: var(--muted); }
   .filter { position: relative; display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; font-size: 14px; font-weight: 500; background: var(--field); border: 1px solid var(--input); border-radius: 18px; cursor: pointer; }
   .filter input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
-  .filter:has(input:checked) { font-weight: 600; color: #FFFFFF; background: var(--text); border-color: var(--text); }
+  .filter:has(input:checked) { font-weight: 600; color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
   .filter:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
   .filter:has(input:disabled) { opacity: .45; cursor: not-allowed; }
   .keep-all { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; background: var(--seg); border-radius: 10px; }
@@ -320,7 +315,7 @@
     height: calc(100vh - 24px); overflow: auto; padding: 8px; background: var(--soft); border: 1px solid var(--border); border-radius: 14px;
   }
   @media (max-width: 900px) { .scan-grid { max-width: none; max-height: 340px; } }
-  .scans.only-low .scan-card:not(.checkable), .scans.only-pictures .scan-card:not(.has-pictures) { display: none; }
+  .scans-list.only-low .scan-card:not(.checkable), .scans-list.only-pictures .scan-card:not(.has-pictures) { display: none; }
   .scan-card {
     flex: none; display: flex; gap: 10px; padding: 10px; text-align: left; background: var(--field);
     border: 1px solid var(--border); border-radius: 12px; cursor: pointer;
@@ -333,7 +328,7 @@
   .scan-card > span:last-child { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .card-head b { font: 500 13px var(--mono); }
-  .excerpt { margin: 0; font: 13px/1.45 Georgia, 'Times New Roman', serif; color: #3B3D40; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .excerpt { margin: 0; font: 13px/1.45 Georgia, 'Times New Roman', serif; color: #CFC8BC; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .excerpt.empty { font: italic 13px var(--sans); color: var(--muted); }
   .card-mark { font-size: 12px; font-weight: 500; color: var(--accent); }
   .chip.kept { color: var(--kept-text); background: var(--kept-bg); }
@@ -404,7 +399,7 @@
   #contents .ch-row .ch-edit { flex: none; justify-content: center; width: 44px; min-height: 0; padding: 0; font-size: 16px; color: var(--muted); border-top: 0; }
   #contents .ch-row .ch-edit:hover { color: var(--text); }
   #contents .ch-row input { flex: 1 1 auto; min-width: 0; height: 40px; margin: 4px 8px; padding: 0 10px; border: 1px solid var(--input); border-radius: 8px; }
-  #contents.waiting { border-style: dashed; border-color: #D9B98F; }
+  #contents.waiting { border-style: dashed; border-color: var(--accent); }
   .chapter-add { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; }
   .chapter-add label { display: flex; align-items: center; gap: 8px; }
   .chapter-add input { width: 88px; height: 40px; padding: 0 10px; border: 1px solid var(--input); border-radius: 8px; }
@@ -429,35 +424,179 @@
   .settings-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-top: 20px; border-top: 1px solid var(--rule); }
 
   dialog { width: min(92vw, 520px); padding: 0; border: 1px solid var(--border); border-radius: 16px; background: var(--card); color: var(--text); }
-  dialog::backdrop { background: rgba(23, 25, 28, .35); }
+  dialog::backdrop { background: rgba(0, 0, 0, .6); }
   dialog form { display: flex; flex-direction: column; gap: 14px; padding: 20px; }
   dialog p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+
+  /* ===== the reading room =====
+     The book in the middle, as the reader shows it; one drawer beside it for its tools,
+     opened from the rail on the right; the shelf of books along the bottom. */
+  /* the page is the size of the window: the middle and the drawer scroll on their own,
+     so the shelf stays in view below them and never covers the book */
+  body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .room { flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch; }
+  .room-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; overflow: auto; }
+  .room-main > .start { padding: 28px 24px 40px; }
+  .work { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
+  .work .stage { flex: 1 1 auto; }
+  /* the reader, lit like a page in a dark room */
+  /* the reader as big as the window leaves room for: its screen is 3 : 5, under it the slider and buttons */
+  .device { background: transparent; padding: 0; box-shadow: none; width: min(100%, 380px, calc((100vh - 460px) * .6)); min-width: 220px; }
+  .device .screen { border-radius: 6px; box-shadow: 0 30px 80px rgba(0, 0, 0, .55); }
+  .device.landscape { width: min(100%, 640px); padding: 0; }
+  .device.landscape.left { padding: 0; }
+  .pager { width: min(100%, 380px, max(220px, calc((100vh - 460px) * .6))); }
+  .work .stage { padding-top: 12px; }
+  #status { background: transparent; border-bottom: 0; text-align: center; }
+  .checks li { background: var(--card); }
+
+  /* the drawer: one tool at a time */
+  .drawer {
+    flex: 0 0 400px; max-width: 100%; display: flex; flex-direction: column; gap: 16px; padding: 18px 20px 24px;
+    background: var(--card); border-left: 1px solid var(--border); overflow: auto;
+  }
+  .drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .drawer-head h2 { margin: 0; font: 600 19px/1.3 var(--serif); }
+  .round { border-radius: 50%; font-size: 20px; line-height: 1; }
+  .drawer .panel { padding: 0; }
+  .drawer .settings-head { padding: 0; }
+  .drawer .settings-head > div { display: none; }
+  .drawer .two { grid-template-columns: 1fr; }
+  .drawer .chapters-panel > div { max-width: none; }
+  .drawer #contents { max-height: none; }
+  .drawer .settings-panel > div { gap: 24px; }
+  /* Title and cover, or Reader and pictures: the parts of the settings each shows */
+  .settings-panel[data-part="cover"] #secOutput, .settings-panel[data-part="cover"] #secReader,
+  .settings-panel[data-part="cover"] #again, .settings-panel[data-part="cover"] #bookFoot,
+  .settings-panel[data-part="output"] #secDetails, .settings-panel[data-part="output"] #secCover { display: none; }
+  .settings-panel[data-part="output"] #secReader > h3 { display: none; } /* the drawer's own title says it */
+  /* EPUB only: XTC isn't offered in the page */
+  #secOutput { display: none !important; }
+  .scans-list { display: flex; flex-direction: column; gap: 12px; }
+  .scans-list .scans-head { padding: 0; }
+  .scans-list .scan-grid { position: static; height: auto; max-width: none; max-height: none; padding: 0; background: transparent; border: 0; overflow: visible; }
+  .scans { padding: 8px 24px 24px; }
+  .scans .page-editor { position: static; }
+
+  /* the rail: the drawer's tools, the one open lit */
+  .rail { flex: none; width: 72px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 0; border-left: 1px solid var(--border); }
+  .rail-btn {
+    position: relative; width: 56px; min-height: 58px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    font-size: 11px; font-weight: 600; color: var(--muted); background: transparent; border: 0; border-radius: 14px; cursor: pointer;
+  }
+  .rail-btn:hover { color: var(--text); background: var(--field); }
+  .rail-btn[aria-pressed="true"] { color: var(--accent-text); background: var(--accent); }
+  .rail-btn .pill { position: absolute; top: 4px; right: 2px; padding: 0 5px; font: 700 10px/16px var(--sans); color: var(--accent-text); background: var(--accent); border-radius: 8px; }
+  .rail-btn[aria-pressed="true"] .pill { color: var(--accent); background: var(--accent-text); }
+
+  /* the shelf: the books, standing side by side */
+  .shelf {
+    flex: none; display: flex; align-items: flex-end; gap: 16px; padding: 12px 28px 16px;
+    background: linear-gradient(180deg, rgba(13, 14, 16, .92), #0D0E10); border-top: 1px solid var(--border);
+  }
+  .shelf-side { flex: none; width: 330px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px 10px; font-size: 12px; }
+  .shelf-side > .list-head, .shelf-side > .list-foot { grid-column: 1 / -1; }
+  .shelf-side > .list-add { min-width: 0; }
+  .shelf .list-add #addTop { width: 100%; padding: 0 10px; }
+  .shelf .sources { align-self: center; }
+  .shelf .source-tab { min-height: 30px; padding: 0 10px; font-size: 13px; }
+  .shelf .list-add #addTop { height: 36px; }
+  .shelf .list-head { gap: 4px; }
+  .shelf .list-head > div:first-child { display: none; }
+  .shelf-all { display: flex; gap: 6px; }
+  .shelf-all .btn { height: 32px; padding: 0 10px; font-size: 12px; }
+  .shelf .list-foot { font-size: 12px; }
+  .shelf .list-empty { padding: 0; }
+  .shelf .books { flex: 1 1 auto; min-width: 0; flex-direction: row; align-items: flex-end; gap: 12px; overflow-x: auto; padding: 8px 4px 4px; }
+  .shelf .books li { flex: none; }
+  .shelf .book {
+    width: 92px; height: 140px; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; padding: 8px 6px;
+    text-align: center; background: var(--card); border-radius: 6px; transition: transform .15s, box-shadow .15s;
+  }
+  .shelf .book.current { padding: 7px 5px; border-color: var(--accent); transform: translateY(-8px); box-shadow: 0 12px 30px rgba(240, 178, 90, .22); }
+  .shelf .book .thumb { width: 60px; height: 82px; border-radius: 3px; }
+  .shelf .book-text { align-items: center; gap: 3px; width: 100%; }
+  .shelf .book-title { font-size: 11px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .shelf .book-sub { display: none; }
+  .shelf .book .chip { align-self: center; padding: 0 6px; font-size: 10px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .shelf .mini { width: 100%; }
+  @media (max-width: 900px) {
+    body { height: auto; overflow: visible; }
+    .room-main { overflow: visible; }
+    .room { flex-direction: column; }
+    .rail { width: auto; flex-direction: row; justify-content: center; border-left: 0; border-top: 1px solid var(--border); order: -1; }
+    .drawer { position: static; max-height: none; flex-basis: auto; border-left: 0; border-top: 1px solid var(--border); }
+    .shelf { position: static; flex-direction: column; align-items: stretch; padding: 12px 16px; }
+    .shelf-side { width: auto; }
+  }
+
+  /* ===== Pages: the PDF page (input) beside the book (output) =====
+     Both as tall as the window leaves room for (--page-h): the PDF page at its own
+     shape (about 1 : 1.41), the reader's screen at 3 : 5. Each has its tools above it,
+     in a head of the same height, so the two line up. */
+  .work { --page-h: clamp(320px, calc(100vh - 560px), 640px); }
+  .col-head { display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; height: 124px; }
+  .book-tools { display: none; }
+  .book-tools h3, .page-editor-head h3 { margin: 0; font: 600 16px/1.3 var(--serif); }
+  .page-tools { padding: 0; border: 0; align-items: center; }
+  .page-tools .choice { flex: 0 1 260px; background: var(--seg); }
+  .chapter-naming input { flex: 1 1 160px; min-width: 0; height: 34px; padding: 0 12px; color: var(--text); background: var(--bg); border: 1px solid var(--accent); border-radius: 8px; }
+  body.comparing .work { display: grid; grid-template-columns: auto auto; justify-content: center; align-content: start; column-gap: 32px; padding: 0 24px 24px; }
+  body.comparing .work > .apply-bar, body.comparing .work > #status { grid-column: 1 / -1; }
+  body.comparing #scans { grid-column: 1; grid-row: 3; padding: 0; }
+  body.comparing #bookView, body.comparing #convertingView { grid-column: 2; grid-row: 3; padding: 0; justify-content: flex-start; }
+  body.comparing #checks { display: none; }
+  body.comparing .book-tools { display: flex; align-self: stretch; }
+  body.comparing .reader-col { align-items: stretch; gap: 10px; flex: none; }
+  body.comparing .device { width: calc(var(--page-h) * .6); min-width: 0; }
+  body.comparing .pager { width: calc(var(--page-h) * .6); }
+  body.comparing .scans .page-editor { width: calc(var(--page-h) * .71); padding: 0; gap: 10px; background: transparent; border: 0; flex: none; }
+  body.comparing .page-editor-head { min-height: 36px; flex-wrap: nowrap; }
+  body.comparing .page-editor-head .chip { white-space: nowrap; }
+  body.comparing .page-nav .btn { padding: 0 10px; white-space: nowrap; }
+  body.comparing .page-scan { width: 100%; }
+  body.comparing .page-scan img { width: 100%; height: var(--page-h); max-height: none; object-fit: contain; background: #F4F1E8; border: 0; border-radius: 3px; box-shadow: 0 20px 60px rgba(0, 0, 0, .5); }
+  .page-text-box summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+  .page-text-box[open] { gap: 8px; }
+  .field textarea.page-text { height: 180px; min-height: 120px; }
+  /* the drawer's pages: a grid of thumbnails, each with its number and how well it was read */
+  .scans-list .scan-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .scans-list .scan-card { flex-direction: column; gap: 6px; padding: 6px; }
+  .scans-list .scan-card.current { padding: 5px; }
+  .scans-list .scan-card .page-thumb { width: 100%; }
+  .scans-list .scan-card > span:last-child { gap: 2px; }
+  .scans-list .card-head { justify-content: space-between; }
+  .scans-list .card-head .chip { padding: 0 5px; font-size: 10px; }
+  .scans-list .excerpt, .scans-list .card-mark { display: none; }
+  .drawer:has(.scans-list:not([hidden])) { flex-basis: 320px; }
+  @media (max-width: 900px) {
+    body.comparing .work { grid-template-columns: 1fr; }
+    body.comparing #scans, body.comparing #bookView { grid-column: 1; grid-row: auto; }
+  }
 </style>
 </head>
 <body>
+<!-- the top: the name, the book shown with Download and Send -->
 <header class="top">
-  <div class="top-left">
-    <div class="brand"><h1>convert<span>Pdf</span></h1><span class="version" id="version" hidden></span></div>
-    <nav class="sources" role="tablist" aria-label="What you convert">
-      <button type="button" class="source-tab" role="tab" id="srcPdf" data-source="pdf" aria-selected="true">PDFs <span class="source-count" id="countPdf">0</span></button>
-      <button type="button" class="source-tab" role="tab" id="srcWeb" data-source="web" aria-selected="false">Web pages <span class="source-count" id="countWeb">0</span></button>
-    </nav>
+  <div class="brand"><h1>convert<span>Pdf</span></h1><span class="version" id="version" hidden></span></div>
+  <div class="top-book" id="bookPane" hidden>
+    <h2 id="paneTitle"></h2><p class="book-info" id="bookInfo"></p>
   </div>
   <div class="top-actions">
-    <p class="private">
+    <p class="private" title="Your files never leave this computer">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
-      Your files never leave this computer
+      <span>On this computer only</span>
     </p>
-    <button type="button" class="btn" id="downloadAll" disabled>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
-      <span id="downloadAllText">Download all</span></button>
-    <button type="button" class="btn" id="sendAll" disabled hidden>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><path d="M2 9a15 15 0 0 1 20 0"/><circle cx="12" cy="19.5" r="1"/></svg>
-      <span id="sendAllText">Send all</span></button>
+        <div class="get-row" id="getRow">
+          <a class="btn big primary disabled" id="download" aria-disabled="true" tabindex="-1">Download</a>
+          <button type="button" class="btn big soft" id="send" disabled hidden title="Send to your reader over Wi-Fi">Send</button>
+        </div>
   </div>
 </header>
 
-<main class="layout">
+<!-- the reading room: the book in the middle, one drawer for its tools, the rail that opens it -->
+<main class="room" id="room">
+  <div class="room-main">
   <!-- nothing added yet: what they're made into, the reader, then the PDFs or links -->
   <section class="start" id="start" aria-labelledby="startTitle">
     <div class="start-head">
@@ -465,7 +604,7 @@
       <p class="intro" id="intro"></p>
     </div>
     <div class="card start-card">
-      <div class="start-step" id="startFormat">
+      <div class="start-step" id="startFormat" hidden>
         <span class="step-label">Make them into</span>
         <div class="choose" role="radiogroup" aria-label="Make the PDFs into">
           <label><input type="radio" name="newFormat" id="newEpub" value="epub" checked><span><b>EPUB</b><small>Text that flows, with chapters. Best for books.</small></span></label>
@@ -506,67 +645,28 @@
     <p class="hint" id="startHint" hidden></p>
   </section>
 
-  <!-- the books of the source chosen -->
-  <aside class="list" id="listPane" aria-label="Books" hidden>
-    <div class="list-add">
-      <button type="button" class="btn soft" id="addTop">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-        <span id="addTopText">Add PDFs</span></button>
-      <button type="button" class="btn icon-btn" id="collapseList" aria-expanded="true" aria-controls="books" aria-label="Hide the list of books" title="Hide the list of books">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg>
-      </button>
-    </div>
-    <div class="list-head">
-      <div><h2 class="panel-title" id="listTitle">PDF books</h2><span class="small mono" id="bookCount">0</span></div>
-      <div id="queue" hidden>
-        <span class="queue-text" id="queueText"></span>
-        <button type="button" class="btn small" id="pause">Pause</button>
-      </div>
-      <div class="bar thin" id="queueBar" hidden aria-hidden="true"><div id="queueFill"></div></div>
-    </div>
-    <p class="list-empty" id="listEmpty"></p>
-    <ol class="books" id="books"></ol>
-    <div class="list-foot">
-      <span class="foot-new"><span>New books</span>
-        <span class="mini-seg" id="footFormat" role="radiogroup" aria-label="New PDFs are made into">
-          <input type="radio" name="footFormat" id="footEpub" value="epub" checked><label for="footEpub">EPUB</label>
-          <input type="radio" name="footFormat" id="footXtc" value="xtc"><label for="footXtc">XTC</label>
-        </span>
-        <span id="defaultsText"></span></span>
-      <button type="button" class="link" id="editDefaults">Change</button>
-    </div>
-  </aside>
-
-  <!-- the book shown, or the settings for new books -->
-  <section class="card work" id="work" aria-label="The book" hidden>
-    <div class="settings-head" id="settingsHead">
-      <div><h2>Settings for new books</h2><button type="button" class="btn small primary" id="doneDefaults">Done</button></div>
-      <p class="note">Used for each book you add. Every book can be changed on its own afterwards.</p>
-    </div>
-
-    <div id="bookPane" hidden>
-      <div class="pane-head">
-        <div><h2 id="paneTitle"></h2><p class="book-info" id="bookInfo"></p></div>
-        <div class="get-row">
-          <a class="btn big primary disabled" id="download" aria-disabled="true" tabindex="-1">Download</a>
-          <button type="button" class="btn big soft" id="send" disabled hidden title="Send to your reader over Wi-Fi">Send</button>
-        </div>
-      </div>
-      <div class="tabs" id="tabs" role="tablist" aria-label="The book">
-        <button type="button" role="tab" id="tabBook" aria-selected="true" aria-controls="bookView">Preview</button>
-        <button type="button" role="tab" id="tabScans" aria-selected="false" aria-controls="scans" hidden>Pages<span class="pill" id="lowCount" hidden></span></button>
-        <button type="button" role="tab" id="tabChapters" aria-selected="false" aria-controls="chaptersPanel" hidden>Chapters</button>
-        <button type="button" role="tab" id="tabSettings" aria-selected="false" aria-controls="settingsPanel">Settings</button>
-      </div>
+  <!-- the book shown -->
+  <section class="work" id="work" aria-label="The book" hidden>
       <div class="apply-bar" id="applyBar" role="status" hidden>
-        <span id="applyText"></span>
-        <button type="button" class="btn small primary" id="applyBtn">Apply changes</button>
+        <span class="spinner" aria-hidden="true"></span><span id="applyText"></span>
+        <button type="button" class="btn small primary" id="applyBtn" hidden>Apply changes</button>
       </div>
-    </div>
     <p id="status" role="status"></p>
 
     <div class="stage" id="bookView" role="tabpanel" aria-labelledby="tabBook" hidden>
       <div class="reader-col">
+        <!-- Pages open: the book's tools above it, as tall as the PDF page's beside it -->
+        <div class="col-head book-tools" id="bookTools">
+          <div class="page-editor-head"><h3>In the book</h3><span class="note" id="bookToolsWhere"></span></div>
+          <div class="row-btns page-tools" id="chapterTools">
+            <button type="button" class="btn small" id="startChapter" title="Start a chapter on this page, with the name you type">Add to chapter</button>
+          </div>
+          <form class="row-btns page-tools chapter-naming" id="chapterNaming" hidden>
+            <input id="chapterName" autocomplete="off" placeholder="Chapter name" aria-label="Chapter name">
+            <button type="submit" class="btn small primary" id="chapterNameSave">Add</button>
+            <button type="button" class="btn small" id="chapterNameCancel" aria-label="Cancel">×</button>
+          </form>
+        </div>
         <div class="device" id="reader">
           <div class="screen" id="screen">
             <div class="placeholder" id="placeholder">
@@ -636,7 +736,71 @@
       </div>
     </div>
 
-    <div class="scans" id="scans" role="tabpanel" aria-labelledby="tabScans" hidden>
+    <!-- Pages: the page picked in the drawer -->
+    <div class="scans" id="scans" hidden>
+        <aside class="page-editor" id="pageEditor" aria-label="The PDF page">
+          <!-- the page's tools above it, as tall as the book's beside it -->
+          <div class="col-head">
+            <div class="page-editor-head">
+              <h3 id="pageTitle">Page</h3><span class="chip" id="pageChip"></span>
+              <div class="page-nav">
+                <button type="button" class="btn small" id="prevLow"></button>
+                <button type="button" class="btn small" id="nextLow"></button>
+              </div>
+            </div>
+            <div class="row-btns page-tools" id="boxButtons">
+              <button type="button" class="btn small" id="drawBoxes" title="Box the pictures on this page: what's in the boxes goes in the book as pictures">Draw pictures</button>
+              <button type="button" class="btn small" id="foundBoxes">Use found pictures</button>
+              <button type="button" class="btn small" id="readAgain" title="Read the page again with other settings, keeping the better reading">Read again</button>
+              <button type="button" class="btn small" id="keepToggle" aria-expanded="false" aria-controls="keepPart" title="The whole page goes in the book as a picture, instead of its text">Keep as picture</button>
+              <button type="button" class="btn small" id="useAsContents" title="Make the book's chapters from this page's table of contents">Use as the Daftar Isi</button>
+            </div>
+            <div class="row-btns page-tools" id="keepPart" hidden>
+              <div class="choice" role="group" aria-label="Keep the whole page as a picture">
+                <button type="button" data-parts="1" title="The whole page, upright">Whole</button>
+                <button type="button" data-parts="2" title="Turned on its side, in 2 parts that each fill the screen">2 parts</button>
+                <button type="button" data-parts="3" title="Turned on its side, in 3 parts that each fill the screen">3 parts</button>
+              </div>
+              <button type="button" class="btn small" id="keepCancel">Cancel</button>
+            </div>
+            <div class="row-btns page-tools" id="drawButtons" hidden>
+              <button type="button" class="btn small primary" id="saveBoxes">Save pictures</button>
+              <button type="button" class="btn small" id="clearBoxes">Remove all</button>
+              <button type="button" class="btn small" id="cancelBoxes">Cancel</button>
+              <span class="note" id="drawHelp" hidden>Drag across the page to box a picture; drag a box to move it, its corner to resize it.</span>
+            </div>
+            <div class="row-btns page-tools" id="picturePart" hidden>
+              <span class="note">This page goes in the book as a picture.</span>
+              <button type="button" class="btn small" id="useText">Use its text</button>
+            </div>
+          </div>
+          <p class="note" id="pageEmpty">Pick a page in the drawer.</p>
+          <div id="pageBody" hidden>
+            <div class="page-scan" id="pageScan"><img id="pageImg" alt="" draggable="false"></div>
+            <p class="page-note" id="pageNote" hidden></p>
+            <details class="field page-text-box" id="textPart">
+              <summary>Text on this page</summary>
+              <textarea class="page-text" id="pageText" spellcheck="true" aria-label="Text on this page"></textarea>
+              <span class="small">An empty line between paragraphs. The pictures in the boxes go above or between them, where they are on the page.</span>
+              <div class="row-btns"><button type="button" class="btn primary" id="saveText">Save text</button></div>
+            </details>
+          </div>
+        </aside>
+    </div>
+  </section>
+  </div>
+
+  <!-- the drawer: Pages, Chapters, Title and cover, Output and reader, or the settings for new books -->
+  <aside class="drawer" id="drawer" aria-labelledby="drawerTitle" hidden>
+    <div class="drawer-head">
+      <h2 id="drawerTitle"></h2>
+      <button type="button" class="btn icon-btn round" id="drawerClose" aria-label="Close">×</button>
+    </div>
+    <div class="settings-head" id="settingsHead">
+      <div><h2>Settings for new books</h2><button type="button" class="btn small primary" id="doneDefaults">Done</button></div>
+      <p class="note">Used for each book you add. Every book can be changed on its own afterwards.</p>
+    </div>
+    <div class="scans-list" id="scansList" hidden>
       <div class="scans-head">
         <span id="scanSummary"></span>
         <label class="filter"><input type="checkbox" id="onlyLow"><span>Read at <span class="offer-limit">90</span>% or lower</span></label>
@@ -653,64 +817,9 @@
           <button type="button" class="btn small" id="keepAllCancel">Cancel</button>
         </div>
       </div>
-      <div class="scans-body">
         <div class="scan-grid" id="scanGrid"></div>
-        <aside class="page-editor" id="pageEditor" aria-label="The page open">
-          <div class="page-editor-head">
-            <h3 id="pageTitle">Page</h3><span class="chip" id="pageChip"></span>
-            <div class="page-nav">
-              <button type="button" class="btn small" id="prevLow"></button>
-              <button type="button" class="btn small" id="nextLow"></button>
-            </div>
-          </div>
-          <p class="note" id="pageEmpty">Click a page to check it here.</p>
-          <div id="pageBody" hidden>
-            <div class="row-btns page-tools" id="boxButtons">
-              <button type="button" class="btn small" id="drawBoxes">Draw pictures</button>
-              <button type="button" class="btn small" id="foundBoxes">Use found pictures</button>
-              <button type="button" class="btn small" id="startChapter" title="Add this page to the book's contents, as the start of a chapter">Add to the contents</button>
-              <button type="button" class="btn small" id="useAsContents" title="Make the book's chapters from this page's table of contents">Use as the Daftar Isi</button>
-            </div>
-            <div class="row-btns page-tools" id="drawButtons" hidden>
-              <button type="button" class="btn small primary" id="saveBoxes">Save pictures</button>
-              <button type="button" class="btn small" id="clearBoxes">Remove all</button>
-              <button type="button" class="btn small" id="cancelBoxes">Cancel</button>
-              <span class="note" id="drawHelp" hidden>Drag across the page to box each picture; drag a box to move it, its corner to resize it, × to remove it.</span>
-            </div>
-            <p class="page-note" id="pageNote" hidden></p>
-            <div class="page-cols">
-              <div class="page-scan" id="pageScan"><img id="pageImg" alt="" draggable="false"></div>
-              <div class="page-side">
-                <div class="field" id="textPart">
-                  <label for="pageText">Text on this page</label>
-                  <textarea class="page-text" id="pageText" spellcheck="true"></textarea>
-                  <span class="small">An empty line between paragraphs. The pictures in the boxes go above or between them, where they are on the page.</span>
-                  <div class="row-btns">
-                    <button type="button" class="btn primary" id="saveText">Save text</button>
-                    <button type="button" class="btn soft" id="readAgain">Read again</button>
-                  </div>
-                </div>
-                <div class="field" id="picturePart" hidden>
-                  <span>This page goes in the book as a picture, instead of its text.</span>
-                  <div class="row-btns"><button type="button" class="btn" id="useText">Use its text</button></div>
-                </div>
-                <fieldset class="group" id="keepPart">
-                  <legend>Or keep the whole page as a picture</legend>
-                  <div class="choice">
-                    <button type="button" data-parts="1">Whole</button>
-                    <button type="button" data-parts="2">2 parts</button>
-                    <button type="button" data-parts="3">3 parts</button>
-                  </div>
-                  <p class="note" style="margin-top: 6px">2 or 3 parts turn it on its side, each part filling the screen, so the text is bigger.</p>
-                </fieldset>
-              </div>
-            </div>
-          </div>
-        </aside>
-      </div>
     </div>
-
-    <div class="panel chapters-panel" id="chaptersPanel" role="tabpanel" aria-labelledby="tabChapters" hidden>
+    <div class="panel chapters-panel" id="chaptersPanel" hidden>
       <div>
         <div class="toc-pick" id="tocPick" hidden>
           <p class="note" id="tocText"></p>
@@ -730,8 +839,7 @@
         </div>
       </div>
     </div>
-
-    <div class="panel settings-panel" id="settingsPanel" role="tabpanel" aria-labelledby="tabSettings" hidden>
+    <div class="panel settings-panel" id="settingsPanel" hidden>
       <div>
         <section class="set-group" id="secDetails">
           <h3>Details <span class="set-summary" id="sumDetails"></span></h3>
@@ -886,8 +994,62 @@
         </div>
       </div>
     </div>
-  </section>
+  </aside>
+
+  <!-- the rail: what the drawer opens -->
+  <nav class="rail" id="rail" aria-label="The book's tools" hidden>
+    <button type="button" class="rail-btn" id="tabScans" data-drawer="pages" aria-pressed="false" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg><span>Pages</span><span class="pill" id="lowCount" hidden></span></button>
+    <button type="button" class="rail-btn" id="tabChapters" data-drawer="chapters" aria-pressed="false" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>Chapters</span></button>
+    <button type="button" class="rail-btn" id="tabCover" data-drawer="cover" aria-pressed="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M5 15l4-4 4 4 2-2 4 4"/></svg><span>Cover</span></button>
+    <button type="button" class="rail-btn" id="tabOutput" data-drawer="output" aria-pressed="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg><span>Output</span></button>
+  </nav>
 </main>
+
+<!-- the shelf: the books of the source chosen, and what goes on with them -->
+<footer class="shelf" id="listPane" aria-label="Books" hidden>
+  <div class="shelf-side">
+    <nav class="sources" role="tablist" aria-label="What you convert">
+      <button type="button" class="source-tab" role="tab" id="srcPdf" data-source="pdf" aria-selected="true">PDFs <span class="source-count" id="countPdf">0</span></button>
+      <button type="button" class="source-tab" role="tab" id="srcWeb" data-source="web" aria-selected="false">Web pages <span class="source-count" id="countWeb">0</span></button>
+    </nav>
+    <div class="list-add">
+      <button type="button" class="btn soft" id="addTop">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span id="addTopText">Add PDFs</span></button>
+      <button type="button" class="btn icon-btn" id="collapseList" hidden aria-expanded="true" aria-controls="books" aria-label="Hide the list of books" title="Hide the list of books">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg>
+      </button>
+    </div>
+    <div class="list-head">
+      <div><h2 class="panel-title" id="listTitle">PDF books</h2><span class="small mono" id="bookCount">0</span></div>
+      <div id="queue" hidden>
+        <span class="queue-text" id="queueText"></span>
+        <button type="button" class="btn small" id="pause">Pause</button>
+      </div>
+      <div class="bar thin" id="queueBar" hidden aria-hidden="true"><div id="queueFill"></div></div>
+    </div>
+    <div class="shelf-all">
+    <button type="button" class="btn" id="downloadAll" disabled>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+      <span id="downloadAllText">Download all</span></button>
+    <button type="button" class="btn" id="sendAll" disabled hidden>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><path d="M2 9a15 15 0 0 1 20 0"/><circle cx="12" cy="19.5" r="1"/></svg>
+      <span id="sendAllText">Send all</span></button>
+    </div>
+    <div class="list-foot">
+      <span class="foot-new"><span>New books</span>
+        <span class="mini-seg" id="footFormat" hidden role="radiogroup" aria-label="New PDFs are made into">
+          <input type="radio" name="footFormat" id="footEpub" value="epub" checked><label for="footEpub">EPUB</label>
+          <input type="radio" name="footFormat" id="footXtc" value="xtc"><label for="footXtc">XTC</label>
+        </span>
+        <span id="defaultsText"></span></span>
+      <button type="button" class="link" id="editDefaults">Change</button>
+    </div>
+  </div>
+    <p class="list-empty" id="listEmpty"></p>
+    <ol class="books" id="books"></ol>
+</footer>
+
 
 <dialog id="linksDialog" aria-labelledby="linksDialogTitle">
   <form method="dialog">
@@ -1194,9 +1356,11 @@
   const clone = s => JSON.parse(JSON.stringify(s));
   // settings a book is converted with (full-page pictures aren't: they change an EPUB as it's shown)
   // The reader settings `s` can have: the X4 Pro is drawn for as the X4 (the same
-  // screen), and an XTC book is for an Xteink, never any reader.
+  // screen). XTC isn't offered in the page, so every book is an EPUB (the converter
+  // still makes XTC books on the command line).
   function fitReader(s) {
-    if (s.device === 'x4-pro' || (s.device === 'any' && s.format === 'xtc')) s.device = 'x4';
+    s.format = 'epub';
+    if (s.device === 'x4-pro') s.device = 'x4';
     return s;
   }
   const madeWith = s => JSON.stringify({ format: s.format, device: s.device, ...(s.format === 'xtc' && { xtc: s.xtc }) });
@@ -1432,7 +1596,7 @@
     $('sendAllText').textContent = ready ? `Send all · ${ready}` : 'Send all';
     const d = defaultsBy[source];
     $('defaultsText').textContent = source === 'web' ? `EPUB · ${deviceName(d.device)}` : `· ${deviceName(d.device)}`;
-    $('footFormat').hidden = source === 'web';
+    $('footFormat').hidden = true; // every book is an EPUB
     // EPUB or XTC for new PDFs, chosen here and in the start box too
     const xtcNext = defaultsBy.pdf.format === 'xtc';
     $(xtcNext ? 'footXtc' : 'footEpub').checked = true;
@@ -1677,7 +1841,7 @@
       heading: 'Turn PDFs into books for your e-reader',
       add: 'Add PDFs',
       intro: 'Real chapters and paragraphs, scanned pages read for you, pictures sized for the screen.',
-      empty: 'Every PDF you add gets its own line here, with its progress. Click one to preview and change it.',
+      empty: 'No PDFs yet. Each one you add stands here, with its progress.',
       hint: 'Drop as many PDFs as you like: they start converting as soon as they’re added, one after another. You can preview and change each one while the rest are still being made.',
       forAll: 'Use these settings for all PDF books',
     },
@@ -1686,7 +1850,7 @@
       heading: 'Turn web pages into books for your e-reader',
       add: 'Add links',
       intro: 'Links of news articles and other web pages into EPUB books: only the article, with its pictures and captions, no menus, ads or “Read also”. Each link becomes a book.',
-      empty: 'Every link you add gets its own line here, with its progress. Click one to preview and change it.',
+      empty: 'No web pages yet. Each link you add stands here, with its progress.',
       hint: 'The links start converting as soon as they’re added, one after another. You can preview and change each book while the rest are still being made.',
       forAll: 'Use these settings for all web page books',
     },
@@ -1718,7 +1882,7 @@
     $('useForAll').textContent = s.forAll;
     const web = source === 'web';
     $('drop').hidden = web;
-    $('startFormat').hidden = web;
+    $('startFormat').hidden = true; // XTC isn't offered in the page: every book is an EPUB
     $('startLinks').hidden = !web;
     $('addTopText').textContent = web ? 'Add links' : 'Add PDFs';
     $('addTop').hidden = web && !api.convertLinks;
@@ -1736,18 +1900,64 @@
     renderBooks();
   }
 
-  let viewTab = 'book'; // the book's tab: 'book' (Preview), 'scans' (Pages), 'chapters', 'settings'
-  let userPickedTab = false; // once the reader picks a tab, new pages don't switch it
+  let viewTab = 'book'; // what the middle shows: 'book' (the reader, or how far it's got), or 'scans' (the page picked in Pages)
+  let userPickedTab = false; // once the reader picks a tool, new pages don't switch to Pages
+  // The drawer beside the reader, opened from the rail: 'pages', 'chapters', 'cover'
+  // (title and cover), 'output' (reader and pictures), or 'defaults' (the settings for
+  // new books, from Change on the shelf or More settings on the start); null when closed.
+  let drawer = null;
+  const DRAWERS = { pages: 'Pages', chapters: 'Chapters', cover: 'Title and cover', output: 'Reader and pictures', defaults: 'Settings for new books' };
 
-  // The start (no book yet), or the books beside the book shown, or the settings
-  // for new books (Change under the list).
+  // The start (no book yet), or the book shown in the middle, the shelf of books below.
   function showLayout() {
-    $('start').hidden = !!current || editingDefaults;
-    $('listPane').hidden = !sourceBooks().length;
-    $('work').hidden = !current && !editingDefaults;
+    $('start').hidden = !!current;
+    $('listPane').hidden = false; // the shelf is always there: PDFs or web pages, and their books
+    $('getRow').hidden = !current;
+    $('work').hidden = !current;
     $('settingsHead').hidden = !editingDefaults;
-    $('bookPane').hidden = !current || editingDefaults;
+    $('bookPane').hidden = !current;
+    $('rail').hidden = !current;
+    showDrawer();
   }
+
+  // The drawer and the rail as they are: what's open, and which tools the book has.
+  function showDrawer() {
+    const b = current;
+    const state = b ? b.state : '';
+    const hasScans = !!(b && b.scan && b.scan.pages.size);
+    if (drawer === 'pages' && !hasScans) drawer = null;
+    if (drawer === 'chapters' && state !== 'ready') drawer = null;
+    if ((drawer === 'cover' || drawer === 'output') && !b) drawer = null;
+    if (drawer === 'defaults' && !editingDefaults) drawer = null;
+    $('tabScans').hidden = !hasScans;
+    $('tabChapters').hidden = state !== 'ready';
+    for (const btn of $('rail').querySelectorAll('.rail-btn')) btn.setAttribute('aria-pressed', String(btn.dataset.drawer === drawer));
+    $('drawer').hidden = !drawer;
+    $('drawerTitle').textContent = drawer ? DRAWERS[drawer] : '';
+    $('scansList').hidden = drawer !== 'pages';
+    $('chaptersPanel').hidden = drawer !== 'chapters';
+    $('settingsPanel').hidden = !['cover', 'output', 'defaults'].includes(drawer);
+    $('settingsPanel').dataset.part = drawer === 'cover' ? 'cover' : 'output';
+    document.body.classList.toggle('drawer-open', !!drawer);
+  }
+
+  // A tool of the rail opened in the drawer, or closed (null). Pages also shows the
+  // page picked in the middle, in place of the reader.
+  function openDrawer(which) {
+    if (editingDefaults && which !== 'defaults') {
+      editingDefaults = false;
+      renderSettings();
+    }
+    drawer = which;
+    showTab(which === 'pages' ? 'scans' : 'book');
+  }
+  for (const btn of $('rail').querySelectorAll('.rail-btn')) {
+    btn.addEventListener('click', () => {
+      userPickedTab = true;
+      openDrawer(drawer === btn.dataset.drawer ? null : btn.dataset.drawer);
+    });
+  }
+  $('drawerClose').addEventListener('click', () => (editingDefaults ? editDefaults(false) : openDrawer(null)));
 
   function showPane() {
     const b = current;
@@ -1792,31 +2002,34 @@
     }
   }
 
-  // One of the book's tabs: Preview (the book, or how far it's got), Pages (its
-  // scanned pages, while it's made too), Chapters (once it's made) and Settings.
-  // The settings for new books show Settings alone.
+  // What the middle shows: the reader (or how far the book has got), or the page
+  // picked in Pages. 'chapters' and 'settings' open those in the drawer, beside the reader.
   function showTab(which, fresh = false) {
-    const b = editingDefaults ? null : current;
+    const b = current;
     const state = b ? b.state : '';
     const hasScans = !!(b && b.scan && b.scan.pages.size);
-    if (which === 'scans' && !hasScans) which = 'book';
-    if (which === 'chapters' && state !== 'ready') which = 'book';
-    viewTab = which;
-    $('tabScans').hidden = !hasScans;
-    $('tabChapters').hidden = state !== 'ready';
-    for (const [id, name] of [['tabBook', 'book'], ['tabScans', 'scans'], ['tabChapters', 'chapters'], ['tabSettings', 'settings']]) {
-      $(id).setAttribute('aria-selected', String(which === name));
+    if (which === 'chapters' || which === 'settings') {
+      if (which === 'chapters' && state === 'ready') drawer = 'chapters';
+      if (which === 'settings') drawer = 'cover';
+      which = 'book';
     }
-    const preview = !!b && which === 'book';
+    if (which === 'scans' && !hasScans) which = 'book';
+    if (which === 'scans') drawer = 'pages';
+    else if (drawer === 'pages') drawer = null;
+    viewTab = which;
+    showDrawer();
+    // with Pages, the book stays in the middle too: the PDF page beside it, as it reads in the book
+    const preview = !!b && (which === 'book' || which === 'scans');
+    document.body.classList.toggle('comparing', !!b && which === 'scans');
+    editableBookNow(); // the book's text is typed into while Pages is open
     $('bookView').hidden = !preview || state !== 'ready';
     $('convertingView').hidden = !preview || state !== 'converting';
     $('waitingView').hidden = !preview || state !== 'waiting';
     $('failedView').hidden = !preview || state !== 'failed';
     $('scans').hidden = !b || which !== 'scans';
-    $('chaptersPanel').hidden = !b || which !== 'chapters';
-    $('settingsPanel').hidden = !(editingDefaults || (b && which === 'settings'));
     if (b && which === 'scans') {
       scans.openFirst();
+      if (scans.open() !== null) showPdfPage(scans.open());
       scans.fit();
     }
     if (fresh) previewStale = true; // another book: its preview is drawn when its Preview tab is shown
@@ -1824,9 +2037,6 @@
       openPreview(false).catch(() => showStatus('The preview could not be shown.', { error: true }));
     }
     paintScreenBusy();
-  }
-  for (const [id, name] of [['tabBook', 'book'], ['tabScans', 'scans'], ['tabChapters', 'chapters'], ['tabSettings', 'settings']]) {
-    $(id).addEventListener('click', () => { userPickedTab = true; showTab(name); });
   }
 
   function showBookInfo() {
@@ -1902,11 +2112,12 @@
     return b.kind === 'pdf' && was.format === 'epub' && b.settings.format === 'epub' ? 'reader' : 'convert';
   }
 
-  // ---------- changes waiting ----------
-  // Changes to a made book that build it again wait until Apply changes, all put in
-  // at once: pages changed in the page editor, page 1 as the cover, the Daftar Isi,
-  // and another reader for an EPUB of a PDF. Download puts them in first. A book not
-  // made yet just uses them when it's made. `b.next` holds the settings waiting.
+  // ---------- changes going in ----------
+  // Changes to a made book that build it again go in by themselves, all at once, a
+  // moment after the last one (scheduleApply): pages changed, page 1 as the cover,
+  // the Daftar Isi, the chapters, and another reader for an EPUB of a PDF. Building it
+  // again only redraws the pages they touch, so it's quick. Download waits for them.
+  // A book not made yet just uses them when it's made. `b.next` holds the settings waiting.
   const hasChange = (b, key) => !!(b && b.next && key in b.next);
   // the setting as it will be: waiting, or as the book is made (contentsPages null: looked for)
   // (chapterStarts null: the chapters found)
@@ -1944,14 +2155,41 @@
     return list;
   }
 
+  const applyTimers = new Map(); // book → the update waiting for it
+  let bookTyping = false; // a paragraph of the book is being typed into (editableBook)
+
+  // the line above the book while changes go in, and the update they wait for
   function showApply() {
     const b = editingDefaults ? null : current;
     const list = pendingList(b);
-    $('applyBar').hidden = !list.length;
-    if (!list.length) return;
-    $('applyText').textContent = `Waiting to go in the book: ${joinList(list)}.`;
-    $('applyBtn').textContent = list.length === 1 ? 'Apply the change' : `Apply ${list.length} changes`;
-    $('applyBtn').disabled = !!b.rebuilding || !!(b.scan && b.scan.busy);
+    for (const book of books) if (pendingList(book).length && !applyTimers.has(book) && !book.applying) scheduleApply(book);
+    $('applyBar').hidden = !list.length && !(b && b.rebuilding);
+    if ($('applyBar').hidden) return;
+    $('applyText').textContent = list.length ? `Updating the book with your changes: ${joinList(list)}…` : 'Updating the book…';
+  }
+
+  // Put the book's changes in it a moment after the last one (`ms`), all at once. It
+  // waits while the book is being built or a page read, and while text is being
+  // typed on the book (bookTyping). Download and Send wait for it (b.applying).
+  function scheduleApply(b, ms = 1500) {
+    clearTimeout(applyTimers.get(b));
+    applyTimers.set(b, setTimeout(async () => {
+      applyTimers.delete(b);
+      if (!books.includes(b) || !pendingList(b).length) return;
+      if (b.rebuilding || (b.scan && b.scan.busy) || (b === current && bookTyping)) return scheduleApply(b, 800);
+      const going = applyChanges(b);
+      b.applying = going;
+      try {
+        const r = await going;
+        const chapters = r.chapters ? ` The book has ${r.meta.chapters} ${r.meta.chapters === 1 ? 'chapter' : 'chapters'}${r.meta.ownChapters ? ', as you chose them' : ''}.` : '';
+        if (b === current) showStatus(`In the book: ${joinList(r.what)}.${r.contents ? ` ${tocResult(r.meta)}` : ''}${chapters}`);
+      } catch (err) {
+        if (b === current) showStatus(err.message || 'Could not put the changes in the book.', { error: true });
+      } finally {
+        if (b.applying === going) b.applying = null;
+        if (b === current) showApply();
+      }
+    }, ms));
   }
 
   // Build the book again with everything waiting. Resolves with what went in.
@@ -2002,7 +2240,7 @@
       const chapters = r.chapters ? ` The book has ${r.meta.chapters} ${r.meta.chapters === 1 ? 'chapter' : 'chapters'}${r.meta.ownChapters ? ', as you chose them' : ''}.` : '';
       if (b === current) showStatus(`Applied: ${joinList(r.what)}.${r.contents ? ` ${tocResult(r.meta)}` : ''}${chapters}`);
     } catch (err) {
-      showStatus(err.message || 'Could not apply the changes.', { error: true });
+      showStatus(err.message || 'Could not put the changes in the book.', { error: true });
     }
   });
 
@@ -2110,7 +2348,7 @@
     showApply();
     updateRow(b);
     store.saveBooks();
-    if (changeKind(b) === 'reader') showStatus(`The book will be drawn for the ${deviceName(s.device)} when you apply the changes.`);
+    if (changeKind(b) === 'reader') showStatus(`The book will be drawn for the ${deviceName(s.device)} in a moment.`);
     else if (readerBefore && !changeKind(b)) showStatus(`The book stays drawn for the ${deviceName(s.device)}.`);
     if (partsChanged) b.savedMeta = null;
     if (partsChanged && b.state === 'ready' && !isXtc()) {
@@ -2123,6 +2361,7 @@
   // the settings for new books: Change under the list, or More settings on the start
   function editDefaults(on) {
     editingDefaults = on;
+    drawer = on ? 'defaults' : null;
     renderSettings();
     showPane();
   }
@@ -2197,7 +2436,7 @@
   // has its own setting for that (First page is the cover).
   const firstPageCover = b => wanted(b, 'firstPageCover') && b.kind === 'pdf' && b.settings.format !== 'xtc';
   const coverName = b => (b.cover ? b.cover.name : firstPageCover(b) ? 'Page 1 of the PDF' : `Taken from the ${origin(b)}`) +
-    (!b.cover && hasChange(b, 'firstPageCover') ? ' · after Apply changes' : '');
+    (!b.cover && hasChange(b, 'firstPageCover') ? ' · going in the book…' : '');
 
   function showCover() {
     const b = current;
@@ -2280,8 +2519,8 @@
     showSummaries();
     renderBooks();
     showStatus(!hasChange(b, 'firstPageCover') ? `The book keeps ${on ? 'page 1' : `the cover from the ${origin(b)}`} as its cover.`
-      : on ? 'Page 1 will be the cover, and its text left out of the book, when you apply the changes.'
-      : `The cover from the ${origin(b)} will be used, and page 1's text put back, when you apply the changes.`);
+      : on ? 'Page 1 will be the cover, and its text left out of the book, in a moment.'
+      : `The cover from the ${origin(b)} will be used, and page 1's text put back, in a moment.`);
   }
   $('coverFirstPage').addEventListener('click', () => useFirstPage(true));
 
@@ -2360,9 +2599,9 @@
     const found = contents ? contents.entries.length - missing.length : 0;
     let text;
     if (waiting) {
-      text = asked === null ? 'The Daftar Isi will be looked for again when you apply the changes.'
-        : asked.length ? `The chapters will follow the Daftar Isi on page ${tocPagesText(asked)} when you apply the changes.`
-        : 'The chapters will be made without the Daftar Isi when you apply the changes.';
+      text = asked === null ? 'The Daftar Isi will be looked for again in a moment.'
+        : asked.length ? `The chapters will follow the Daftar Isi on page ${tocPagesText(asked)} in a moment.`
+        : 'The chapters will be made without the Daftar Isi in a moment.';
     } else if (b.state === 'ready' && b.meta && b.meta.ownChapters) {
       text = 'The chapters are the ones you chose' + (found ? `; the Daftar Isi on page ${tocPagesText(contents.pages)} is left out of the book.` : '.');
     } else if (asked && !asked.length) text = `Chapters as the converter found them, without the book’s Daftar Isi. ${pickHint(b)}`;
@@ -2410,9 +2649,9 @@
     showToc();
     if (b === shownBook() && scans) scans.refreshEditor();
     showStatus(!hasChange(b, 'contentsPages') ? 'The chapters stay as they are.'
-      : pages === null ? 'The Daftar Isi will be looked for again when you apply the changes.'
-      : pages.length ? `The chapters will follow the Daftar Isi on page ${tocPagesText(pages)} when you apply the changes.`
-      : 'The chapters will be made without the Daftar Isi when you apply the changes.');
+      : pages === null ? 'The Daftar Isi will be looked for again in a moment.'
+      : pages.length ? `The chapters will follow the Daftar Isi on page ${tocPagesText(pages)} in a moment.`
+      : 'The chapters will be made without the Daftar Isi in a moment.');
   }
 
   // ---------- chapters chosen page by page ----------
@@ -2440,7 +2679,7 @@
     renderContents();
     showChapterTools();
     if (b === current && scans) scans.refreshEditor();
-    showStatus(hasChange(b, 'chapterStarts') ? `${said} Apply the changes to put the chapters in the book.` : 'The chapters stay as they are.');
+    showStatus(hasChange(b, 'chapterStarts') ? `${said} It goes in the book in a moment.` : 'The chapters stay as they are.');
   }
   function renameChapter(b, page, title) {
     const list = chapterStarts(b);
@@ -2454,14 +2693,15 @@
     if (!list.length) return showStatus('A book needs a chapter. Add another one first, or use the chapters found.', { error: true });
     setChapters(b, list, `The chapter on page ${page} will join the one before it.`);
   }
-  function addChapter(b, page) {
+  // A chapter starting on `page`, named `title` (empty: from the top of the page).
+  function addChapter(b, page, title = '') {
     const last = b.meta.pages;
     if (!Number.isInteger(page) || page < 1 || page > last) return showStatus(`Give the number of the PDF page to add, from 1 to ${last}.`, { error: true });
     const list = chapterStarts(b);
     if (list.some(c => c.page === page)) return showStatus(`Page ${page} is in the contents already.`, { error: true });
-    list.push({ page, title: '' });
+    list.push({ page, title });
     list.sort((x, y) => x.page - y.page);
-    setChapters(b, list, `Page ${page} will be in the contents, as a chapter titled from the page (rename it once it's applied).`);
+    setChapters(b, list, title ? `Page ${page} will start the chapter “${title}”.` : `Page ${page} will be in the contents, as a chapter titled from the page (rename it once it's applied).`);
   }
 
   function showChapterTools() {
@@ -2474,7 +2714,7 @@
     const own = wanted(b, 'chapterStarts');
     $('chaptersFound').hidden = !own;
     $('chaptersNote').textContent = waiting
-      ? (own ? 'These chapters go in the book when you apply the changes.' : 'The chapters found go back in the book when you apply the changes.')
+      ? (own ? 'These chapters go in the book in a moment.' : 'The chapters found go back in the book in a moment.')
       : 'Rename (✎) or remove (×) a chapter, or add a page to the contents.';
     const busy = !!b.rebuilding;
     for (const id of ['chapterPage', 'chapterAddBtn', 'chaptersFound']) $(id).disabled = busy;
@@ -2613,6 +2853,8 @@
     let shown = null; // the book whose pages are listed
     let open = null; // the page open in the editor
     let drawing = null; // boxes being drawn on the open page, or null
+    let keepOpen = false; // Keep as picture's choices shown, in place of the page's tools
+    let naming = false; // the name of the chapter starting on the open page being typed
     const cards = new Map(); // page → card
 
     // pages read very badly are pictures (a cover, an illustration), not text worth reading again
@@ -2694,7 +2936,7 @@
           renderCard(b, n);
         }
         const one = pages.length === 1;
-        showStatus(`${one ? 'The page' : `${pages.length} pages`} will be ${keep ? (parts > 1 ? `${parts} sideways pictures${one ? '' : ' each'}` : one ? 'a picture' : 'pictures') : 'text again'}. Apply the changes to use ${one ? 'it' : 'them'}.`);
+        showStatus(`${one ? 'The page' : `${pages.length} pages`} will be ${keep ? (parts > 1 ? `${parts} sideways pictures${one ? '' : ' each'}` : one ? 'a picture' : 'pictures') : 'text again'}. ${one ? 'It goes' : 'They go'} in the book in a moment.`);
       } catch (err) {
         showStatus(err.message || 'Could not change the pages.', { error: true });
       }
@@ -2753,13 +2995,15 @@
       excerpt.classList.toggle('empty', p.picture || !p.text);
       const mark = card.querySelector('.card-mark');
       mark.hidden = !(n === open || p.changed);
-      mark.textContent = n === open ? 'Open →' : 'Changed · in the book after Apply changes';
+      mark.textContent = n === open ? 'Open →' : 'Changed · going in the book…';
       const thumb = card.querySelector('.page-thumb');
       thumb.querySelectorAll('.pic-box').forEach(el => el.remove());
       if (!p.picture) for (const box of p.boxes || []) thumb.append(boxElement(box, p.drawn));
     }
 
-    function openPage(n) {
+    // The page opened beside the book, which turns to where it is (unless `following`
+    // the book, whose screen picked it).
+    function openPage(n, following = false) {
       if (open !== null && cards.get(open)) {
         const before = open;
         open = n;
@@ -2767,10 +3011,77 @@
       }
       open = n;
       drawing = null;
+      keepOpen = false;
+      naming = false;
       renderCard(shown, n);
       renderEditor(true);
-      if (window.innerWidth < 900) $('pageEditor').scrollIntoView({ block: 'start', behavior: 'smooth' });
+      if (!following) {
+        showPdfPage(n);
+        cards.get(n)?.scrollIntoView({ block: 'nearest' });
+      }
     }
+
+    // The chapter starting on the open page, if there is one: chosen by the user or found.
+    const chapterAt = (b, n) => (canChooseChapters(b) ? chapterRows(b).find(c => !c.opening && c.page === n) : null) || null;
+
+    // Above the book, beside the PDF page: where it is, and Add to chapter (or Rename
+    // chapter, on a page a chapter starts on), whose name is typed in place.
+    function renderBookTools(p) {
+      const b = shown;
+      const can = !!p && canChooseChapters(b);
+      $('bookToolsWhere').textContent = p ? `page ${open}` : '';
+      if (!can) naming = false;
+      $('chapterTools').hidden = !can || naming;
+      $('chapterNaming').hidden = !can || !naming;
+      if (!can) return;
+      const here = chapterAt(b, open);
+      const ready = b.scan.done && !b.scan.busy && !b.rebuilding;
+      $('startChapter').textContent = here ? 'Rename chapter' : 'Add to chapter';
+      $('startChapter').title = here ? `A chapter starts on this page: “${here.title}”. Change its name.` : 'Start a chapter on this page, with the name you type';
+      $('startChapter').disabled = !ready;
+      $('chapterNameSave').textContent = here ? 'Save' : 'Add';
+    }
+    $('startChapter').addEventListener('click', () => {
+      const b = shown;
+      const p = b && b.scan && b.scan.pages.get(open);
+      if (!p) return;
+      const here = chapterAt(b, open);
+      naming = true;
+      renderBookTools(p);
+      // a new chapter starts with the top line of its page as its name, ready to be typed over
+      const firstLine = (p.text || '').split(/\n/).find(l => l.trim());
+      $('chapterName').value = here ? here.title.replace(/ \(title from the page\)$/, '') : (firstLine || '').trim().slice(0, 80);
+      $('chapterName').focus();
+      $('chapterName').select();
+    });
+    $('chapterNaming').addEventListener('submit', e => {
+      e.preventDefault();
+      const b = shown;
+      const title = $('chapterName').value.trim();
+      if (!title) return showStatus('Type a name for the chapter.', { error: true });
+      naming = false;
+      if (b === current) {
+        if (chapterAt(b, open)) renameChapter(b, open, title);
+        else addChapter(b, open, title);
+      }
+      renderBookTools(b.scan.pages.get(open));
+    });
+    $('chapterNameCancel').addEventListener('click', () => {
+      naming = false;
+      renderBookTools(shown && shown.scan && shown.scan.pages.get(open));
+    });
+    $('chapterName').addEventListener('keydown', e => {
+      if (e.key === 'Escape') $('chapterNameCancel').click();
+    });
+    // Keep as picture: its choices in place of the page's tools, until one is picked or Cancel
+    $('keepToggle').addEventListener('click', () => {
+      keepOpen = true;
+      renderEditor();
+    });
+    $('keepCancel').addEventListener('click', () => {
+      keepOpen = false;
+      renderEditor();
+    });
 
     // The page open: its scan with its pictures, its text and what can be done to it.
     function renderEditor(fresh = false) {
@@ -2782,7 +3093,11 @@
       $('pageChip').hidden = !p;
       $('pageTitle').textContent = p ? `Page ${open}` : 'Page';
       $('prevLow').hidden = $('nextLow').hidden = !p;
-      if (!p) return;
+      renderBookTools(p);
+      if (!p) {
+        for (const id of ['boxButtons', 'keepPart', 'drawButtons', 'picturePart']) $(id).hidden = true;
+        return;
+      }
       const [text, kind] = badge(r, p);
       $('pageChip').textContent = text;
       $('pageChip').className = 'chip ' + kind;
@@ -2812,16 +3127,17 @@
       const ready = r.done && !r.busy;
       const waitTitle = r.done ? '' : 'Available when the conversion has finished';
       $('drawHelp').hidden = !drawing;
-      $('boxButtons').hidden = !!drawing || p.picture;
+      $('boxButtons').hidden = !!drawing || p.picture || keepOpen;
       $('drawButtons').hidden = !drawing;
       $('foundBoxes').hidden = !p.drawn;
       $('clearBoxes').disabled = !drawing || !drawing.length;
       $('textPart').hidden = p.picture || !!drawing;
       $('picturePart').hidden = !p.picture;
-      $('keepPart').hidden = p.picture || !!drawing;
+      $('keepPart').hidden = p.picture || !!drawing || !keepOpen;
+      $('keepToggle').setAttribute('aria-expanded', String(keepOpen));
       if (fresh || document.activeElement !== $('pageText')) $('pageText').value = p.text || '';
       $('readAgain').hidden = p.manual;
-      for (const btn of $('pageBody').querySelectorAll('button')) {
+      for (const btn of $('pageEditor').querySelectorAll('.col-head .page-tools button, #pageBody button')) {
         btn.disabled = !ready;
         btn.title = waitTitle;
       }
@@ -2830,18 +3146,14 @@
       const isContents = (asked === null ? tocInUse(b) : asked).includes(open);
       $('useAsContents').textContent = isContents ? 'Used as the Daftar Isi' : 'Use as the Daftar Isi';
       $('useAsContents').disabled = !ready || isContents;
-      // this page in the contents: a chapter starts on it, chosen by the user or found
-      const chapterHere = canChooseChapters(b) && chapterRows(b).some(c => !c.opening && c.page === open);
-      $('startChapter').hidden = !canChooseChapters(b);
-      $('startChapter').textContent = chapterHere ? 'In the contents' : 'Add to the contents';
-      $('startChapter').disabled = !ready || chapterHere || !!b.rebuilding;
       // the low pages before and after this one
       const low = lowPages(r);
       const prev = [...low].reverse().find(n => n < open);
       const next = low.find(n => n > open);
       $('prevLow').textContent = prev ? `‹ p. ${prev}` : '‹';
       $('prevLow').title = prev ? `The page to check before: p. ${prev}` : 'No page to check before this one';
-      $('nextLow').textContent = next ? `Next to check: p. ${next} ›` : 'None left to check';
+      $('nextLow').textContent = next ? `Next to check: p. ${next} ›` : 'None left';
+      $('nextLow').title = next ? `The next page read at ${r.limit}% or lower` : 'No page read badly after this one';
       $('prevLow').disabled = !prev;
       $('nextLow').disabled = !next;
       $('prevLow').onclick = () => prev && openPage(prev);
@@ -2888,29 +3200,30 @@
     $('saveText').addEventListener('click', e => {
       const text = $('pageText').value;
       change(e.currentTarget, 'Saving…', (id, n) => api.setText(id, n, text), (p, res) => {
-        Object.assign(p, { text: res.text, manual: true, changed: true, note: { good: true, text: 'Your text will be used for this page. Apply the changes to use it.' } });
+        Object.assign(p, { text: res.text, manual: true, changed: true, note: { good: true, text: 'Your text will be used for this page. It goes in the book in a moment.' } });
       });
     });
     $('readAgain').addEventListener('click', e => {
       change(e.currentTarget, 'Reading again…', (id, n) => api.retry(id, n), (p, res) => {
         if (res.improved) Object.assign(p, { confidence: res.confidence, text: res.text, better: true, changed: true });
         p.note = res.improved
-          ? { good: true, text: `Read again (${res.setting}): ${res.before}% → ${res.confidence}%. Apply the changes to use it.` }
+          ? { good: true, text: `Read again (${res.setting}): ${res.before}% → ${res.confidence}%. It goes in the book in a moment.` }
           : { text: `Tried other settings; the best (${res.setting}) read ${res.tried ?? 0}%, not better than ${res.before}%. Kept the first reading.` };
       });
     });
     for (const btn of document.querySelectorAll('#keepPart [data-parts]')) {
       btn.addEventListener('click', () => {
         const parts = Number(btn.dataset.parts);
+        keepOpen = false;
         change(btn, 'Saving…', (id, n) => api.setPicture(id, n, true, parts), (p, res) => {
           Object.assign(p, { picture: res.picture, pictureParts: res.parts || 1, changed: true });
-          p.note = { good: true, text: res.parts > 1 ? `The page will be ${res.parts} sideways pictures in the book. Apply the changes to use them.` : 'The whole page will be a picture in the book. Apply the changes to use it.' };
+          p.note = { good: true, text: res.parts > 1 ? `The page will be ${res.parts} sideways pictures in the book. They go in the book in a moment.` : 'The whole page will be a picture in the book. It goes in the book in a moment.' };
         });
       });
     }
     $('useText').addEventListener('click', e => {
       change(e.currentTarget, 'Saving…', (id, n) => api.setPicture(id, n, false), (p, res) => {
-        Object.assign(p, { picture: res.picture, pictureParts: 1, changed: true, note: { good: true, text: "The page's text will be used again. Apply the changes to use it." } });
+        Object.assign(p, { picture: res.picture, pictureParts: 1, changed: true, note: { good: true, text: "The page's text will be used again. It goes in the book in a moment." } });
       });
     });
 
@@ -2939,10 +3252,10 @@
       p.note = {
         good: true,
         text: !res.drawn
-          ? 'The pictures found on the page will be used again. Apply the changes to see them.'
+          ? 'The pictures found on the page will be used again. They go in the book in a moment.'
           : count
-            ? `${count === 1 ? 'The picture in the box' : `The ${count} pictures in the boxes`} will go in the book, and the text around ${count === 1 ? 'it' : 'them'} was read again without ${count === 1 ? 'it' : 'them'}. Apply the changes to use ${count === 1 ? 'it' : 'them'}.`
-            : 'The whole page will be text, with no pictures. Apply the changes to use it.',
+            ? `${count === 1 ? 'The picture in the box' : `The ${count} pictures in the boxes`} will go in the book, and the text around ${count === 1 ? 'it' : 'them'} was read again without ${count === 1 ? 'it' : 'them'}. ${count === 1 ? 'It goes' : 'They go'} in the book in a moment.`
+            : 'The whole page will be text, with no pictures. It goes in the book in a moment.',
       };
     };
     $('saveBoxes').addEventListener('click', e => {
@@ -3018,23 +3331,109 @@
       }
     }
 
-    $('onlyLow').addEventListener('change', e => $('scans').classList.toggle('only-low', e.target.checked));
-    $('startChapter').addEventListener('click', () => {
-      if (shown === current && open !== null) addChapter(current, open);
-    });
+    $('onlyLow').addEventListener('change', e => $('scansList').classList.toggle('only-low', e.target.checked));
     $('useAsContents').addEventListener('click', () => {
       if (shown === current && open !== null) useContents([open]);
     });
-    $('onlyPictures').addEventListener('change', e => $('scans').classList.toggle('only-pictures', e.target.checked));
+    $('onlyPictures').addEventListener('change', e => $('scansList').classList.toggle('only-pictures', e.target.checked));
+
+    // ----- text fixed on the book -----
+    // A paragraph of the book typed into (editableBook): the words it had are found in
+    // its page's text, ignoring what OCR text and the book's paragraphs don't share (line
+    // breaks, a hyphen splitting a word at a line's end, punctuation, case), and replaced
+    // with what was typed. A paragraph running on from page n into the next was joined
+    // from both: the end of page n gets all of it, and its words leave the next page.
+
+    // the words of a text, each with where it is in it
+    function wordsOf(text) {
+      const words = [];
+      const letter = c => /[\p{L}\p{N}]/u.test(c || '');
+      let i = 0;
+      while (i < text.length) {
+        if (!letter(text[i])) {
+          i++;
+          continue;
+        }
+        const start = i;
+        let word = '';
+        while (i < text.length) {
+          if (letter(text[i])) word += text[i++].toLowerCase();
+          else if (text[i] === '-' && text[i + 1] === '\n' && letter(text[i + 2])) i += 2;
+          else break;
+        }
+        words.push({ word, start, end: i });
+      }
+      return words;
+    }
+    // where the words `want` run in `have`, from `from` on (the index of the first), or -1
+    function findRun(have, want, from = 0) {
+      for (let i = from; i + want.length <= have.length; i++) {
+        if (want.every((w, k) => have[i + k].word === w.word)) return i;
+      }
+      return -1;
+    }
+    // the texts of page n (and the next) with the paragraph `was` replaced by `now`;
+    // null when its words aren't found there
+    function textsFixed(n, was, now) {
+      const r = shown.scan;
+      const page = r.pages.get(n), next = r.pages.get(n + 1);
+      const want = wordsOf(was);
+      if (!page || !want.length) return null;
+      const text = page.text || '';
+      const have = wordsOf(text);
+      const at = findRun(have, want);
+      if (at >= 0) return { [n]: text.slice(0, have[at].start) + now + text.slice(have[at + want.length - 1].end) };
+      if (!next) return null;
+      // its first words end this page, the rest start the next
+      const following = wordsOf(next.text || '');
+      for (let k = want.length - 1; k >= 1; k--) {
+        const head = want.slice(0, k), tail = want.slice(k);
+        const i = have.length - head.length;
+        if (i < 0 || findRun(have, head, i) !== i || findRun(following.slice(0, tail.length), tail) !== 0) continue;
+        const rest = next.text.slice(following[tail.length - 1].end).replace(/^[\s,.;:!?…'"”’)\]]*/, '');
+        return { [n]: text.slice(0, have[i].start) + now, [n + 1]: rest };
+      }
+      return null;
+    }
 
     return {
       lowCount,
+      // a page of the book shown that was read with OCR (its text can be fixed)
+      has: n => !!(shown && shown.scan && shown.scan.pages.has(n)),
+      // The paragraph `was` of page n, typed into on the book as `now`: its page's text
+      // (and the next's) saved with it. Resolves false when it couldn't be matched.
+      async fixText(n, was, now) {
+        const b = shown;
+        if (!b || !b.scan || b !== current) return false;
+        const texts = textsFixed(n, was, now);
+        if (!texts) {
+          showStatus(`This paragraph didn't match page ${n}'s text, so it wasn't changed. Fix it in “Text on this page”, under the PDF page.`, { error: true });
+          return false;
+        }
+        const r = b.scan;
+        try {
+          for (const [k, text] of Object.entries(texts)) {
+            const res = await api.setText(b.id, Number(k), text);
+            r.pending = res.pendingPages;
+            Object.assign(r.pages.get(Number(k)), { text: res.text, manual: true, changed: true, note: { good: true, text: 'Your text is used for this page. It goes in the book in a moment.' } });
+            renderCard(b, Number(k));
+          }
+        } catch (err) {
+          showStatus(err.message || 'Could not save the text.', { error: true });
+          return false;
+        }
+        store.keepReadings(b);
+        updateCounts(b);
+        if (b === shown && open !== null) renderEditor(true);
+        showStatus(`Page ${n}: your text is saved. It goes in the book in a moment.`);
+        return true;
+      },
       pictureCount: b => (b.scan ? [...b.scan.pages.values()].filter(hasPictures).length : 0),
       // only the low pages, or the pages with pictures, or all (null)
       filter(which) {
         for (const [id, cls, on] of [['onlyLow', 'only-low', which === 'low'], ['onlyPictures', 'only-pictures', which === 'pictures']]) {
           $(id).checked = on;
-          $('scans').classList.toggle(cls, on);
+          $('scansList').classList.toggle(cls, on);
         }
       },
       refreshEditor: () => renderEditor(),
@@ -3110,6 +3509,13 @@
         const first = lowPages(shown.scan)[0] ?? Math.min(...shown.scan.pages.keys());
         openPage(first);
       },
+      // the book turned to page n (a scanned one): it's the page open beside it
+      follow(n) {
+        if (!shown || !shown.scan || !shown.scan.pages.has(n) || n === open) return;
+        openPage(n, true);
+        cards.get(n)?.scrollIntoView({ block: 'nearest' });
+      },
+      open: () => open,
     };
   })();
 
@@ -3267,6 +3673,7 @@
   // Save a made book to the computer: changes waiting go in it first, so the file
   // is the book as it's checked. The website makes the file here; the app's server sends it.
   async function saveBook(b) {
+    if (b.applying) await b.applying.catch(() => {});
     const changed = pendingList(b).length > 0;
     if (changed) await applyChanges(b);
     const parts = b.settings.parts, pictures = b.settings.pictures || 'inline';
@@ -3316,6 +3723,7 @@
       const zip = new JSZip();
       const names = new Set();
       for (const b of ready) {
+        if (b.applying) await b.applying.catch(() => {});
         if (pendingList(b).length) await applyChanges(b);
         const data = await api.file(b.id, { xtc: b.meta.format === 'xtc', parts: b.settings.parts, pictures: b.settings.pictures || 'inline' });
         let name = b.meta.fileName;
@@ -3380,6 +3788,9 @@
     let sent = 0;
     try {
       for (const b of list) {
+        // the book as it's checked: its changes in it first
+        if (b.applying) await b.applying.catch(() => {});
+        if (pendingList(b).length) await applyChanges(b);
         // two books with the same name would overwrite each other on the reader
         let name = b.meta.fileName;
         for (let k = 2; names.has(name.toLowerCase()); k++) name = b.meta.fileName.replace(/(.[^.]+)$/, ` (${k})$1`);
@@ -3448,6 +3859,8 @@
     viewer.innerHTML = '';
     placeholder.hidden = true;
     epub = ePub(data);
+    pageHrefs = new Map();
+    findPageHrefs(data, token);
     rendition = epub.renderTo(viewer, { width: '100%', height: '100%', spread: 'none' });
     previewOf = id;
     sidewaysSections = new Map();
@@ -3465,6 +3878,7 @@
       doc.documentElement.classList.toggle('landscape', landscape);
       sidewaysSections.set(shown.sectionIndex, sideways);
       holdFor(sideways);
+      editableBook(shown);
     });
     rendition.on('relocated', onRelocated);
     rendition.on('keyup', onKey);
@@ -3761,7 +4175,7 @@
       line.append(go, edit, remove);
       nav.append(line);
     }
-    $('contentsNote').textContent = waiting ? '· waiting for Apply changes' : contentsNoteText;
+    $('contentsNote').textContent = waiting ? '· going in the book…' : contentsNoteText;
   }
 
   function markContents(here) {
@@ -3776,8 +4190,143 @@
     else if (rendition) rendition.display(target);
   }
 
+  // ---------- text fixed on the book ----------
+  // With Pages open, the paragraphs of the book that come from scanned pages are typed
+  // into where they're shown (each belongs to the page whose marker comes before it).
+  // Leaving one puts its new text in its page (scans.fixText); the book goes in again a
+  // moment later, not while a paragraph is being typed into (bookTyping).
+  function editableBook(contents) {
+    const doc = contents.document;
+    if (!doc || !doc.body) return;
+    if (!doc.getElementById('fixStyle')) {
+      const style = doc.createElement('style');
+      style.id = 'fixStyle';
+      style.textContent = '.fixable { cursor: text; outline: none; border-bottom: 1px dashed rgba(201, 136, 58, .75); }' +
+        ' .fixable:hover { background: rgba(240, 178, 90, .12); } .fixable:focus { background: rgba(240, 178, 90, .24); border-bottom-color: #C9883A; }';
+      doc.head.append(style);
+      const fixable = e => e.target && e.target.closest && e.target.closest('.fixable');
+      doc.addEventListener('focusin', e => {
+        const el = fixable(e);
+        if (!el) return;
+        bookTyping = true;
+        el.dataset.was = el.textContent;
+      });
+      doc.addEventListener('focusout', e => {
+        const el = fixable(e);
+        if (!el) return;
+        bookTyping = false;
+        const was = el.dataset.was;
+        delete el.dataset.was;
+        const now = el.textContent.replace(/\s+/g, ' ').trim();
+        if (was === undefined || now === was.replace(/\s+/g, ' ').trim()) return;
+        if (!now) {
+          el.textContent = was;
+          return;
+        }
+        scans.fixText(Number(el.dataset.page), was, now).then(ok => { if (!ok) el.textContent = was; });
+      });
+      // one paragraph at a time: Enter is done, Esc puts it back; keys type, they don't turn the page
+      const keys = e => {
+        const el = fixable(e);
+        if (!el) return;
+        e.stopPropagation();
+        if (e.type !== 'keydown') return;
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          el.blur();
+        } else if (e.key === 'Escape') {
+          if (el.dataset.was !== undefined) el.textContent = el.dataset.was;
+          el.blur();
+        }
+      };
+      doc.addEventListener('keydown', keys, true);
+      doc.addEventListener('keyup', keys, true);
+    }
+    const on = viewTab === 'scans';
+    let page = null;
+    for (const el of doc.body.querySelectorAll('.pdfp, p, h3')) {
+      if (el.classList.contains('pdfp')) {
+        page = Number(el.id.slice(4));
+        continue;
+      }
+      const fixable = on && page !== null && scans.has(page);
+      el.classList.toggle('fixable', fixable);
+      if (fixable) {
+        el.contentEditable = 'true';
+        el.spellcheck = true;
+        el.dataset.page = page;
+      } else el.removeAttribute('contenteditable');
+    }
+  }
+  function editableBookNow() {
+    if (rendition) for (const contents of rendition.getContents()) editableBook(contents);
+  }
+
+  // Where each PDF page starts in the book shown (the markers chapterFiles puts in the
+  // EPUB, pdfp12 for page 12): page → the place to turn the preview to. A page asked for
+  // before they're read (`pageWanted`) is turned to once they are.
+  let pageHrefs = new Map();
+  let pageWanted = null;
+  let turning = false; // the preview is turning to a page asked for: it doesn't pick the page back (see onRelocated)
+  async function findPageHrefs(data, token) {
+    const found = new Map();
+    try {
+      const zip = await JSZip.loadAsync(data);
+      for (const name of Object.keys(zip.files)) {
+        if (!/^OEBPS\/chapter[\d-]+\.xhtml$/.test(name)) continue;
+        const text = await zip.file(name).async('string');
+        for (const m of text.matchAll(/id="pdfp(\d+)"/g)) found.set(Number(m[1]), `${name.slice(6)}#pdfp${m[1]}`);
+      }
+    } catch {
+      return;
+    }
+    if (token !== previewToken) return;
+    pageHrefs = found;
+    if (pageWanted !== null) showPdfPage(pageWanted);
+  }
+  // The preview turned to where PDF page n starts: the page itself, or the nearest one
+  // before it that's in the book (a Daftar Isi or blank page isn't).
+  function showPdfPage(n) {
+    if (!rendition || !pageHrefs.size || $('bookView').hidden) {
+      pageWanted = n;
+      return;
+    }
+    pageWanted = null;
+    let k = n;
+    while (k > 0 && !pageHrefs.has(k)) k--;
+    const href = pageHrefs.get(k) || pageHrefs.get(Math.min(...pageHrefs.keys()));
+    if (!href) return;
+    turning = true;
+    rendition.display(href).catch(() => { turning = false; });
+  }
+  // The PDF page for the screen shown, from the page markers in its file: the page
+  // open if it starts on this screen, else the first page starting on it, else the last
+  // one started before it (a screen can be all one page's text). Each screen is a
+  // column of the laid-out file, `delta` wide, scrolled to (epub.js's own count of the
+  // page displayed doesn't follow the turns here).
+  function pdfPageShown(loc, open) {
+    const contents = rendition && rendition.getContents()[0];
+    const manager = rendition && rendition.manager;
+    const delta = manager && manager.layout && manager.layout.delta;
+    if (!contents || !delta || !manager.container || !loc || !loc.start) return null;
+    const column = Math.round(manager.container.scrollLeft / delta);
+    const markers = [...contents.document.querySelectorAll('.pdfp')].map(m => ({ page: Number(m.id.slice(4)), column: Math.floor(m.offsetLeft / delta) }));
+    const here = markers.filter(m => m.column === column);
+    if (here.some(m => m.page === open)) return open;
+    if (here.length) return here[0].page;
+    const before = markers.filter(m => m.column < column);
+    return before.length ? before[before.length - 1].page : null;
+  }
+
   function onRelocated(loc) {
     if (!loc || !loc.start) return;
+    // Pages open: the page beside the book follows it as it's turned (not when it
+    // was turned to the page opened)
+    if (turning) turning = false;
+    else if (viewTab === 'scans') {
+      const page = pdfPageShown(loc, scans.open());
+      if (page) scans.follow(page);
+    }
     holdFor(!!sidewaysSections.get(loc.start.index));
     // a chapter's section headings share its file, so the chapter itself is the place shown
     const file = loc.start.href.split('#')[0];
