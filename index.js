@@ -718,7 +718,11 @@ function chaptersAtStarts(pages, starts) {
     let title = start.title || pageTitle(first) || `Page ${start.page + 1}`;
     if (title.length > 100) title = title.slice(0, 97) + '…';
     const inTitle = new Set(titleWords(title));
-    while (first.length && first[0].heading && titleWords(first[0].text).every(w => inTitle.has(w))) first.shift();
+    // the page's own heading is the chapter's title: left out, as the chapter has it.
+    // Named by the user, the name takes its place (a renamed chapter doesn't keep its
+    // old heading under the new one); the heading lines at the top go, up to 3.
+    if (start.title) for (let k = 0; k < 3 && first.length && first[0].heading; k++) first.shift();
+    else while (first.length && first[0].heading && titleWords(first[0].text).every(w => inTitle.has(w))) first.shift();
     chapters.push({ title, blocks: [...first, ...pages.slice(start.page + 1, end).flat()], page: start.page });
   });
   return chapters;

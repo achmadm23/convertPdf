@@ -257,7 +257,14 @@
   #slider:disabled { opacity: .45; cursor: not-allowed; }
   .pager-buttons { display: flex; align-items: center; gap: 8px; }
   .pager-buttons .seg { flex: 1 1 auto; }
-  .pager-buttons .seg label { min-height: 32px; padding: 2px 8px; font-size: 13px; }
+  .pager-buttons .seg label { min-height: 32px; padding: 2px 8px; font-size: 13px; white-space: nowrap; }
+  /* too narrow for ‹, Portrait | Landscape and › on one line: the choice goes above the arrows */
+  .pager { container-type: inline-size; }
+  @container (max-width: 340px) {
+    .pager-buttons { flex-wrap: wrap; }
+    .pager-buttons .seg { order: -1; flex: 1 1 100%; }
+    .pager-buttons .icon-btn { flex: 1 1 0; }
+  }
   .icon-btn { flex: none; width: 44px; height: 44px; padding: 0; }
   .checks { flex: 1 1 320px; max-width: 440px; display: flex; flex-direction: column; gap: 14px; }
   .checks h3 { margin: 0; font-size: 17px; font-weight: 600; }
@@ -391,6 +398,10 @@
   #contents.waiting { border-style: dashed; border-color: var(--accent); }
   .chapter-add { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; }
   .chapter-add label { display: flex; align-items: center; gap: 8px; }
+  .chapter-add .chapter-name { flex: 1 1 180px; }
+  .chapter-add .chapter-name input { flex: 1 1 auto; width: auto; min-width: 0; }
+  /* a heading inside a chapter: listed under it, smaller, so only chapters look like chapters */
+  #contents button.sub { min-height: 36px; font-size: 13px; color: var(--muted); }
   .chapter-add input { width: 88px; height: 40px; padding: 0 10px; border: 1px solid var(--input); border-radius: 8px; }
 
   /* Settings: the book's, or the ones for new books */
@@ -513,6 +524,17 @@
   .book-act:disabled { opacity: .35; cursor: not-allowed; }
   .chip.paused { color: var(--muted); background: var(--seg); }
   .shelf .book .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (min-width: 901px) and (max-width: 1299px) {
+    body.comparing .shelf { flex-basis: 76px; padding: 16px 10px; align-items: center; }
+    body.comparing .shelf .list-add { flex-direction: column; align-items: center; }
+    body.comparing .shelf #addTop { width: 44px; height: 44px; padding: 0; flex: none; }
+    body.comparing .shelf #addTopText, body.comparing .shelf .sources, body.comparing .shelf .list-head, body.comparing .shelf .list-empty,
+    body.comparing .shelf .book-text, body.comparing .shelf .book-actions, body.comparing .shelf .shelf-foot, body.comparing .shelf #collapseList { display: none; }
+    body.comparing .shelf .books { margin: 0; padding: 2px; }
+    body.comparing .shelf li[data-acts] .book { justify-content: center; padding: 6px; }
+    body.comparing .shelf li[data-acts] .book.current { padding: 5px; }
+    body.comparing .drawer { flex-basis: 280px; }
+  }
   @media (min-width: 901px) {
     #collapseList svg { transition: transform .15s; }
     .shelf.collapsed { flex-basis: 76px; padding: 16px 10px; align-items: center; }
@@ -540,7 +562,10 @@
      Both as tall as the window leaves room for (--page-h): the PDF page at its own
      shape (about 1 : 1.41), the reader's screen at 3 : 5. Each has its tools above it,
      in a head of the same height, so the two line up. */
-  .work { --page-h: clamp(320px, calc(100vh - 560px), 640px); }
+  /* as tall as the window leaves room for, and no wider than the middle can hold the two
+     side by side (the PDF page about 0.71 of its height wide, the book 0.6, and the gaps) */
+  .room-main { container-type: inline-size; }
+  .work { --page-h: min(clamp(320px, calc(100vh - 560px), 640px), max(220px, calc((100cqw - 140px) / 1.31))); }
   /* as tall as their tools, matched to the other's (alignHeads) */
   .col-head { display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; min-height: 92px; }
   .book-tools { display: none; }
@@ -895,7 +920,8 @@
         <p class="note" id="chaptersNote" hidden></p>
         <div class="chapter-add" id="chapterAdd" hidden>
           <label>Add page <input type="number" id="chapterPage" min="1" inputmode="numeric"></label>
-          <button type="button" class="btn small soft" id="chapterAddBtn">to the contents</button>
+          <label class="chapter-name">named <input id="chapterNewName" autocomplete="off" placeholder="from the page" aria-label="Name of the new chapter (empty: from the top of its page)"></label>
+          <button type="button" class="btn small soft" id="chapterAddBtn">Add chapter</button>
           <button type="button" class="btn small" id="chaptersFound" hidden>Use the chapters found</button>
         </div>
       </div>
@@ -2835,10 +2861,23 @@
     const busy = !!b.rebuilding;
     for (const id of ['chapterPage', 'chapterAddBtn', 'chaptersFound']) $(id).disabled = busy;
   }
-  $('chapterAddBtn').addEventListener('click', () => current && addChapter(current, Number($('chapterPage').value)));
-  $('chapterPage').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && current) { e.preventDefault(); addChapter(current, Number($('chapterPage').value)); }
-  });
+  // a chapter added at a page, named as typed (empty: from the top of its page)
+  function addTypedChapter() {
+    if (!current) return;
+    const page = Number($('chapterPage').value);
+    const before = JSON.stringify(wanted(current, 'chapterStarts'));
+    addChapter(current, page, $('chapterNewName').value.trim());
+    if (JSON.stringify(wanted(current, 'chapterStarts')) !== before) $('chapterPage').value = $('chapterNewName').value = '';
+  }
+  $('chapterAddBtn').addEventListener('click', addTypedChapter);
+  for (const id of ['chapterPage', 'chapterNewName']) {
+    $(id).addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addTypedChapter();
+      }
+    });
+  }
   $('chaptersFound').addEventListener('click', () => current && setChapters(current, null, 'The chapters found will be used again.'));
 
   $('tocRemove').addEventListener('click', () => useContents([]));
@@ -4272,6 +4311,7 @@
       const go = document.createElement('button');
       go.type = 'button';
       go.style.paddingLeft = `${12 + (entry.depth || 0) * 14}px`;
+      go.classList.toggle('sub', !!entry.depth); // a heading inside a chapter
       go.innerHTML = '<span></span><span></span>';
       go.children[0].textContent = entry.label;
       go.title = entry.label; // the whole title, when it's cut to 2 lines
@@ -4605,23 +4645,26 @@
     turning = true;
     rendition.display(href).catch(() => { turning = false; });
   }
-  // The PDF page for the screen shown, from the page markers in its file: the page
-  // open if it starts on this screen, else the first page starting on it, else the last
-  // one started before it (a screen can be all one page's text). Each screen is a
-  // column of the laid-out file, `delta` wide, scrolled to (epub.js's own count of the
-  // page displayed doesn't follow the turns here).
-  function pdfPageShown(loc, open) {
+  // The PDF page for the screen shown, from the page markers in its file: the page whose
+  // content the screen starts with. A page starting at the very top of the screen is it;
+  // otherwise the screen goes on with the last page started before it, until that page's
+  // content is done. Each screen is a column of the laid-out file, `delta` wide, scrolled
+  // to (epub.js's own count of the page displayed doesn't follow the turns here).
+  function pdfPageShown(loc) {
     const contents = rendition && rendition.getContents()[0];
     const manager = rendition && rendition.manager;
     const delta = manager && manager.layout && manager.layout.delta;
     if (!contents || !delta || !manager.container || !loc || !loc.start) return null;
     const column = Math.round(manager.container.scrollLeft / delta);
-    const markers = [...contents.document.querySelectorAll('.pdfp')].map(m => ({ page: Number(m.id.slice(4)), column: Math.floor(m.offsetLeft / delta) }));
-    const here = markers.filter(m => m.column === column);
-    if (here.some(m => m.page === open)) return open;
-    if (here.length) return here[0].page;
+    // the top of this screen: where its first block starts
+    const blocks = [...contents.document.body.children].filter(el => Math.floor(el.offsetLeft / delta) === column);
+    const top = blocks.length ? Math.min(...blocks.map(el => el.offsetTop)) : 0;
+    const markers = [...contents.document.querySelectorAll('.pdfp')].map(m => ({ page: Number(m.id.slice(4)), column: Math.floor(m.offsetLeft / delta), top: m.offsetTop }));
+    const starting = markers.find(m => m.column === column && m.top <= top + 2);
+    if (starting) return starting.page;
     const before = markers.filter(m => m.column < column);
-    return before.length ? before[before.length - 1].page : null;
+    if (before.length) return before[before.length - 1].page;
+    return markers.length ? markers[0].page : null; // a screen before its file's first marker
   }
 
   function onRelocated(loc) {
@@ -4630,7 +4673,7 @@
     // was turned to the page opened)
     if (turning) turning = false;
     else if (viewTab === 'scans' && !restoring) {
-      const page = pdfPageShown(loc, scans.open());
+      const page = pdfPageShown(loc);
       if (page) scans.follow(page);
     }
     holdFor(!!sidewaysSections.get(loc.start.index));
