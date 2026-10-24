@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const JSZip = require('jszip');
-const { measureLayout, findGaps, detectFigures, sidewaysParts, renderCover, imageCover } = require('./figures');
+const { measureLayout, layoutMeasures, findGaps, detectFigures, sidewaysParts, renderCover, imageCover } = require('./figures');
 const { findPagePictures } = require('./picture-pages');
 const { recognizePages, finishPages, LANGUAGES } = require('./ocr');
 const { openPdf } = require('./pdf');
@@ -218,7 +218,10 @@ function linesToBlocks(lines, bodySize) {
 // the result's `contentsLines` are those pages' lines ([page, lines] each), read
 // before anything else is done to them.
 // The result's `printed` is the page number printed on each page, where there is one.
-async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: previous, onOcrPage, screen, firstPageCover = false, contentsPages } = {}) {
+// cache: an object (newBookCache) kept with the book and passed to each rebuild of the
+// same PDF: its pages' text and the pictures found on them are kept in it, so a rebuild
+// only draws again the pages whose pictures could come out otherwise.
+async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: previous, onOcrPage, screen, firstPageCover = false, contentsPages, cache } = {}) {
   const doc = await openPdf(buffer);
 
   let meta = {};
@@ -226,12 +229,16 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
     meta = (await doc.getMetadata()).info || {};
   } catch {}
 
-  const pageLines = [];
-  for (let n = 1; n <= doc.numPages; n++) {
-    const page = await doc.getPage(n);
-    const content = await page.getTextContent();
-    pageLines.push(pageToLines(content.items));
-    onProgress({ stage: 'text', done: n, total: doc.numPages });
+  let pageLines = [];
+  if (cache?.text) pageLines = structuredClone(cache.text);
+  else {
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const content = await page.getTextContent();
+      pageLines.push(pageToLines(content.items));
+      onProgress({ stage: 'text', done: n, total: doc.numPages });
+    }
+    if (cache) cache.text = structuredClone(pageLines);
   }
 
   // pages with no text layer are scans: read them with OCR
@@ -274,6 +281,19 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   const bodySize = [...sizeChars.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 10;
 
   const layout = measureLayout(pageLines, bodySize);
+  // Work on a page done before with the same inputs (see newBookCache), else done now
+  // and kept: `slot` names the work, one kept result each.
+  const measures = JSON.stringify([layoutMeasures(layout), screen]);
+  const keyOf = inputs => crypto.createHash('md5').update(Buffer.from(JSON.stringify(inputs) + measures)).digest().toString('hex');
+  const kept = async (slot, inputs, make) => {
+    if (!cache) return make();
+    const key = keyOf(inputs);
+    const was = cache.work.get(slot);
+    if (was && was.key === key) return was.value;
+    const value = await make();
+    cache.work.set(slot, { key, value });
+    return value;
+  };
   const printed = printedPageNumbers(pageLines);
   const tocPages = contentsPages ?? [...new Set([
     ...pageLines.slice(0, CONTENTS_FRONT).map((_, i) => i + 1),
@@ -302,19 +322,23 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   onProgress({ stage: 'pictures', done: 0, total: renders });
 
   let cover = null;
+  const coverOfPage1 = () => kept('cover', [], async () => renderCover(await doc.getPage(1), screen));
   if (firstPageCover && pageLines.length > 0) {
-    cover = await renderCover(await doc.getPage(1), screen);
+    cover = await coverOfPage1();
     pageLines[0] = [];
     picturePages.delete(1); // it's the cover, so not a picture in the text as well
     onProgress({ stage: 'pictures', done: ++rendered, total: renders });
   } else if (hasCoverCandidate && pictureParts(1) === 1 && !drawn(1)) {
     // a first page that is mostly picture with hardly any body text is the cover,
     // unless it was kept as a picture in parts, which go in the book instead
-    const first = await doc.getPage(1);
-    const height = first.view[3] - first.view[1];
-    const [picture] = await detectFigures(first, pageLines[0], [{ top: height, bottom: 0 }], layout, screen);
-    if (picture && picture.top - picture.bottom > height * 0.5) {
-      cover = await renderCover(first, screen);
+    const big = await kept('coverCheck', pageLines[0], async () => {
+      const first = await doc.getPage(1);
+      const height = first.view[3] - first.view[1];
+      const [picture] = await detectFigures(first, pageLines[0], [{ top: height, bottom: 0 }], layout, screen);
+      return !!picture && picture.top - picture.bottom > height * 0.5;
+    });
+    if (big) {
+      cover = await coverOfPage1();
       pageLines[0] = [];
       picturePages.delete(1); // it's the cover, so not a picture in the text as well
     }
@@ -340,9 +364,29 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
         ? { n, find: 'words', lines: layoutLines[n - 1] }
         : { n, find: 'gaps', lines: pageLines[n - 1], gaps: findGaps(pageLines[n - 1], layout, bodySize) }
   );
-  const found = await findPagePictures(buffer, doc, tasks, layout, screen, () =>
+  // pages searched before with the same lines, gaps or boxes keep what was found
+  const found = new Map();
+  const keys = new Map();
+  const todo = [];
+  for (const task of tasks) {
+    const { n, ...inputs } = task;
+    const key = cache && keyOf(inputs);
+    const was = cache?.work.get(`page:${n}`);
+    if (was && was.key === key) {
+      found.set(n, was.value);
+      onProgress({ stage: 'pictures', done: Math.min(++rendered, renders), total: renders });
+    } else {
+      keys.set(n, key);
+      todo.push(task);
+    }
+  }
+  const searched = await findPagePictures(buffer, doc, todo, layout, screen, () =>
     onProgress({ stage: 'pictures', done: Math.min(++rendered, renders), total: renders })
   );
+  for (const [n, result] of searched) {
+    found.set(n, result);
+    if (cache) cache.work.set(`page:${n}`, { key: keys.get(n), value: result });
+  }
   for (const n of candidates) {
     const { figures, pageWidth, pageHeight } = found.get(n);
     if (ocr?.pages.has(n)) {
@@ -373,14 +417,17 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   // pages kept as a picture: the whole page, cropped to its ink like a cover,
   // upright or turned sideways and cut into 2 or 3 parts
   for (const n of picturePages) {
-    const page = await doc.getPage(n);
-    const height = page.view[3] - page.view[1];
-    const [picture] = await detectFigures(page, [], [{ top: height, bottom: 0 }], layout, screen);
-    page.cleanup();
+    const parts = pictureParts(n);
+    const picture = await kept(`whole:${n}`, parts, async () => {
+      const page = await doc.getPage(n);
+      const height = page.view[3] - page.view[1];
+      const [found] = await detectFigures(page, [], [{ top: height, bottom: 0 }], layout, screen);
+      page.cleanup();
+      return found ? { top: found.top, parts: parts > 1 ? sidewaysParts(found.crop, parts, screen) : [found.data] } : null;
+    });
     onProgress({ stage: 'pictures', done: Math.min(++rendered, renders), total: renders });
     if (!picture) continue; // a blank page
-    const parts = pictureParts(n);
-    pageLines[n - 1] = (parts > 1 ? sidewaysParts(picture.crop, parts, screen) : [picture.data]).map((data, i) => {
+    pageLines[n - 1] = picture.parts.map((data, i) => {
       const name = `img${images.length + 1}.png`;
       images.push({ name, data, ...(parts > 1 && { sideways: true }) });
       return { image: name, y: picture.top - i };
@@ -391,6 +438,10 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   const pages = pageLines.map(lines => linesToBlocks(lines, bodySize));
   return { pages, images, cover, startsLow, ocr, pictureBoxes, printed, contentsLines, title: meta.Title, author: meta.Author };
 }
+
+// What a book's rebuilds keep of the work done on its PDF (see extractPdf's `cache`):
+// its pages' text, and each page's pictures with what they were found from.
+const newBookCache = () => ({ text: null, work: new Map() });
 
 // Pages whose text starts far below the usual top of the text block, under a
 // title or picture, as on the first page of a chapter. They find the chapters of
@@ -1059,7 +1110,7 @@ async function writeWebPages(opts) {
   if (!made) process.exitCode = 1;
 }
 
-module.exports = { convertPdfToEpub, analyzePdf, buildEpub, extractPdf, openPdf, cleanPages, buildChapters, readerScreen, contentsPagesFrom, chapterStartsFrom };
+module.exports = { convertPdfToEpub, analyzePdf, newBookCache, buildEpub, extractPdf, openPdf, cleanPages, buildChapters, readerScreen, contentsPagesFrom, chapterStartsFrom };
 
 if (require.main === module) {
   main().catch(err => {

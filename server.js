@@ -5,7 +5,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { analyzePdf, buildEpub, openPdf, readerScreen, contentsPagesFrom, chapterStartsFrom } = require('./index');
+const { analyzePdf, newBookCache, buildEpub, openPdf, readerScreen, contentsPagesFrom, chapterStartsFrom } = require('./index');
 const { imageCover, cleanBoxes } = require('./figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('./xtc');
 const { retryPage, manualReading, readAroundBoxes, readingWithBoxes, packReadings, unpackReadings } = require('./ocr');
@@ -59,6 +59,7 @@ function newSession(pdf, options) {
   const session = {
     id, pdf, options, thumbnails: new Map(), book: null, cover: null, xtc: null, xtcCover: null,
     busy: false, improved: new Set(),
+    cache: newBookCache(), // what rebuilds of its book keep of the work on the PDF
   };
   sessions.set(id, session);
   // the oldest of the same kind go first: books of PDFs, or books of web pages
@@ -294,6 +295,7 @@ async function handleConvert(req, res) {
     for (const [n, r] of saved?.ocr?.pages || []) send({ page: pageSummary(n, r) });
     const book = await analyzePdf(pdf, {
       ...session.options,
+      cache: session.cache,
       ...(saved?.ocr && { ocr: saved.ocr }),
       onProgress,
       onOcrPage: (n, { confidence, text, thumbnail }) => {
@@ -439,7 +441,8 @@ async function handleBoxes(req, res, session, n, use) {
 }
 
 // POST /book/<id>/rebuild: build the book again using improved page readings.
-// Pages aren't read with OCR again, so this only takes the time for pictures and chapters.
+// Pages aren't read with OCR again, and only pages whose pictures could come out
+// otherwise are drawn again (see extractPdf's cache), so this mostly takes the time for chapters.
 // The request body can change the book's settings (JSON: { firstPageCover, contentsPages, device }):
 // page 1 as the cover, its text left out of the book, instead of a picture chosen; the
 // pages of the book's own table of contents to take its chapters from ([] for none, null
@@ -473,7 +476,7 @@ async function handleRebuild(req, res, session) {
   session.busy = true;
   try {
     await streamJob(res, async (send, onProgress) => {
-      const book = await analyzePdf(session.pdf, { ...options, onProgress, ocr: session.book.ocr });
+      const book = await analyzePdf(session.pdf, { ...options, onProgress, ocr: session.book.ocr, cache: session.cache });
       // the same PDF, so the title and author stay as they are (maybe changed by the user)
       Object.assign(book, { fileName: session.book.fileName, title: session.book.title, author: session.book.author });
       session.book = book;

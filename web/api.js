@@ -2,7 +2,7 @@
 // server.js does for the app, done here without a server. public/index.html uses
 // it when this file is loaded (window.convertPdfApi); web/build.js bundles it.
 
-const { analyzePdf, buildEpub, readerScreen, contentsPagesFrom, chapterStartsFrom } = require('../index');
+const { analyzePdf, newBookCache, buildEpub, readerScreen, contentsPagesFrom, chapterStartsFrom } = require('../index');
 const { openPdf } = require('../pdf');
 const { imageCover, cleanBoxes } = require('../figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('../xtc');
@@ -26,6 +26,7 @@ function newSession(pdf, options) {
   const session = {
     id, pdf, options, thumbnails: new Map(), scans: new Map(), book: null, cover: null, xtc: null, xtcCover: null,
     busy: false, improved: new Set(), screen: null,
+    cache: newBookCache(), // what rebuilds of its book keep of the work on the PDF
   };
   sessions.set(id, session);
   while (sessions.size > MAX_BOOKS) {
@@ -150,6 +151,7 @@ async function convert(file, { title, author, xtc, device, firstPageCover, conte
   for (const [n, r] of saved?.ocr?.pages || []) onPage(pageSummary(n, r));
   const book = await analyzePdf(pdf, {
     ...s.options,
+    cache: s.cache,
     ...(saved?.ocr && { ocr: saved.ocr }),
     onProgress,
     onOcrPage: (n, { confidence, text, thumbnail }) => {
@@ -268,7 +270,7 @@ async function rebuild(id, { onProgress = () => {} } = {}, changes = {}) {
   }
   s.busy = true;
   try {
-    const book = await analyzePdf(s.pdf, { ...options, onProgress, ocr: s.book.ocr });
+    const book = await analyzePdf(s.pdf, { ...options, onProgress, ocr: s.book.ocr, cache: s.cache });
     Object.assign(book, { fileName: s.book.fileName, title: s.book.title, author: s.book.author });
     s.book = book;
     s.options = options;
