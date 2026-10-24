@@ -1171,6 +1171,9 @@
       file: (id, { xtc, parts = 1, pictures }) => send(downloadUrl(id, xtc, parts, pictures)).then(res => res.arrayBuffer()),
       scanUrl: (id, n) => `book/${id}/pages/${n}.jpg`,
       screenUrl: async (id, n, version) => `book/${id}/screens/${n}.png?v=${version}`,
+      // the server forgets a book (and its cache): one deleted, or every book as the page closes
+      forget: id => fetch(`book/${id}/forget`, { method: 'POST', keepalive: true }).catch(() => {}),
+      forgetAll: ids => ids.forEach(id => navigator.sendBeacon(`book/${id}/forget`)),
       send: (id, where) =>
         json(`book/${id}/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(where) }),
       downloadUrl,
@@ -1771,6 +1774,7 @@
     const i = own.indexOf(b);
     books.splice(books.indexOf(b), 1);
     store.forget(b);
+    if (b.id && api.forget) api.forget(b.id); // the converter lets go of it and its cache
     if (b.coverUrl) URL.revokeObjectURL(b.coverUrl);
     if (current === b) {
       const next = own[i + 1] || own[i - 1] || null;
@@ -3831,6 +3835,13 @@
   // Books are kept for next time (see store), but leaving loses a book being read
   // with OCR, and changes not written yet: ask first. Without the store, leaving
   // loses every book not saved since it last changed.
+  // A book's cache (what makes changes to it quick: its pages' text, layout and pictures)
+  // lasts while the page is open. Closed or reloaded, the server forgets its books; the
+  // website's go with the page.
+  window.addEventListener('pagehide', () => {
+    if (api.forgetAll) api.forgetAll(books.filter(b => b.id).map(b => b.id));
+  });
+
   window.addEventListener('beforeunload', e => {
     const unsaved = store.busy || books.some(b => (b.state === 'converting' && !b.reopen) ||
       (!store.works && (b.state === 'waiting' || (b.state === 'ready' && (b.savedMeta !== b.meta || pendingList(b).length)))));

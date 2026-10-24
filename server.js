@@ -726,6 +726,12 @@ const server = http.createServer((req, res) => {
       console.error(err);
       sendError(res, 500, err.message || 'Could not build the XTC file.');
     }
+  } else if (req.method === 'POST' && (match = route.match(/^\/book\/([\w-]+)\/forget$/))) {
+    // POST /book/<id>/forget: the page is done with the book (deleted from its list, or the
+    // page closed or reloaded): the book and what its rebuilds keep (its cache) go
+    sessions.delete(match[1]);
+    res.writeHead(204);
+    res.end();
   } else if (req.method === 'POST' && (match = route.match(/^\/book\/([\w-]+)\/details$/))) {
     const session = sessions.get(match[1]);
     if (!session) return sendError(res, 404, 'This book has expired. Please convert it again.');

@@ -38,6 +38,15 @@ function newSession(pdf, options) {
   return session;
 }
 
+// The page is done with a book (deleted from its list): it and its cache go.
+function forget(id) {
+  const s = sessions.get(id);
+  if (!s) return;
+  for (const url of s.thumbnails.values()) URL.revokeObjectURL(url);
+  if (s.screen) URL.revokeObjectURL(s.screen);
+  sessions.delete(id);
+}
+
 function session(id) {
   const s = sessions.get(id);
   if (!s) throw new Error('This book has expired. Please convert the PDF again.');
@@ -398,4 +407,4 @@ async function send(id, { address, folder = '/', name, parts = 1, pictures } = {
 // eslint-disable-next-line no-undef
 const version = async () => __VERSION__;
 
-window.convertPdfApi = { convert, readings, retry, setText, setPicture, setBoxes, rebuild, setCover, setDetails, epub, file, coverUrl, scanUrl, screenUrl, download, send, version };
+window.convertPdfApi = { convert, forget, readings, retry, setText, setPicture, setBoxes, rebuild, setCover, setDetails, epub, file, coverUrl, scanUrl, screenUrl, download, send, version };

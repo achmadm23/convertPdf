@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const JSZip = require('jszip');
-const { measureLayout, layoutMeasures, findGaps, detectFigures, sidewaysParts, renderCover, imageCover, turned } = require('./figures');
+const { measureLayout, layoutFrom, layoutMeasures, findGaps, detectFigures, sidewaysParts, renderCover, imageCover, turned } = require('./figures');
 const { screenImage } = require('./eink');
 const { findPagePictures } = require('./picture-pages');
 const { recognizePages, finishPages, LANGUAGES } = require('./ocr');
@@ -280,9 +280,12 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   // the body font size is the one used for the most text
   const sizeChars = new Map();
   for (const l of pageLines.flat()) sizeChars.set(l.size, (sizeChars.get(l.size) || 0) + l.text.length);
-  const bodySize = [...sizeChars.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 10;
-
-  const layout = measureLayout(pageLines, bodySize);
+  // A rebuild keeps the layout measured when the book was first made: a page fixed or
+  // read again nudges its medians, and every page would then look changed to the cache
+  // and be drawn again. The book's layout is the same.
+  const bodySize = cache?.layout?.bodySize ?? ([...sizeChars.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 10);
+  const layout = cache?.layout ? layoutFrom(cache.layout) : measureLayout(pageLines, bodySize);
+  if (cache && !cache.layout) cache.layout = layoutMeasures(layout);
   // Work on a page done before with the same inputs (see newBookCache), else done now
   // and kept: `slot` names the work, one kept result each.
   const measures = JSON.stringify([layoutMeasures(layout), screen]);
@@ -470,8 +473,9 @@ function looksFrom(value) {
 }
 
 // What a book's rebuilds keep of the work done on its PDF (see extractPdf's `cache`):
-// its pages' text, and each page's pictures with what they were found from.
-const newBookCache = () => ({ text: null, work: new Map() });
+// its pages' text, its layout as first measured, and each page's pictures with what they
+// were found from.
+const newBookCache = () => ({ text: null, layout: null, work: new Map() });
 
 // Pages whose text starts far below the usual top of the text block, under a
 // title or picture, as on the first page of a chapter. They find the chapters of
