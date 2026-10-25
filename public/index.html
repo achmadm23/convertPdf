@@ -870,7 +870,7 @@
             <details class="field page-text-box" id="textPart">
               <summary>Text on this page</summary>
               <textarea class="page-text" id="pageText" spellcheck="true" aria-label="Text on this page"></textarea>
-              <span class="small">An empty line between paragraphs. The pictures in the boxes go above or between them, where they are on the page.</span>
+              <span class="small" id="textHelp">An empty line between paragraphs. The pictures in the boxes go above or between them, where they are on the page.</span>
               <div class="row-btns"><button type="button" class="btn primary" id="saveText">Save text</button></div>
             </details>
           </div>
@@ -3039,6 +3039,7 @@
     const lowCount = b => (b.scan ? lowPages(b.scan).length : 0);
 
     function badge(r, p) {
+      if (p.own) return ['PDF text', ''];
       if (p.picture) return [`kept as picture${p.pictureParts > 1 ? ` · ${p.pictureParts} parts` : ''}`, 'kept'];
       if (p.manual) return ['typed by hand', 'typed'];
       if (p.confidence === null) return ['no text', ''];
@@ -3066,7 +3067,9 @@
       const count = $('lowCount');
       count.hidden = !low;
       count.textContent = `${low} low`;
-      summary.textContent = `${r.pages.size}${r.total ? ` of ${r.total}` : ''} pages read` + (low ? ` · ${low} at ${r.limit}% or lower` : '');
+      const own = [...r.pages.values()].filter(p => p.own).length;
+      summary.textContent = (own ? `${r.pages.size} pages${r.pages.size > own ? ` · ${r.pages.size - own} read with OCR` : ''}`
+        : `${r.pages.size}${r.total ? ` of ${r.total}` : ''} pages read`) + (low ? ` · ${low} at ${r.limit}% or lower` : '');
       // the pages are listed once they're all read (and the book is made from them)
       $('scanGrid').hidden = !r.done;
       $('scansWait').hidden = r.done;
@@ -3151,8 +3154,8 @@
         card.className = 'scan-card';
         card.dataset.n = n;
         card.innerHTML = '<span class="page-thumb"><img alt="" loading="lazy"></span><span><span class="card-head"><b></b><span class="chip"></span></span><span class="excerpt"></span><span class="card-mark" hidden></span></span>';
-        card.querySelector('img').src = api.scanUrl(b.id, n);
-        card.querySelector('img').alt = `Scan of page ${n}`;
+        showScan(card.querySelector('img'), b, n, card);
+        card.querySelector('img').alt = `Page ${n}`;
         card.addEventListener('click', () => openPage(n));
         cards.set(n, card);
         const after = [...grid.children].find(c => Number(c.dataset.n) > n);
@@ -3177,6 +3180,31 @@
       const thumb = card.querySelector('.page-thumb');
       thumb.querySelectorAll('.pic-box').forEach(el => el.remove());
       if (!p.picture) for (const box of p.boxes || []) thumb.append(boxElement(box, p.drawn));
+    }
+
+    // A page's picture in an img: its scan, or (a page with its own text, on the website)
+    // drawn once its card comes into view (`card`) or it's opened.
+    const drawWhenSeen = 'IntersectionObserver' in window && new IntersectionObserver(entries => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        drawWhenSeen.unobserve(e.target);
+        e.target.draw();
+      }
+    }, { rootMargin: '200px' });
+    function showScan(img, b, n, card = null) {
+      const url = api.scanUrl(b.id, n);
+      if (url || !api.pageThumb) {
+        if (img.getAttribute('src') !== url) img.src = url;
+        return;
+      }
+      img.dataset.n = n;
+      const draw = () => api.pageThumb(b.id, n).then(drawn => {
+        if (drawn && img.dataset.n === String(n)) img.src = drawn;
+      }).catch(() => {});
+      if (card && drawWhenSeen) {
+        card.draw = draw;
+        drawWhenSeen.observe(card);
+      } else draw();
     }
 
     // The page opened beside the book, which turns to where its text is (its ‹ › then go
@@ -3286,9 +3314,8 @@
       }
       const sheet = $('pageScan');
       const img = $('pageImg');
-      const url = api.scanUrl(b.id, open);
-      if (img.getAttribute('src') !== url) img.src = url;
-      img.alt = `Scan of page ${open}`;
+      showScan(img, b, open);
+      img.alt = `Page ${open}`;
       sheet.classList.toggle('box-page', !!drawing);
       sheet.querySelectorAll('.pic-box').forEach(el => el.remove());
       if (drawing) {
@@ -3306,14 +3333,24 @@
       $('drawHelp').hidden = !drawing;
       $('boxButtons').hidden = !!drawing || p.picture || keepOpen;
       $('drawButtons').hidden = !drawing;
-      $('foundBoxes').hidden = !p.drawn;
       $('clearBoxes').disabled = !drawing || !drawing.length;
       $('textPart').hidden = p.picture || !!drawing;
       $('picturePart').hidden = !p.picture;
       $('keepPart').hidden = p.picture || !!drawing || !keepOpen;
       $('keepToggle').setAttribute('aria-expanded', String(keepOpen));
       if (fresh || document.activeElement !== $('pageText')) $('pageText').value = p.text || '';
-      $('readAgain').hidden = p.manual;
+      $('readAgain').hidden = p.manual || p.own;
+      for (const id of ['drawBoxes', 'foundBoxes', 'keepToggle']) if (p.own) $(id).hidden = true;
+      if (!p.own) {
+        $('drawBoxes').hidden = $('keepToggle').hidden = false;
+        $('foundBoxes').hidden = !p.drawn;
+      }
+      // its text as the PDF has it, to read
+      $('pageText').readOnly = !!p.own;
+      $('saveText').hidden = !!p.own;
+      $('textHelp').textContent = p.own
+        ? 'This page has its own text in the PDF: it goes in the book as it is.'
+        : 'An empty line between paragraphs. The pictures in the boxes go above or between them, where they are on the page.';
       for (const btn of $('pageEditor').querySelectorAll('.col-head .page-tools button, #pageBody button')) {
         btn.disabled = !ready;
         btn.title = waitTitle;
@@ -3327,7 +3364,7 @@
       const all = [...r.pages.keys()].sort((x, y) => x - y);
       const prev = [...all].reverse().find(n => n < open);
       const next = all.find(n => n > open);
-      $('scanWhere').textContent = `Page ${open} of ${r.total || all.length}`;
+      $('scanWhere').textContent = `Page ${open} of ${all.length}`;
       $('prevLow').title = prev ? `The page before: p. ${prev}` : 'The first page';
       $('nextLow').title = next ? `The page after: p. ${next}` : 'The last page';
       $('prevLow').disabled = !prev;
@@ -3576,7 +3613,7 @@
     return {
       lowCount,
       // a page of the book shown that was read with OCR (its text can be fixed)
-      has: n => !!(shown && shown.scan && shown.scan.pages.has(n)),
+      has: n => !!(shown && shown.scan && shown.scan.pages.has(n) && !shown.scan.pages.get(n).own),
       // The paragraph `was` of page n, typed into on the book as `now`: its page's text
       // (and the next's) saved with it. Resolves false when it couldn't be matched.
       async fixText(n, was, now) {
@@ -3646,6 +3683,12 @@
       finish(b, meta) {
         b.scan.done = true;
         b.scan.total = meta.scannedPages || b.scan.total;
+        for (const [n, text] of Object.entries(meta.pdfPages || {})) {
+          if (b.scan.pages.has(Number(n))) continue;
+          b.scan.pages.set(Number(n), { own: true, confidence: null, text, boxes: [], drawn: false, manual: false, picture: false, pictureParts: 1 });
+        }
+        if (b === shown) for (const n of b.scan.pages.keys()) renderCard(b, n);
+        if (b === current) showDrawer();
         showPictures(b, meta.pictures);
         updateCounts(b);
         if (b === shown) renderEditor();

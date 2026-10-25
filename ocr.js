@@ -106,6 +106,11 @@ async function pageImage(doc, n, { dpi = DPI, blackAndWhite = false, thumb = fal
   return { image: await canvas.encode('jpeg', 90), width, height, scale: dpi / 72, thumbnail };
 }
 
+// A picture of page n to show (a page with its own text, not read with OCR)
+async function pageThumbnail(doc, n) {
+  return (await pageImage(doc, n, { dpi: 150, thumb: true })).thumbnail;
+}
+
 // How well a page was read: the median word confidence (0-100), or null for a
 // page with hardly any text. The median, so an ornament read as junk doesn't
 // make a page of clean print look bad.
@@ -566,4 +571,4 @@ function unpackReadings(text) {
   };
 }
 
-module.exports = { recognizePages, retryPage, readAroundBoxes, readingWithBoxes, manualReading, finishPages, packReadings, unpackReadings, LANGUAGES };
+module.exports = { recognizePages, pageThumbnail, retryPage, readAroundBoxes, readingWithBoxes, manualReading, finishPages, packReadings, unpackReadings, LANGUAGES };

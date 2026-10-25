@@ -6,7 +6,7 @@ const { analyzePdf, newBookCache, buildEpub, readerScreen, contentsPagesFrom, ch
 const { openPdf } = require('../pdf');
 const { imageCover, cleanBoxes } = require('../figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('../xtc');
-const { retryPage, manualReading, readAroundBoxes, readingWithBoxes, packReadings, unpackReadings } = require('../ocr');
+const { retryPage, pageThumbnail, manualReading, readAroundBoxes, readingWithBoxes, packReadings, unpackReadings } = require('../ocr');
 
 const MAX_BYTES = 300 * 1024 * 1024;
 const MAX_BOOKS = 8; // converted books kept, in this page's memory: the page converts several
@@ -72,6 +72,8 @@ function bookSummary(s) {
     ...readerSummary(book.device),
     lowPages: scanned.filter(r => !r.manual && !r.picture && r.confidence >= PICTURE_BELOW && r.confidence <= LOW_CONFIDENCE).length,
     pictures: scannedPictures(book),
+    // the pages with their own text (not read with OCR): page → its text, for listing every page
+    pdfPages: book.pdfTexts || {},
     ...(book.contents && { contents: book.contents }), // the book's own table of contents, when it's used
     // each chapter with the page (1-based) it starts on, and whether they're the user's own
     chapterList: book.chapters.map((ch, i) => ({
@@ -83,10 +85,10 @@ function bookSummary(s) {
 
 // Where the pictures are on each scanned page, and whether the user drew them.
 function scannedPictures(book) {
-  if (!book.ocr) return {};
-  return Object.fromEntries(
-    [...book.ocr.pages].map(([n, r]) => [n, { drawn: !!r.boxes, boxes: book.pictureBoxes?.[n] || [] }])
-  );
+  const pages = [...(book.ocr ? book.ocr.pages : [])].map(([n, r]) => [n, { drawn: !!r.boxes, boxes: book.pictureBoxes?.[n] || [] }]);
+  // the pages with their own text too
+  for (const n of Object.keys(book.pdfTexts || {})) pages.push([Number(n), { drawn: false, boxes: book.pictureBoxes?.[n] || [] }]);
+  return Object.fromEntries(pages);
 }
 
 // The e-reader an EPUB's pictures are drawn for, for the page's preview.
@@ -347,6 +349,17 @@ async function coverUrl(id) {
 
 // The scan of a page read with OCR, as a picture address.
 const scanUrl = (id, n) => sessions.get(id)?.thumbnails.get(n) || '';
+// A page with its own text: its picture, drawn the first time it's asked for (a promise of its URL)
+async function pageThumb(id, n) {
+  const s = sessions.get(id);
+  if (!s) return '';
+  if (s.thumbnails.has(n)) return s.thumbnails.get(n);
+  if (!s.pdf || !s.book?.pdfTexts?.[n]) return '';
+  if (!s.pdfDoc) s.pdfDoc = openPdf(s.pdf);
+  const jpeg = await pageThumbnail(await s.pdfDoc, n);
+  if (!s.thumbnails.has(n)) s.thumbnails.set(n, objectUrl(jpeg, 'image/jpeg'));
+  return s.thumbnails.get(n);
+}
 
 // Page n of an XTC book as the reader shows it, as a picture address.
 async function screenUrl(id, n) {
@@ -407,4 +420,4 @@ async function send(id, { address, folder = '/', name, parts = 1, pictures } = {
 // eslint-disable-next-line no-undef
 const version = async () => __VERSION__;
 
-window.convertPdfApi = { convert, forget, readings, retry, setText, setPicture, setBoxes, rebuild, setCover, setDetails, epub, file, coverUrl, scanUrl, screenUrl, download, send, version };
+window.convertPdfApi = { convert, forget, readings, retry, setText, setPicture, setBoxes, rebuild, setCover, setDetails, epub, file, coverUrl, scanUrl, pageThumb, screenUrl, download, send, version };

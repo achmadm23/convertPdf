@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const { analyzePdf, newBookCache, buildEpub, openPdf, readerScreen, contentsPagesFrom, chapterStartsFrom, looksFrom } = require('./index');
 const { imageCover, cleanBoxes } = require('./figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('./xtc');
-const { retryPage, manualReading, readAroundBoxes, readingWithBoxes, packReadings, unpackReadings } = require('./ocr');
+const { retryPage, pageThumbnail, manualReading, readAroundBoxes, readingWithBoxes, packReadings, unpackReadings } = require('./ocr');
 const { parseLinks, readWebPages, previewLink } = require('./web');
 
 const { version } = require('./package.json');
@@ -180,6 +180,16 @@ async function streamJob(res, run) {
   res.end();
 }
 
+// A page's picture: its scan as read, or (a page with its own text) drawn the first time it's asked for
+async function pageThumb(session, n) {
+  if (session.thumbnails.has(n)) return session.thumbnails.get(n);
+  if (!session.pdf || !session.book?.pdfTexts?.[n]) return null;
+  if (!session.pdfDoc) session.pdfDoc = openPdf(session.pdf);
+  const image = await pageThumbnail(await session.pdfDoc, n);
+  session.thumbnails.set(n, image);
+  return image;
+}
+
 function bookSummary(session) {
   const { book } = session;
   const scanned = book.ocr ? [...book.ocr.pages.values()] : [];
@@ -194,6 +204,8 @@ function bookSummary(session) {
     ...readerSummary(book.device),
     lowPages: scanned.filter(r => !r.manual && !r.picture && r.confidence >= PICTURE_BELOW && r.confidence <= LOW_CONFIDENCE).length,
     pictures: scannedPictures(book),
+    // the pages with their own text (not read with OCR): page → its text, for listing every page
+    pdfPages: book.pdfTexts || {},
     ...(book.skipped && { skipped: book.skipped }), // web pages that couldn't be read
     ...(book.contents && { contents: book.contents }), // the book's own table of contents, when it's used
     // each chapter with the page (1-based) it starts on, and whether they're the user's own
@@ -207,10 +219,10 @@ function bookSummary(session) {
 // Where the pictures are on each scanned page (boxes, see figures.js cleanBoxes),
 // and whether the user drew them.
 function scannedPictures(book) {
-  if (!book.ocr) return {};
-  return Object.fromEntries(
-    [...book.ocr.pages].map(([n, r]) => [n, { drawn: !!r.boxes, boxes: book.pictureBoxes?.[n] || [] }])
-  );
+  const pages = [...(book.ocr ? book.ocr.pages : [])].map(([n, r]) => [n, { drawn: !!r.boxes, boxes: book.pictureBoxes?.[n] || [] }]);
+  // the pages with their own text too
+  for (const n of Object.keys(book.pdfTexts || {})) pages.push([Number(n), { drawn: false, boxes: book.pictureBoxes?.[n] || [] }]);
+  return Object.fromEntries(pages);
 }
 
 // The e-reader an EPUB's pictures are drawn for, for the page's preview.
@@ -762,10 +774,11 @@ const server = http.createServer((req, res) => {
       else res.end();
     };
     if (req.method === 'GET' && match[2]) {
-      const image = session.thumbnails.get(Number(match[2]));
-      if (!image) return sendError(res, 404, 'No preview for that page.');
-      res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'max-age=3600' });
-      res.end(image);
+      pageThumb(session, Number(match[2])).then(image => {
+        if (!image) return sendError(res, 404, 'No preview for that page.');
+        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'max-age=3600' });
+        res.end(image);
+      }).catch(fail);
     } else if (req.method === 'POST' && match[3]) {
       handleRetry(res, session, Number(match[3])).catch(fail);
     } else if (req.method === 'POST' && match[4]) {

@@ -248,6 +248,11 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   pageLines.forEach((lines, i) => {
     if (letterCount(lines.map(l => l.text).join('')) < 20) scanned.push(i + 1);
   });
+  // the text of the other pages, as the PDF has it (page → its lines), for showing them
+  const pdfTexts = {};
+  pageLines.forEach((lines, i) => {
+    if (!scanned.includes(i + 1)) pdfTexts[i + 1] = lines.map(l => l.text).join('\n');
+  });
   // every line found on the page, even ones left out of the text, for the page layout
   const layoutLines = [...pageLines];
   // scanned pages kept whole as a picture instead of their text (chosen in the web UI);
@@ -402,7 +407,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   }
   for (const n of candidates) {
     const { figures, pageWidth, pageHeight } = found.get(n);
-    if (ocr?.pages.has(n)) {
+    {
       const share = v => Math.round(v * 10000) / 10000;
       pictureBoxes[n] = figures.map(f => ({
         x: share(f.left / pageWidth), y: share(1 - f.top / pageHeight),
@@ -455,7 +460,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
 
   const startsLow = lowStartPages(pageLines, layoutLines, layout);
   const pages = pageLines.map(lines => linesToBlocks(lines, bodySize));
-  return { pages, images, cover, startsLow, ocr, pictureBoxes, printed, contentsLines, title: meta.Title, author: meta.Author };
+  return { pages, images, cover, startsLow, ocr, pictureBoxes, pdfTexts, printed, contentsLines, title: meta.Title, author: meta.Author };
 }
 
 // How the user turned and sized pictures, as sent by the web app, made safe: by
@@ -1051,6 +1056,7 @@ async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', device 
     cover: extracted.cover,
     ocr: extracted.ocr,
     pictureBoxes: extracted.pictureBoxes,
+    pdfTexts: extracted.pdfTexts,
     device, // the e-reader its pictures are drawn for
     stats: { pages: pages.length, paragraphs, images: extracted.images.length, fullPagePictures: extracted.images.filter(i => i.split).length },
   };
