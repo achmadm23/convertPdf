@@ -255,6 +255,7 @@
   .pager-text b { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #slider { width: 100%; height: 40px; margin: 0; accent-color: var(--accent); cursor: pointer; }
   #slider:disabled { opacity: .45; cursor: not-allowed; }
+  body.comparing #slider { display: none; }
   .pager-buttons { display: flex; align-items: center; gap: 8px; }
   .pager-buttons .seg { flex: 1 1 auto; }
   .pager-buttons .seg label { min-height: 32px; padding: 2px 8px; font-size: 13px; white-space: nowrap; }
@@ -311,7 +312,9 @@
     height: calc(100vh - 24px); overflow: auto; padding: 8px; background: var(--soft); border: 1px solid var(--border); border-radius: 14px;
   }
   @media (max-width: 900px) { .scan-grid { max-width: none; max-height: 340px; } }
+  .scans-list .scan-card:not(.checkable):not(.has-pictures):not(.current),
   .scans-list.only-low .scan-card:not(.checkable), .scans-list.only-pictures .scan-card:not(.has-pictures) { display: none; }
+  .scans-none { margin: 0; font-size: 13px; color: var(--muted); }
   .scan-card {
     flex: none; display: flex; gap: 10px; padding: 10px; text-align: left; background: var(--field);
     border: 1px solid var(--border); border-radius: 12px; cursor: pointer;
@@ -584,7 +587,7 @@
   body.comparing .pager { width: calc(var(--page-h) * .6); }
   body.comparing .scans .page-editor { width: calc(var(--page-h) * .71); padding: 0; gap: 10px; background: transparent; border: 0; flex: none; }
   body.comparing .page-editor-head { min-height: 36px; flex-wrap: nowrap; }
-  body.comparing .page-editor-head .chip { white-space: nowrap; }
+  body.comparing .page-editor-head .chip, #pageTitle { white-space: nowrap; }
   body.comparing .page-nav .btn { padding: 0 10px; white-space: nowrap; }
   body.comparing .page-scan { width: 100%; }
   body.comparing .page-scan img { width: 100%; height: var(--page-h); max-height: none; object-fit: contain; background: #F4F1E8; border: 0; border-radius: 3px; box-shadow: 0 20px 60px rgba(0, 0, 0, .5); }
@@ -903,6 +906,7 @@
         <div class="scans-wait" id="scansWait" role="status">
           <span class="spinner" aria-hidden="true"></span><span id="scansWaitText">Reading the pages…</span>
         </div>
+        <p class="scans-none" id="scansNone" hidden>No page was read at <span class="offer-limit">90</span>% or lower, and none has pictures. ‹ › beside the page go through all of them.</p>
         <div class="scan-grid" id="scanGrid" hidden></div>
     </div>
     <div class="panel chapters-panel" id="chaptersPanel" hidden>
@@ -2171,6 +2175,7 @@
       if (was !== 'scans' && scans.open() !== null) showPdfPage(scans.open());
       scans.fit();
     }
+    if (rendition && !$('bookView').hidden) showPosition(); // in Pages, where the book is in the page open
     if (fresh) previewStale = true; // another book: its preview is drawn when its Preview tab is shown
     if (preview && state === 'ready' && previewStale) {
       openPreview(false).catch(() => showStatus('The preview could not be shown.', { error: true }));
@@ -3063,6 +3068,7 @@
       // the pages are listed once they're all read (and the book is made from them)
       $('scanGrid').hidden = !r.done;
       $('scansWait').hidden = r.done;
+      noneToLook(b);
       $('scansWaitText').textContent = `Reading the pages: ${r.pages.size}${r.total ? ` of ${r.total}` : ''}. They're listed here once they're all read.`;
       for (const filter of $('scansList').querySelectorAll('.filter')) filter.hidden = !r.done;
       // pages with pictures are known once the book is made (and after each update)
@@ -3132,6 +3138,13 @@
     function hasPictures(p) {
       return !!p.picture || (p.boxes || []).length > 0;
     }
+    // The list shows the pages that need a look: read at offerPicture or lower (or kept
+    // as a picture, or typed), or with pictures; if there are none, it says so.
+    function noneToLook(b) {
+      const r = b.scan;
+      const some = [...r.pages.values()].some(p => p.manual || p.picture || canBePicture(r, p.confidence) || hasPictures(p));
+      $('scansNone').hidden = !r.done || some;
+    }
 
     function renderCard(b, n) {
       if (b !== shown) return;
@@ -3172,9 +3185,9 @@
       if (!p.picture) for (const box of p.boxes || []) thumb.append(boxElement(box, p.drawn));
     }
 
-    // The page opened beside the book, which turns to where it is (unless `following`
-    // the book, whose screen picked it).
-    function openPage(n, following = false) {
+    // The page opened beside the book, which turns to where its text is (its ‹ › then go
+    // through that text only, see pageSpan).
+    function openPage(n) {
       if (open !== null && cards.get(open)) {
         const before = open;
         open = n;
@@ -3186,11 +3199,9 @@
       naming = false;
       renderCard(shown, n);
       renderEditor(true);
-      if (!following) {
-        if (viewTab !== 'scans' && shown === current) showTab('scans'); // the PDF page beside the book
-        showPdfPage(n);
-        cards.get(n)?.scrollIntoView({ block: 'nearest' });
-      }
+      if (viewTab !== 'scans' && shown === current) showTab('scans'); // the PDF page beside the book
+      showPdfPage(n);
+      cards.get(n)?.scrollIntoView({ block: 'nearest' });
     }
 
     // The chapter starting on the open page, if there is one: chosen by the user or found.
@@ -3319,14 +3330,14 @@
       const isContents = (asked === null ? tocInUse(b) : asked).includes(open);
       $('useAsContents').textContent = isContents ? 'Used as the Daftar Isi' : 'Use as the Daftar Isi';
       $('useAsContents').disabled = !ready || isContents;
-      // the low pages before and after this one
-      const low = lowPages(r);
-      const prev = [...low].reverse().find(n => n < open);
-      const next = low.find(n => n > open);
+      // the pages before and after this one: every page of the book, one by one
+      const all = [...r.pages.keys()].sort((x, y) => x - y);
+      const prev = [...all].reverse().find(n => n < open);
+      const next = all.find(n => n > open);
       $('prevLow').textContent = prev ? `‹ p. ${prev}` : '‹';
-      $('prevLow').title = prev ? `The page to check before: p. ${prev}` : 'No page to check before this one';
-      $('nextLow').textContent = next ? `Next to check: p. ${next} ›` : 'None left';
-      $('nextLow').title = next ? `The next page read at ${r.limit}% or lower` : 'No page read badly after this one';
+      $('prevLow').title = prev ? `The page before: p. ${prev}` : 'The first page';
+      $('nextLow').textContent = next ? `p. ${next} ›` : '›';
+      $('nextLow').title = next ? `The page after: p. ${next}` : 'The last page';
       $('prevLow').disabled = !prev;
       $('nextLow').disabled = !next;
       $('prevLow').onclick = () => prev && openPage(prev);
@@ -3503,6 +3514,7 @@
         Object.assign(p, { boxes: found?.boxes || [], drawn: !!found?.drawn });
         renderCard(b, n);
       }
+      if (b === shown) noneToLook(b);
     }
 
     $('onlyLow').addEventListener('change', e => $('scansList').classList.toggle('only-low', e.target.checked));
@@ -3681,11 +3693,6 @@
         openPage(first);
       },
       // the book turned to page n (a scanned one): it's the page open beside it
-      follow(n) {
-        if (!shown || !shown.scan || !shown.scan.pages.has(n) || n === open) return;
-        openPage(n, true);
-        cards.get(n)?.scrollIntoView({ block: 'nearest' });
-      },
       open: () => open,
     };
   })();
@@ -4021,7 +4028,6 @@
     // the place to go back to, if the preview is still of this book
     const loc = keepPlace && rendition && previewOf === id && rendition.currentLocation();
     const place = loc && loc.start ? { cfi: loc.start.cfi, href: loc.start.href } : null;
-    const workingOn = viewTab === 'scans' ? scans.open() : null; // the page open beside it, in Pages
     setLoading(true);
 
     let data;
@@ -4063,19 +4069,18 @@
     rendition.on('keyup', onKey);
     slider.disabled = true;
     $('position').textContent = 'Counting pages…';
-    // go back to the same spot; if that fails, at least the same chapter (the page beside
-    // it doesn't follow these turns: see restoring)
-    restoring = true;
+    // go back to the same spot; if that fails, at least the same chapter
     try {
       await rendition.display(place ? place.cfi : undefined);
       const now = rendition.currentLocation();
       if (place && (!now || !now.start || now.start.href !== place.href)) await rendition.display(place.href);
-    } catch {} finally {
-      restoring = false;
+    } catch {}
+    // with Pages open, the book built again comes back to the page open: the place above,
+    // from the book before it changed, can land a screen or two off in the new one
+    if (place && inPages() && token === previewToken) {
+      const span = pageSpan(scans.open());
+      if (!span || span.column < span.first || span.column > span.last) showPdfPage(scans.open());
     }
-    // with Pages open, the book built again comes back to the page worked on: the place
-    // above, from the book before it changed, can land a screen or two off in the new one
-    if (place && workingOn !== null && viewTab === 'scans' && token === previewToken) showPdfPage(workingOn);
     if (token === previewToken) setLoading(false); // the page is shown; its screens are counted below
     const nav = await epub.loaded.navigation;
     const items = [];
@@ -4613,20 +4618,36 @@
   let pageHrefs = new Map();
   let pageWanted = null;
   let turning = false; // the preview is turning to a page asked for: it doesn't pick the page back (see onRelocated)
-  let restoring = false; // the preview is going back to where it was, laid out again: the page beside it stays
+  // A page's text can go on into the next file (a picture on a screen of its own, a
+  // chapter starting on it): `fileStarts` keeps the page each file starts with, and whether
+  // it starts there (its marker first) or goes on from the file before.
+  let fileStarts = new Map();
   async function findPageHrefs(data, token) {
-    const found = new Map();
+    const found = new Map(), starts = new Map();
     try {
       const zip = await JSZip.loadAsync(data);
-      for (const name of Object.keys(zip.files)) {
-        if (!/^OEBPS\/chapter[\d-]+\.xhtml$/.test(name)) continue;
-        const text = await zip.file(name).async('string');
-        for (const m of text.matchAll(/id="pdfp(\d+)"/g)) found.set(Number(m[1]), `${name.slice(6)}#pdfp${m[1]}`);
+      // in the book's order: chapter3, chapter3-2, chapter4…
+      const order = name => (name.match(/chapter(\d+)(?:-(\d+))?/) || []).slice(1).map(v => Number(v || 1));
+      const names = Object.keys(zip.files).filter(name => /^OEBPS\/chapter[\d-]+\.xhtml$/.test(name))
+        .sort((x, y) => { const [a, b] = [order(x), order(y)]; return a[0] - b[0] || a[1] - b[1]; });
+      let page = null; // the page the file before ended on
+      for (const name of names) {
+        const text = (await zip.file(name).async('string')).replace(/<h2>[\s\S]*?<\/h2>/, '');
+        const file = name.slice(6);
+        const markers = [...text.matchAll(/id="pdfp(\d+)"/g)];
+        // a file starts with its first marker, or goes on with the page before
+        const content = text.search(/<(p|h3|img)[\s>]/);
+        const marked = markers.length > 0 && (content < 0 || markers[0].index < content);
+        if (marked) page = Number(markers[0][1]);
+        if (page !== null) starts.set(file, { page, marked });
+        for (const m of markers) if (!found.has(Number(m[1]))) found.set(Number(m[1]), `${file}#pdfp${m[1]}`);
+        if (markers.length) page = Number(markers[markers.length - 1][1]);
       }
     } catch {
       return;
     }
     if (token !== previewToken) return;
+    fileStarts = starts;
     pageHrefs = found;
     if (pageWanted !== null) showPdfPage(pageWanted);
   }
@@ -4643,39 +4664,57 @@
     const href = pageHrefs.get(k) || pageHrefs.get(Math.min(...pageHrefs.keys()));
     if (!href) return;
     turning = true;
-    rendition.display(href).catch(() => { turning = false; });
+    rendition.display(href).then(async () => {
+      // its marker can sit at the foot of the screen before its text: on to where the text starts
+      for (let i = 0; i < 3 && inPages() && scans.open() === n; i++) {
+        const span = pageSpan(n);
+        if (!span || span.column >= span.first) break;
+        await rendition.next();
+      }
+    }).catch(() => { turning = false; });
   }
-  // The PDF page for the screen shown, from the page markers in its file: the page whose
-  // content the screen starts with. A page starting at the very top of the screen is it;
-  // otherwise the screen goes on with the last page started before it, until that page's
-  // content is done. Each screen is a column of the laid-out file, `delta` wide, scrolled
-  // to (epub.js's own count of the page displayed doesn't follow the turns here).
-  function pdfPageShown(loc) {
+  // Where PDF page n's text is in the file shown: its first and last screens there, and
+  // whether it goes on in the file before or after. Each screen is a column of the laid-out
+  // file, `delta` wide, scrolled to (epub.js's own count of the page displayed doesn't
+  // follow the turns here). A page starting at the very top of a screen leaves the screen
+  // before it to the page before; one starting further down shares its screen.
+  function pageSpan(n) {
     const contents = rendition && rendition.getContents()[0];
     const manager = rendition && rendition.manager;
     const delta = manager && manager.layout && manager.layout.delta;
+    const loc = rendition && rendition.currentLocation();
     if (!contents || !delta || !manager.container || !loc || !loc.start) return null;
+    const body = contents.document.body;
     const column = Math.round(manager.container.scrollLeft / delta);
-    // the top of this screen: where its first block starts
-    const blocks = [...contents.document.body.children].filter(el => Math.floor(el.offsetLeft / delta) === column);
-    const top = blocks.length ? Math.min(...blocks.map(el => el.offsetTop)) : 0;
-    const markers = [...contents.document.querySelectorAll('.pdfp')].map(m => ({ page: Number(m.id.slice(4)), column: Math.floor(m.offsetLeft / delta), top: m.offsetTop }));
-    const starting = markers.find(m => m.column === column && m.top <= top + 2);
-    if (starting) return starting.page;
-    const before = markers.filter(m => m.column < column);
-    if (before.length) return before[before.length - 1].page;
-    return markers.length ? markers[0].page : null; // a screen before its file's first marker
+    const rects = body.lastElementChild ? [...body.lastElementChild.getClientRects()] : [];
+    const lastColumn = rects.length ? Math.max(0, Math.floor((rects[rects.length - 1].right - 1) / delta)) : 0;
+    // what's on each screen, a paragraph going on from the screen before too
+    const pieces = [...body.children].filter(el => !el.classList.contains('pdfp'))
+      .flatMap(el => [...el.getClientRects()].map((rect, i) => ({ el, first: !i, column: Math.floor(rect.left / delta), top: rect.top })));
+    const topOf = col => Math.min(...pieces.filter(x => x.column === col).map(x => x.top));
+    // a page is where its first content is (its marker, empty, can sit at the foot of the
+    // screen before)
+    const markers = [...contents.document.querySelectorAll('.pdfp')].map(m => {
+      const start = pieces.find(x => x.first && x.el === m.nextElementSibling);
+      return { page: Number(m.id.slice(4)), column: start ? start.column : Math.floor(m.offsetLeft / delta), top: start ? start.top : m.offsetTop };
+    });
+    const file = loc.start.href.split('#')[0];
+    const at = markers.findIndex(m => m.page === n);
+    const goesOnWith = f => { const start = fileStarts.get(f); return !!start && start.page === n && !start.marked; };
+    const continues = goesOnWith(file);
+    if (at < 0 && !continues) return null; // the page's text isn't in this file
+    const after = markers[at < 0 ? 0 : at + 1];
+    const first = at < 0 || continues ? 0 : markers[at].column;
+    let last = lastColumn;
+    if (after) last = Math.max(first, after.column - (after.top <= topOf(after.column) + 2 ? 1 : 0));
+    const nextFile = rendition.book.spine.get(loc.start.index + 1);
+    const goesOn = !after && !!nextFile && goesOnWith(nextFile.href.split('#')[0]);
+    return { column, first, last, before: continues, after: goesOn };
   }
 
   function onRelocated(loc) {
     if (!loc || !loc.start) return;
-    // Pages open: the page beside the book follows it as it's turned (not when it
-    // was turned to the page opened)
-    if (turning) turning = false;
-    else if (viewTab === 'scans' && !restoring) {
-      const page = pdfPageShown(loc);
-      if (page) scans.follow(page);
-    }
+    turning = false;
     holdFor(!!sidewaysSections.get(loc.start.index));
     // a chapter's section headings share its file, so the chapter itself is the place shown
     const file = loc.start.href.split('#')[0];
@@ -4683,6 +4722,28 @@
     const here = inFile.find(it => !it.depth) || inFile[0];
     markContents(here);
     $('where').textContent = here ? here.label : bookMeta.title;
+    showPosition();
+  }
+
+  // Pages open, the book shows the page open beside it: where it is in that page's text,
+  // and ‹ › go no further than it. Otherwise, where it is in the book.
+  const inPages = () => viewTab === 'scans' && !isXtc() && document.body.classList.contains('comparing') && scans.open() !== null;
+  function showPosition() {
+    const span = inPages() ? pageSpan(scans.open()) : null;
+    $('prevPage').disabled = $('nextPage').disabled = false;
+    $('prevPage').title = $('nextPage').title = '';
+    if (span) {
+      const n = scans.open();
+      const at = span.column - span.first + 1, of = span.last - span.first + 1;
+      $('position').textContent = span.before || span.after ? `screen ${at}${span.after ? ', more ›' : ''}` : `screen ${at} of ${of}`;
+      const startOf = span.column <= span.first && !span.before;
+      const endOf = span.column >= span.last && !span.after;
+      $('prevPage').disabled = startOf;
+      $('nextPage').disabled = endOf;
+      if (startOf) $('prevPage').title = `The start of page ${n}: ‹ beside the scan goes to the page before`;
+      if (endOf) $('nextPage').title = `The end of page ${n}: › beside the scan goes to the page after`;
+      return;
+    }
     const stop = shownStop();
     if (!slider.disabled && stop !== undefined) {
       slider.value = stop;
@@ -4710,8 +4771,14 @@
     pageWanted = null;
     turning = false;
   }
-  const prevPage = () => (turnedByHand(), isXtc() ? goToScreen(screen - 1) : rendition && rendition.prev());
-  const nextPage = () => (turnedByHand(), isXtc() ? goToScreen(screen + 1) : rendition && rendition.next());
+  // in Pages, only through the text of the page open (pageSpan)
+  function canTurn(step) {
+    const span = inPages() ? pageSpan(scans.open()) : null;
+    if (!span) return true;
+    return step < 0 ? span.column > span.first || span.before : span.column < span.last || span.after;
+  }
+  const prevPage = () => canTurn(-1) && (turnedByHand(), isXtc() ? goToScreen(screen - 1) : rendition && rendition.prev());
+  const nextPage = () => canTurn(1) && (turnedByHand(), isXtc() ? goToScreen(screen + 1) : rendition && rendition.next());
   $('prevPage').addEventListener('click', prevPage);
   $('nextPage').addEventListener('click', nextPage);
 
