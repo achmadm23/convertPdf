@@ -47,18 +47,26 @@ function parseLinks(text) {
   });
 }
 
+// How pages and pictures are fetched: here, from the site itself; on the website, through
+// its own function on Cloudflare (useFetch, see web/api.js), which says in X-Final-Url
+// where the page ended up after redirects. An error with `told` is said as it is.
+let fetchFile = (url, init) => fetch(url, init);
+const useFetch = fetcher => {
+  fetchFile = fetcher;
+};
+
 async function download(url, maxBytes, accept) {
   let res;
   try {
-    res = await fetch(url, { headers: { ...HEADERS, Accept: accept }, redirect: 'follow', signal: AbortSignal.timeout(TIMEOUT) });
+    res = await fetchFile(url, { headers: { ...HEADERS, Accept: accept }, redirect: 'follow', signal: AbortSignal.timeout(TIMEOUT) });
   } catch (err) {
-    throw new Error(err.name === 'TimeoutError' ? 'the site took too long to answer' : 'the site could not be reached');
+    throw new Error(err.told ? err.message : err.name === 'TimeoutError' ? 'the site took too long to answer' : 'the site could not be reached');
   }
   if (!res.ok) throw new Error(res.status === 403 || res.status === 401 ? 'the site refused to send it' : `the site answered ${res.status}`);
   if (Number(res.headers.get('content-length')) > maxBytes) throw new Error('it is too large');
   const data = Buffer.from(await res.arrayBuffer());
   if (data.length > maxBytes) throw new Error('it is too large');
-  return { data, type: res.headers.get('content-type') || '', url: res.url || url };
+  return { data, type: res.headers.get('content-type') || '', url: res.headers.get('x-final-url') || res.url || url };
 }
 
 function decodeHtml({ data, type }) {
@@ -404,10 +412,10 @@ async function previewLink(link, size = { width: 120, height: 180 }) {
       const canvas = createCanvas(size.width, size.height);
       const w = picture.width * scale, h = picture.height * scale;
       canvas.getContext('2d').drawImage(picture, (size.width - w) / 2, (size.height - h) / 2, w, h);
-      image = 'data:image/jpeg;base64,' + canvas.toBuffer('image/jpeg').toString('base64');
+      image = 'data:image/jpeg;base64,' + (await canvas.encode('jpeg', 85)).toString('base64');
     } catch {} // no picture that can be read: the title alone
   }
   return { title, site, image };
 }
 
-module.exports = { splitLinks, parseLinks, readWebPages, previewLink };
+module.exports = { splitLinks, parseLinks, readWebPages, previewLink, useFetch };

@@ -1,4 +1,4 @@
-// The converter run inside the page, for the website (GitHub Pages): the work
+// The converter run inside the page, for the website (Cloudflare Pages): the work
 // server.js does for the app, done here without a server. public/index.html uses
 // it when this file is loaded (window.convertPdfApi); web/build.js bundles it.
 
@@ -7,6 +7,19 @@ const { openPdf } = require('../pdf');
 const { imageCover, titleCover, cleanBoxes } = require('../figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('../xtc');
 const { retryPage, pageThumbnail, manualReading, readAroundBoxes, readingWithBoxes, packReadings, unpackReadings } = require('../ocr');
+const { parseLinks, readWebPages, previewLink: readPreview, useFetch } = require('../web');
+
+// Web pages and their pictures are fetched by the website's function on Cloudflare
+// (functions/api/page.js): news sites don't let other websites read their pages. Where
+// there's none (another host), it says where web pages can be made into books.
+const SITE = 'https://baca-baca.pages.dev';
+useFetch(async (url, { headers = {}, signal } = {}) => {
+  const res = await fetch(`api/page?url=${encodeURIComponent(url)}`, { headers: { Accept: headers.Accept || '*/*' }, signal });
+  if (!res.headers.get('x-convertpdf-proxy')) {
+    throw Object.assign(new Error(`web pages can be made into books at ${SITE}`), { told: true });
+  }
+  return res;
+});
 
 const MAX_BYTES = 300 * 1024 * 1024;
 const MAX_BOOKS = 8; // converted books kept, in this page's memory: the page converts several
@@ -180,6 +193,18 @@ async function convert(file, { title, author, xtc, device, firstPageCover, conte
   s.book = book;
   return bookSummary(s);
 }
+
+// A book of web pages (`links`: text with one link per line), as server.js handleLinks makes it.
+async function convertLinks(links, { title, author, device }, { onProgress = () => {}, onSession = () => {} } = {}) {
+  const list = parseLinks(links || '');
+  const s = newSession(null, { title: title || undefined, author: author || undefined, ...(device && { device }) });
+  onSession({ id: s.id });
+  s.book = await readWebPages(list, { ...s.options, onProgress });
+  return bookSummary(s);
+}
+
+// A web page's title, site and main picture, while its book waits to be made.
+const previewLink = link => readPreview(link);
 
 // The book's scanned pages as read, with every change made to them, as text to keep
 // (see ocr.js packReadings); or their scans (`part` 'scans'). Null without scanned pages.
@@ -445,4 +470,4 @@ async function send(id, { address, folder = '/', name, parts = 1, pictures } = {
 // eslint-disable-next-line no-undef
 const version = async () => __VERSION__;
 
-window.convertPdfApi = { convert, forget, readings, retry, setText, setPicture, setBoxes, rebuild, setCover, setDetails, epub, file, coverUrl, scanUrl, pageThumb, screenUrl, download, send, version };
+window.convertPdfApi = { convert, convertLinks, previewLink, forget, readings, retry, setText, setPicture, setBoxes, rebuild, setCover, setDetails, epub, file, coverUrl, scanUrl, pageThumb, screenUrl, download, send, version };

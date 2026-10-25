@@ -8,7 +8,7 @@ convertPdf turns any PDF, including scanned books with no text layer, into a cle
 
 PDFs are built for fixed-size printed pages. On a 6-inch e-reader they force zooming and panning, keep running headers and page numbers in the text, and break sentences across pages. Scanned books are worse: they are only pictures of text, so they cannot be reflowed, searched or resized at all.
 
-convertPdf solves this by rebuilding real paragraphs and chapters, reading scanned pages with built-in OCR (English and Indonesian), and keeping pictures as full-screen pages tuned for 4-shade e-ink screens, sized for the chosen Xteink reader (480 x 800 for the X4 and X4 Pro, 528 x 792 for the X3), or kept full size and in color for a Kindle, a Kobo or a phone. It ships as a website (https://achmadm23.github.io/convertPdf/), a local web app, a command-line tool and a no-install Windows executable (`ConvertPdf.exe`, about 60 MB zipped). No file is ever uploaded to a server: the website converts inside the visitor's browser.
+convertPdf solves this by rebuilding real paragraphs and chapters, reading scanned pages with built-in OCR (English and Indonesian), and keeping pictures as full-screen pages tuned for 4-shade e-ink screens, sized for the chosen Xteink reader (480 x 800 for the X4 and X4 Pro, 528 x 792 for the X3), or kept full size and in color for a Kindle, a Kobo or a phone. It ships as a website (https://baca-baca.pages.dev/), the way people use it, with a local web app and a command-line tool for developers. No PDF is ever uploaded to a server: the website converts inside the visitor's browser (only web pages to make into books are fetched through the website's own function on Cloudflare).
 
 For Xteink readers (X3, X4 and X4 Pro), it can also make an XTC book: every PDF page drawn ready for the reader's screen, in black and white (`.xtc`) or 4 shades of gray (`.xtch`).
 
@@ -23,7 +23,7 @@ The product succeeds when a non-technical reader can turn a PDF into an e-book t
 | BO-3 | Keep the book's structure | Chapters and section headings appear in the table of contents; pictures stay where they appear in the text |
 | BO-4 | Look right on 4-shade e-ink | Every picture, the cover and pages kept as pictures fill the reader's screen (480 x 800 on the X4 and X4 Pro, 528 x 792 on the X3) in 4 dithered shades of gray |
 | BO-5 | Protect the user's files | 100% of processing happens locally; no network upload of any file |
-| BO-6 | Zero-friction access | Anyone converts from the website with nothing to install, on any computer or tablet; a Windows user can also unzip and double-click the exe, without Node.js |
+| BO-6 | Zero-friction access | Anyone converts from the website with nothing to install, on any computer or tablet, PDFs and web pages alike |
 | BO-7 | Fast turnaround | A normal PDF converts in a few seconds; a 244-page scanned book with OCR in about 2 minutes on a 12-thread computer |
 | BO-8 | Let users fix what OCR gets wrong | Low-confidence pages can be retried, hand-corrected or kept as a picture, and the book rebuilt in under a minute |
 | BO-9 | Serve Xteink readers in their own format | A PDF becomes an XTC or XTCH book sized for the X3 (528 x 792) or X4 / X4 Pro (480 x 800) that opens on the device with its chapters |
@@ -39,7 +39,7 @@ Version 1.3.0 covers one-way conversion of PDFs and web pages into EPUB or XTC b
 - OCR for English and Indonesian, with automatic language detection
 - Custom cover: the user's own picture can replace the cover found in the PDF
 - XTC output for Xteink X3, X4 and X4 Pro: every page drawn for the screen, in black and white (`.xtc`) or 4 grays (`.xtch`)
-- Four delivery channels: website on GitHub Pages (converting in the browser), local web app, command-line tool, Windows executable
+- Delivery: the website on Cloudflare Pages (converting in the browser, with a function fetching web pages), also on GitHub Pages without web pages; a local web app and command-line tool for developers
 - In-app preview, live OCR page review, retry, manual text entry and keep-as-picture (whole, or in 2 or 3 sideways parts)
 - Reader choice (Xteink X4 / X4 Pro, X3, or Kindle, Kobo or phone): pictures and cover sized for an Xteink's screen, or kept full size and in color for any other reader, the preview laid out at its size, and full-page pictures upright, or sideways in 2 or 3 parts
 - Preview held in portrait or landscape: landscape lays the book out for the wide screen, and in portrait pages turned sideways show in landscape
@@ -64,13 +64,13 @@ The primary user is an e-ink reader who owns PDFs, often scanned, and wants them
 
 | Stakeholder / persona | Need | Channel they use |
 | --- | --- | --- |
-| E-ink reader (primary) | Read PDFs and scanned books comfortably on a small 4-shade screen | Windows exe or web app |
+| E-ink reader (primary) | Read PDFs and scanned books comfortably on a small 4-shade screen | The website |
 | Indonesian-language reader | Convert scanned Indonesian books, not only English ones | Web app with OCR |
 | Privacy-conscious user | Convert personal or confidential documents without uploading them | Any; all convert on the user's own device |
 | Visitor without the app | Convert a PDF on any computer, Mac, Linux or tablet without installing anything | Website |
 | Power user / developer | Script conversions, choose OCR language, change the code | Command line, source install |
 | Xteink owner | Read PDFs, manga and scans on an X3, X4 or X4 Pro in its own XTC format | Web app with Output: XTC, or command line |
-| Sharer | Hand a working converter to friends who have no Node.js | `ConvertPdf.exe` zip from GitHub Releases |
+| Sharer | Hand a working converter to friends who have no Node.js | The website's link |
 | Maintainer / product owner | Keep the converter accurate, small and easy to update | GitHub repository |
 
 ## 5. Current and future process
@@ -133,7 +133,7 @@ flowchart LR
 | FR-21 | Download | Enable Download only once conversion has finished | Must |
 | FR-22 | Session | Keep the last 5 converted books in memory for quick cover changes | Could |
 | FR-23 | Command line | Convert with `node index.js input.pdf [output.epub]` and options for title, author, cover and OCR language | Must |
-| FR-24 | Distribution | Ship one Windows exe that unpacks itself, starts the server, opens the browser, picks the next free port and reopens the browser if run again | Must |
+| FR-24 | Distribution | Publish the website on every push to `main` (Cloudflare Pages, with the function that fetches web pages for it); no executable is shipped | Must |
 | FR-25 | Distribution | Let the port be set with the `PORT` environment variable | Could |
 | FR-26 | Cover | Let the user choose a picture (JPEG, PNG or WebP, up to 20 MB; `--cover` on the command line) to replace the PDF's cover, drawn for the reader's screen in 4 shades of gray (full size and in color for a Kindle, a Kobo or a phone, FR-58); change or remove it without converting again; or use the PDF's first page as the cover whatever is on it (Use page 1), its text left out of the book, which is built again without reading scanned pages again | Should |
 | FR-27 | XTC | Make XTC books for the Xteink X4 and X4 Pro (480 x 800) or X3 (528 x 792) on the command line (`--format xtc`); the web page offers EPUB only for now (FR-59) | Must |
@@ -184,9 +184,9 @@ Privacy and a no-setup install matter as much as conversion quality: the product
 | NFR-02 | Performance | Normal PDFs convert in a few seconds; a 540-page scanned book with 56 pictures in about 2 minutes |
 | NFR-03 | Performance | OCR runs at about 0.5 s per page on a 12-thread computer, using up to 8 CPU cores |
 | NFR-04 | Resources | OCR uses about 150 MB of memory per core; rendered pages waiting for OCR are capped so memory stays bounded on long books |
-| NFR-05 | Startup | The exe unpacks about 64 MB to `%LOCALAPPDATA%\ConvertPdf` in about 2 s on first run, starts in under 1 s after that, and replaces old files when a newer exe runs |
-| NFR-06 | Size | Download stays near 60 MB zipped (about 120 MB unzipped) |
-| NFR-07 | Platform | Source install runs on Windows, macOS and Linux (x64, arm64) with Node.js 22.13 or newer; the exe targets Windows x64 |
+| NFR-05 | Startup | The website loads its converter (about 31 MB of files, cached by the browser) and the OCR data of a language only when a scanned book needs it |
+| NFR-06 | Web page fetching | The function passes on web pages and pictures only, up to 20 MB each, for the website's own pages |
+| NFR-07 | Platform | Source install runs on Windows, macOS and Linux (x64, arm64) with Node.js 22.13 or newer; the website runs in current Chrome, Edge, Firefox and Safari |
 | NFR-08 | Compatibility | Output is a standard EPUB that opens in common e-readers and uses each reader's own font |
 | NFR-09 | Usability | Plain-language progress, for example "Reading scanned pages: 57 of 244", with time left |
 | NFR-10 | Licensing | The web app's font, IBM Plex, is under the SIL Open Font License; dependencies are open source |
@@ -213,8 +213,8 @@ The product assumes a single user on one computer, converting one book at a time
 
 - Web app only: converted books live in memory and are lost when the server restarts; the page makes them again from what the browser kept (FR-54)
 - Website: converted books live in the browser tab; closed or reloaded, the page makes them again from what the browser kept (FR-54), within the browser's storage; big scanned books are limited by the device's memory
-- The exe is not code-signed, so Windows SmartScreen and some antivirus tools warn on first run
-- The exe runs only on the platform it was built on (Windows x64); other platforms need a source install
+- The website's OCR runs in the browser, so big scanned books are slower than in the local app
+- Sites that turn away Cloudflare's servers can't be made into books on the website
 - If ports 3000 to 3010 are all busy, the app cannot start
 - No automated test suite exists yet (`npm test` is a placeholder)
 
@@ -228,8 +228,7 @@ The product assumes a single user on one computer, converting one book at a time
 | `jszip` | Writing the EPUB container |
 | `epubjs` | In-browser book preview |
 | `@fontsource/ibm-plex-sans`, `@fontsource/ibm-plex-mono` | The web app's typeface, served locally so it works offline |
-| `postject` (dev) | Packing the app into a single Windows exe |
-| GitHub Releases | Hosting the `ConvertPdf.zip` download |
+| Cloudflare Pages | Hosting the website and its web page function (free plan) |
 | GitHub Pages and GitHub Actions | Hosting the website and publishing it on every push |
 | `esbuild`, `buffer`, `fflate` (dev) | Bundling the converter for the browser, with browser versions of Node's Buffer and zlib |
 | XTC.js (reference, MIT License) | Image steps and file layout followed for XTC output |
@@ -243,7 +242,7 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 | OCR misreads handwriting, decorative lettering or poor scans | Wrong or garbled text in the book | Drop low-confidence lines and paragraphs; show them as pictures; Retry, Edit text and Keep as picture |
 | Chapter titles cannot be read or found | Poor table of contents | Recognise titles of up to 3 centred lines on scans; detect chapter starts by page layout; fall back to 10-page chapters |
 | Multi-column pages and tables lose their layout | Hard-to-read passages | Documented limitation; Keep as picture for scanned pages; pictures beside the text are found on scanned pages (FR-45), or boxed by hand (FR-46) |
-| SmartScreen or antivirus blocks the unsigned exe | Users give up before first run | README steps (More info, Run anyway); code signing as a future option |
+| A site blocks the website's function | That site's articles can't be made into books | The reason is shown on the book, with Try again; the local app fetches from the user's own connection |
 | Large scanned books exhaust memory on small machines | Slow or failed conversion | Cap at 8 cores, bound pages waiting for OCR, 300 MB upload limit |
 | Server restart loses converted books | User must convert again | Download promptly; documented in README |
 | Upstream library changes (pdf.js needs Node 22.13+) | Install or build failures | Pinned versions in `package-lock.json`; Node version stated in README |
@@ -262,8 +261,7 @@ The largest risk is OCR quality on hard pages; the review tools exist to contain
 - [ ] Is fixing text on the book enough for most pages, so Text on this page can go?
 - [ ] Should XTC books also be offered as reflowed text (the EPUB's text laid out at a chosen font size), not only as drawn pages?
 - [ ] Which OCR languages come next after English and Indonesian?
-- [ ] Is code signing the Windows exe worth the yearly certificate cost?
-- [ ] Should macOS and Linux builds be published on GitHub Releases?
+- [ ] Should the GitHub Pages copy (without web pages) keep being published, or point to baca-baca.pages.dev?
 - [ ] Is batch conversion of a folder of PDFs needed?
 - [ ] What sample PDFs and pass criteria make up a regression test suite?
 - [ ] Should converted books survive a server restart (saved to disk), at the cost of writing files locally?

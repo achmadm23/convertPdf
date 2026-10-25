@@ -35,7 +35,7 @@ const RETRY_SETTINGS = [
 ];
 
 // Languages whose data is bundled. Add one by installing @tesseract.js-data/<code>
-// and listing it here; build/build-exe.js bundles the data of every language listed.
+// and listing it here; web/build.js puts the data of every language listed in the website.
 const LANGUAGES = { eng: 'English', ind: 'Indonesian' };
 
 async function createWorker(code) {

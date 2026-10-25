@@ -51,6 +51,7 @@ async function main() {
     define: { __VERSION__: JSON.stringify(version), 'process.env.NODE_ENV': '"production"' },
     alias: {
       '@napi-rs/canvas': './web/shims/canvas.js',
+      linkedom: './web/shims/linkedom.js',
       zlib: './web/shims/zlib.js',
       crypto: './web/shims/crypto.js',
       path: './web/shims/path.js',

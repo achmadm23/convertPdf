@@ -1155,7 +1155,7 @@
   const viewer = $('viewer'), placeholder = $('placeholder'), bookInfo = $('bookInfo');
 
   // ---------- the converter ----------
-  // In the app it's the local server (npm start, ConvertPdf.exe). On the website
+  // In the app it's the local server (npm start). On the website
   // it runs in this page: web/api.js, loaded before this script, sets convertPdfApi.
   const api = window.convertPdfApi || serverApi();
 
@@ -1778,7 +1778,7 @@
   }
 
   function addLinks(text) {
-    if (!api.convertLinks) return showStatus('Web pages can only be made into books in the app (ConvertPdf.exe or npm start).', { error: true });
+    if (!api.convertLinks) return showStatus('Web pages can’t be made into books here.', { error: true });
     const links = splitLinks(text);
     if (!links.length) return showStatus('Paste the link of a web page.', { error: true });
     if (links.length > MAX_LINKS) return showStatus(`Up to ${MAX_LINKS} links at once.`, { error: true });
@@ -2978,7 +2978,7 @@
   if (!api.convertLinks) {
     $('addLinks').hidden = true;
     $('links').disabled = true;
-    $('linksNote').textContent = 'Web pages can only be made into books in the app (ConvertPdf.exe or npm start): news sites don’t let other websites read their pages.';
+    $('linksNote').textContent = 'Web pages can’t be made into books here.';
   }
 
   // PDFs or links dropped anywhere on the page

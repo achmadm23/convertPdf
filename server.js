@@ -824,8 +824,8 @@ const server = http.createServer((req, res) => {
       sendError(res, 404, 'Not found');
     }
   } else if (req.method === 'GET' && route === '/about.json') {
-    // tells a second copy of the exe that the converter is already running here,
-    // and the page which version it is
+    // tells a second copy started on this port that the converter is already running
+    // here, and the page which version it is
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ app: 'convertPdf', version }));
   } else if (req.method === 'GET' && (match = route.match(/^\/uifonts\/([\w.-]+)$/)) && uiFontFiles.has(match[1])) {
@@ -840,8 +840,8 @@ const server = http.createServer((req, res) => {
 // scanned books with pictures can take a few minutes to convert
 server.requestTimeout = 0;
 
-// ConvertPdf.exe sets this so double-clicking it opens the app in the browser
-const openBrowser = process.env.CONVERTPDF_OPEN_BROWSER === '1' || process.argv.includes('--open');
+// `node server.js --open` opens the app in the browser once it's running
+const openBrowser = process.argv.includes('--open');
 
 function open(url) {
   const { spawn } = require('child_process');
@@ -852,7 +852,7 @@ function open(url) {
   spawn(cmd, args, { detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
 }
 
-// Is the converter already running on this port (e.g. the exe was opened twice)?
+// Is the converter already running on this port (e.g. started twice)?
 function isConverter(port) {
   return new Promise(resolve => {
     http
