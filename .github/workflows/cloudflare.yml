@@ -4,8 +4,7 @@
 # Needs two repository secrets (Settings → Secrets and variables → Actions):
 #   CLOUDFLARE_API_TOKEN   a token with the "Cloudflare Pages: Edit" permission
 #   CLOUDFLARE_ACCOUNT_ID  shown on the Workers & Pages page of the dashboard
-# and the Pages project made once (Direct Upload), named as PROJECT below:
-#   npx wrangler pages project create convertpdf --production-branch main
+# The Pages project (named as PROJECT below) is made by the first run if it isn't there.
 
 name: Cloudflare
 
@@ -37,6 +36,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build:web
+      # the Pages project is made the first time (it's there already: nothing to do)
+      - name: Make the Pages project if there isn't one
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if npx --yes wrangler@3 pages project list | grep -qw "$PROJECT"; then
+            echo "The project $PROJECT is there."
+          else
+            npx --yes wrangler@3 pages project create "$PROJECT" --production-branch main
+          fi
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
