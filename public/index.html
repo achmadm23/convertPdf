@@ -590,6 +590,9 @@
   body.comparing .page-editor-head .chip, #pageTitle { white-space: nowrap; }
   body.comparing .page-nav .btn { padding: 0 10px; white-space: nowrap; }
   body.comparing .page-scan { width: 100%; }
+  .scan-pager { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .scan-pager .icon-btn { flex: 1 1 0; width: auto; }
+  #scanWhere { flex: 1.4 1 0; text-align: center; font: 600 13px var(--mono, monospace); color: var(--muted); white-space: nowrap; }
   body.comparing .page-scan img { width: 100%; height: var(--page-h); max-height: none; object-fit: contain; background: #F4F1E8; border: 0; border-radius: 3px; box-shadow: 0 20px 60px rgba(0, 0, 0, .5); }
   .page-text-box summary { cursor: pointer; font-size: 13px; color: var(--muted); }
   .page-text-box[open] { gap: 8px; }
@@ -829,10 +832,6 @@
           <div class="col-head">
             <div class="page-editor-head">
               <h3 id="pageTitle">Page</h3><span class="chip" id="pageChip"></span>
-              <div class="page-nav">
-                <button type="button" class="btn small" id="prevLow"></button>
-                <button type="button" class="btn small" id="nextLow"></button>
-              </div>
             </div>
             <div class="row-btns page-tools" id="boxButtons">
               <button type="button" class="btn small" id="drawBoxes" title="Box the pictures on this page: what's in the boxes goes in the book as pictures">Draw pictures</button>
@@ -863,6 +862,12 @@
           <p class="note" id="pageEmpty">Pick a page in the drawer.</p>
           <div id="pageBody" hidden>
             <div class="page-scan" id="pageScan"><img id="pageImg" alt="" draggable="false"></div>
+            <!-- every page of the book, one by one, under the page -->
+            <div class="scan-pager">
+              <button type="button" class="btn icon-btn" id="prevLow" aria-label="Page before"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
+              <span id="scanWhere"></span>
+              <button type="button" class="btn icon-btn" id="nextLow" aria-label="Page after"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+            </div>
             <p class="page-note" id="pageNote" hidden></p>
             <details class="field page-text-box" id="textPart">
               <summary>Text on this page</summary>
@@ -906,7 +911,7 @@
         <div class="scans-wait" id="scansWait" role="status">
           <span class="spinner" aria-hidden="true"></span><span id="scansWaitText">Reading the pages…</span>
         </div>
-        <p class="scans-none" id="scansNone" hidden>No page was read at <span class="offer-limit">90</span>% or lower, and none has pictures. ‹ › beside the page go through all of them.</p>
+        <p class="scans-none" id="scansNone" hidden>No page was read at <span class="offer-limit">90</span>% or lower, and none has pictures. ‹ › under the page go through all of them.</p>
         <div class="scan-grid" id="scanGrid" hidden></div>
     </div>
     <div class="panel chapters-panel" id="chaptersPanel" hidden>
@@ -3276,7 +3281,6 @@
       $('pageBody').hidden = !p;
       $('pageChip').hidden = !p;
       $('pageTitle').textContent = p ? `Page ${open}` : 'Page';
-      $('prevLow').hidden = $('nextLow').hidden = !p;
       renderBookTools(p);
       if (!p) {
         for (const id of ['boxButtons', 'keepPart', 'drawButtons', 'picturePart']) $(id).hidden = true;
@@ -3334,9 +3338,8 @@
       const all = [...r.pages.keys()].sort((x, y) => x - y);
       const prev = [...all].reverse().find(n => n < open);
       const next = all.find(n => n > open);
-      $('prevLow').textContent = prev ? `‹ p. ${prev}` : '‹';
+      $('scanWhere').textContent = `Page ${open} of ${r.total || all.length}`;
       $('prevLow').title = prev ? `The page before: p. ${prev}` : 'The first page';
-      $('nextLow').textContent = next ? `p. ${next} ›` : '›';
       $('nextLow').title = next ? `The page after: p. ${next}` : 'The last page';
       $('prevLow').disabled = !prev;
       $('nextLow').disabled = !next;
@@ -4740,10 +4743,16 @@
       const endOf = span.column >= span.last && !span.after;
       $('prevPage').disabled = startOf;
       $('nextPage').disabled = endOf;
-      if (startOf) $('prevPage').title = `The start of page ${n}: ‹ beside the scan goes to the page before`;
-      if (endOf) $('nextPage').title = `The end of page ${n}: › beside the scan goes to the page after`;
+      if (startOf) $('prevPage').title = `The start of page ${n}: ‹ under the scan goes to the page before`;
+      if (endOf) $('nextPage').title = `The end of page ${n}: › under the scan goes to the page after`;
       return;
     }
+    if (inPages() && pageHrefs.size && !pageHrefs.has(scans.open())) {
+      $('position').textContent = 'not in the text';
+      $('position').title = `Page ${scans.open()} isn't in the book's text (a cover or a blank page): the book shows the text nearest it`;
+      return;
+    }
+    $('position').title = '';
     const stop = shownStop();
     if (!slider.disabled && stop !== undefined) {
       slider.value = stop;
