@@ -1,5 +1,5 @@
 # Publish the website (the converter running in the browser) to Cloudflare Pages
-# on every push to main: https://convertpdf.pages.dev
+# on every push to main: https://baca-baca.pages.dev
 #
 # Needs two repository secrets (Settings → Secrets and variables → Actions):
 #   CLOUDFLARE_API_TOKEN   a token with the "Cloudflare Pages: Edit" permission
@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PROJECT: convertpdf
+  PROJECT: baca-baca
 
 jobs:
   deploy:
