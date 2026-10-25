@@ -370,7 +370,6 @@
     position: absolute; top: -14px; right: -14px; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%;
     font: 600 16px/28px var(--sans); color: var(--accent-text); background: var(--accent); cursor: pointer;
   }
-  .draw-help { margin: 6px 0 0; font-size: 12px; }
   .box-page .grip { position: absolute; right: -8px; bottom: -8px; width: 16px; height: 16px; border-radius: 3px; background: var(--accent); cursor: nwse-resize; }
 
   /* Chapters */
@@ -595,6 +594,15 @@
   body.comparing .page-nav .btn { padding: 0 10px; white-space: nowrap; }
   body.comparing .page-scan { width: 100%; }
   .scan-pager { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  /* beside it, the book's ‹ › line up with the page's: right under the book, where it is
+     between them, its chapter and Portrait / Landscape below */
+  body.comparing .pager { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin-top: 10px; }
+  body.comparing .pager-text, body.comparing .pager-buttons { display: contents; }
+  body.comparing #prevPage { grid-area: 1 / 1; width: auto; }
+  body.comparing #nextPage { grid-area: 1 / 3; width: auto; }
+  body.comparing #position { grid-area: 1 / 2; font: 500 15px var(--mono); }
+  body.comparing #where { grid-area: 2 / 1 / 3 / 4; font: 600 12px var(--mono); }
+  body.comparing .pager-buttons .seg { grid-area: 3 / 1 / 4 / 4; }
   .scan-pager .icon-btn { flex: 1 1 0; width: auto; }
   #scanWhere { flex: 1.4 1 0; text-align: center; font: 600 13px var(--mono, monospace); color: var(--muted); white-space: nowrap; }
   body.comparing .page-scan img { width: 100%; height: var(--page-h); max-height: none; object-fit: contain; background: #F4F1E8; border: 0; border-radius: 3px; box-shadow: 0 20px 60px rgba(0, 0, 0, .5); }
@@ -838,7 +846,12 @@
             <div class="page-editor-head">
               <h3 id="pageTitle">Page</h3><span class="chip" id="pageChip"></span>
             </div>
+            <div class="row-btns page-tools" id="boxApply" hidden>
+              <button type="button" class="btn small primary" id="applyBoxes">Apply pictures</button>
+              <button type="button" class="btn small" id="cancelBoxes">Cancel</button>
+            </div>
             <div class="row-btns page-tools" id="boxButtons">
+              <button type="button" class="btn small primary" id="pageDone" hidden>Done</button>
               <button type="button" class="btn small" id="foundBoxes" title="The pictures as the converter found them on this page">Use found pictures</button>
               <button type="button" class="btn small" id="clearBoxes" title="No pictures on this page: all of it is text">Remove all pictures</button>
               <button type="button" class="btn small" id="readAgain" title="Read the page again with other settings, keeping the better reading">Read again</button>
@@ -867,12 +880,10 @@
               <span id="scanWhere"></span>
               <button type="button" class="btn icon-btn" id="nextLow" aria-label="Page after"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
             </div>
-            <p class="note draw-help" id="drawHelp" hidden>Pictures: drag across the page to box one, drag a box to move it or its corner to resize it, × to remove it. What's in the boxes goes in the book as pictures.</p>
             <p class="page-note" id="pageNote" hidden></p>
             <details class="field page-text-box" id="textPart">
               <summary>Text on this page</summary>
               <textarea class="page-text" id="pageText" spellcheck="true" aria-label="Text on this page"></textarea>
-              <span class="small" id="textHelp">An empty line between paragraphs. The pictures in the boxes go above or between them, where they are on the page.</span>
               <div class="row-btns"><button type="button" class="btn primary" id="saveText">Save text</button></div>
             </details>
           </div>
@@ -1281,6 +1292,7 @@
       firstPageCover: wanted(b, 'firstPageCover'), contentsPages: wanted(b, 'contentsPages'), chapterStarts: wanted(b, 'chapterStarts'),
       made: b.state === 'ready' || (b.state === 'converting' && !!b.reopen),
       failed: b.state === 'failed' ? b.error : null, paused: b.state === 'paused', thumbsKept: !!b.thumbsKept,
+      checkedPages: b.checkedPages || [],
     });
 
     return {
@@ -3071,13 +3083,16 @@
     const isLow = (r, c) => c !== null && c >= r.pictureBelow && c <= r.limit;
     // pages read at or below this can go in the book as a picture of the whole page
     const canBePicture = (r, c) => c !== null && c <= r.offerPicture;
-    const lowPages = r => [...r.pages].filter(([, p]) => !p.manual && !p.picture && isLow(r, p.confidence)).map(([n]) => n).sort((x, y) => x - y);
+    // a page read badly is checked by the user with Done (r.checked: its pages), then it isn't one to check
+    const lowPages = r => [...r.pages].filter(([n, p]) => !p.manual && !p.picture && !r.checked.has(n) && isLow(r, p.confidence)).map(([n]) => n).sort((x, y) => x - y);
+    const canBeDone = (r, n, p) => !p.own && !p.manual && !p.picture && isLow(r, p.confidence);
     const lowCount = b => (b.scan ? lowPages(b.scan).length : 0);
 
     function badge(r, p) {
       if (p.picture) return [`kept as picture${p.pictureParts > 1 ? ` · ${p.pictureParts} parts` : ''}`, 'kept'];
       if (p.own) return p.manual ? ['PDF text · edited', 'typed'] : ['PDF text', ''];
       if (p.manual) return ['typed by hand', 'typed'];
+      if (p.checked && isLow(r, p.confidence)) return [`done · ${p.confidence}%`, 'good'];
       if (p.confidence === null) return ['no text', ''];
       if (isPicture(r, p.confidence)) return [`mostly picture · ${p.confidence}%`, ''];
       if (p.better) return [`read better · ${p.confidence}%`, 'good'];
@@ -3197,8 +3212,9 @@
         const after = [...grid.children].find(c => Number(c.dataset.n) > n);
         grid.insertBefore(card, after || null);
       }
-      card.classList.toggle('low', !p.picture && !p.manual && isLow(r, p.confidence));
-      card.classList.toggle('checkable', !p.own && (p.manual || p.picture || canBePicture(r, p.confidence)));
+      p.checked = r.checked.has(n);
+      card.classList.toggle('low', !p.picture && !p.manual && !p.checked && isLow(r, p.confidence));
+      card.classList.toggle('checkable', !p.own && !p.checked && (p.manual || p.picture || canBePicture(r, p.confidence)));
       card.classList.toggle('has-pictures', hasPictures(p));
       card.classList.toggle('current', n === open);
       card.setAttribute('aria-current', String(n === open));
@@ -3365,6 +3381,10 @@
         for (const id of ['boxButtons', 'keepPart', 'picturePart']) $(id).hidden = true;
         return;
       }
+      p.checked = r.checked.has(open);
+      $('pageDone').hidden = !canBeDone(r, open, p);
+      $('pageDone').textContent = p.checked ? 'Not done' : 'Done';
+      $('pageDone').classList.toggle('primary', !p.checked);
       const [text, kind] = badge(r, p);
       $('pageChip').textContent = text;
       $('pageChip').className = 'chip ' + kind;
@@ -3398,8 +3418,10 @@
           sheet.append(el);
         });
       }
-      $('drawHelp').hidden = p.picture || !r.done;
-      $('boxButtons').hidden = p.picture || keepOpen;
+      // pictures changed and not applied yet: Apply pictures and Cancel, in place of the tools
+      const changing = !!edit && edit.dirty && edit.b === b && edit.n === open;
+      $('boxApply').hidden = p.picture || !changing;
+      $('boxButtons').hidden = p.picture || keepOpen || changing;
       $('textPart').hidden = p.picture;
       $('picturePart').hidden = !p.picture;
       $('keepPart').hidden = p.picture || !keepOpen;
@@ -3407,10 +3429,6 @@
       if (fresh || document.activeElement !== $('pageText')) $('pageText').value = p.text || '';
       $('readAgain').hidden = p.manual || p.own;
       $('foundBoxes').hidden = !p.drawn;
-      // its text, to fix: a page with its own text in the PDF too
-      $('textHelp').textContent = p.own
-        ? 'An empty line between paragraphs. The pictures stay between the paragraphs they were between.'
-        : 'An empty line between paragraphs. The pictures in the boxes go above or between them, where they are on the page.';
       for (const btn of $('pageEditor').querySelectorAll('.col-head .page-tools button, #pageBody button')) {
         btn.disabled = !ready;
         btn.title = waitTitle;
@@ -3469,7 +3487,6 @@
       renderCard(b, n);
       if (b === shown && n === open) renderEditor(true);
       updateCounts(b);
-      if (edit && edit.b === b && edit.dirty) scheduleSave(); // changed again meanwhile
     }
 
     $('saveText').addEventListener('click', e => {
@@ -3505,7 +3522,8 @@
     // The pictures on the open page are boxed on it, found or drawn before, and changed
     // right there: drag across the page for a new box, drag a box to move it or its
     // corner to resize it, × to remove it. What's in the boxes goes in the book as
-    // pictures, the text outside them stays text. Saved a moment after the last change.
+    // pictures, the text outside them stays text, once Apply pictures is clicked (or
+    // another page is opened); Cancel puts them back as they were.
     const boxesShown = p => (edit && edit.b === shown && edit.n === open ? edit.boxes : p.boxes || []);
     function editBoxes(p) {
       if (!edit || edit.b !== shown || edit.n !== open) {
@@ -3514,10 +3532,6 @@
       }
       return edit.boxes;
     }
-    function scheduleSave() {
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(saveEdit, 900);
-    }
     function saveEdit() {
       clearTimeout(saveTimer);
       if (!edit) return;
@@ -3525,7 +3539,10 @@
         edit = null;
         return;
       }
-      if (edit.b.scan.busy || drag) return scheduleSave();
+      if (edit.b.scan.busy || drag) {
+        saveTimer = setTimeout(saveEdit, 500); // once the page's change before is done
+        return;
+      }
       const { b, n, boxes } = edit;
       edit = null;
       change(null, boxes.length ? 'Saving the pictures…' : 'Saving…', (id, k) => api.setBoxes(id, k, boxes), savedBoxes, { b, n });
@@ -3598,7 +3615,6 @@
       if (drag.mode === 'new' ? !tiny : ['x', 'y', 'w', 'h'].some(k => box[k] !== f[k])) edit.dirty = true;
       drag = null;
       renderEditor();
-      if (edit.dirty) scheduleSave();
     };
     sheet.addEventListener('pointerup', endDrag);
     sheet.addEventListener('pointercancel', endDrag);
@@ -3609,7 +3625,28 @@
       editBoxes(p).splice(Number(remove.parentElement.dataset.i), 1);
       edit.dirty = true;
       renderEditor();
-      scheduleSave();
+    });
+    $('applyBoxes').addEventListener('click', saveEdit);
+    // Done: the page is checked, the next one to check opens; Not done undoes it
+    $('pageDone').addEventListener('click', () => {
+      const b = shown, r = b.scan, n = open;
+      if (r.checked.has(n)) r.checked.delete(n);
+      else r.checked.add(n);
+      b.checkedPages = [...r.checked];
+      store.saveBooks();
+      renderCard(b, n);
+      updateCounts(b);
+      if (!r.checked.has(n)) return renderEditor();
+      const next = lowPages(r).find(k => k > n) ?? lowPages(r)[0];
+      if (next !== undefined) openPage(next);
+      else {
+        renderEditor();
+        showStatus('Every page read badly is checked.');
+      }
+    });
+    $('cancelBoxes').addEventListener('click', () => {
+      if (edit && edit.b === shown && edit.n === open) edit = null;
+      renderEditor();
     });
 
     // the book was built again with its changed pages: none are waiting any more
@@ -3743,6 +3780,7 @@
         b.scan = {
           limit: session.lowConfidence, pictureBelow: session.pictureBelow, offerPicture: session.offerPicture,
           total: 0, done: false, busy: false, pending: 0, pages: new Map(),
+          checked: new Set(b.checkedPages || []), // the pages read badly checked with Done
         };
         document.querySelectorAll('.offer-limit').forEach(el => { el.textContent = session.offerPicture; });
         if (b === shown) this.show(b);
@@ -4999,7 +5037,7 @@
         title: r.title || '', author: r.author || '',
         firstPageCover: !!r.firstPageCover, contentsPages: r.contentsPages === null ? undefined : r.contentsPages,
         chapterStarts: r.chapterStarts || undefined,
-        thumbsKept: !!r.thumbsKept, reopen: !!r.made,
+        thumbsKept: !!r.thumbsKept, reopen: !!r.made, checkedPages: r.checkedPages || [],
       });
       if (r.cover) Object.assign(b, { cover: r.cover, coverUrl: URL.createObjectURL(r.cover) });
       if (r.failed) Object.assign(b, { state: 'failed', error: r.failed, reopen: false });
