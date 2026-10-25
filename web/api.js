@@ -2,7 +2,7 @@
 // server.js does for the app, done here without a server. public/index.html uses
 // it when this file is loaded (window.convertPdfApi); web/build.js bundles it.
 
-const { analyzePdf, typedParagraphs, newBookCache, buildEpub, readerScreen, contentsPagesFrom, chapterStartsFrom, looksFrom } = require('../index');
+const { analyzePdf, typedParagraphs, ownEdits, newBookCache, buildEpub, readerScreen, contentsPagesFrom, chapterStartsFrom, looksFrom } = require('../index');
 const { openPdf } = require('../pdf');
 const { imageCover, titleCover, cleanBoxes } = require('../figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('../xtc');
@@ -74,6 +74,7 @@ function bookSummary(s) {
     pictures: scannedPictures(book),
     // the pages with their own text (not read with OCR): page → its text, for listing every page
     pdfPages: book.pdfTexts || {},
+    ownPictures: book.ownPictures || {}, // the ones kept as a picture: page → parts
     ...(book.contents && { contents: book.contents }), // the book's own table of contents, when it's used
     // each chapter with the page (1-based) it starts on, and whether they're the user's own
     chapterList: book.chapters.map((ch, i) => ({
@@ -87,7 +88,7 @@ function bookSummary(s) {
 function scannedPictures(book) {
   const pages = [...(book.ocr ? book.ocr.pages : [])].map(([n, r]) => [n, { drawn: !!r.boxes, boxes: book.pictureBoxes?.[n] || [] }]);
   // the pages with their own text too
-  for (const n of Object.keys(book.pdfTexts || {})) pages.push([Number(n), { drawn: false, boxes: book.pictureBoxes?.[n] || [] }]);
+  for (const n of Object.keys(book.pdfTexts || {})) pages.push([Number(n), { drawn: !!book.ownBoxes?.[n], boxes: book.pictureBoxes?.[n] || [] }]);
   return Object.fromEntries(pages);
 }
 
@@ -242,9 +243,16 @@ async function setText(id, n, text) {
 async function setPicture(id, n, keep, parts = 1) {
   const s = session(id);
   const current = s.book?.ocr?.pages.get(n);
-  if (!current) throw new Error('That page was not read with OCR.');
+  const own = !current && s.book?.pdfTexts?.[n] !== undefined; // a page with its own text
+  if (!current && !own) throw new Error('That page is not in the book.');
   if (s.busy) throw new Error('Busy updating the book. Try again in a moment.');
   if (![1, 2, 3].includes(parts)) throw new Error('A page can be kept as 1, 2 or 3 pictures.');
+  if (own) {
+    const { [n]: was, ...others } = s.book.ownPictures || {};
+    s.book.ownPictures = keep ? { ...others, [n]: parts } : others;
+    s.improved.add(n);
+    return { picture: keep, parts: keep ? parts : 1, pendingPages: s.improved.size };
+  }
   const { picture, pictureParts, ...reading } = current;
   s.book.ocr.pages.set(n, keep ? { ...reading, picture: true, ...(parts > 1 && { pictureParts: parts }) } : reading);
   s.improved.add(n);
@@ -256,9 +264,17 @@ async function setPicture(id, n, keep, parts = 1) {
 async function setBoxes(id, n, boxes) {
   const s = session(id);
   const current = s.book?.ocr?.pages.get(n);
-  if (!current) throw new Error('That page was not read with OCR.');
+  const own = !current && s.book?.pdfTexts?.[n] !== undefined; // a page with its own text
+  if (!current && !own) throw new Error('That page is not in the book.');
   if (s.busy) throw new Error('Busy updating the book. Try again in a moment.');
   const use = boxes && cleanBoxes(boxes);
+  // a page with its own text: its text is as it is, the boxes are its pictures
+  if (own) {
+    const { [n]: was, ...others } = s.book.ownBoxes || {};
+    s.book.ownBoxes = use ? { ...others, [n]: use } : others;
+    s.improved.add(n);
+    return { drawn: !!use, boxes: use || null, pendingPages: s.improved.size };
+  }
   // the text beside the pictures is read again without them (a few seconds)
   s.busy = true;
   let next;
@@ -295,7 +311,7 @@ async function rebuild(id, { onProgress = () => {} } = {}, changes = {}) {
   }
   s.busy = true;
   try {
-    const book = await analyzePdf(s.pdf, { ...options, onProgress, ocr: s.book.ocr, ...(s.book.textEdits && { textEdits: s.book.textEdits }), cache: s.cache });
+    const book = await analyzePdf(s.pdf, { ...options, onProgress, ocr: s.book.ocr, ...ownEdits(s.book), cache: s.cache });
     Object.assign(book, { fileName: s.book.fileName, title: s.book.title, author: s.book.author });
     s.book = book;
     s.options = options;

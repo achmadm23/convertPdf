@@ -271,7 +271,7 @@ function linesToBlocks(lines, bodySize, withY = false) {
 // same PDF: its pages' text and the pictures found on them are kept in it, so a rebuild
 // only draws again the pages whose pictures could come out otherwise.
 // looks: how the user turned and sized pictures (see looksFrom), by "page:number".
-async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: previous, onOcrPage, screen, firstPageCover = false, contentsPages, cache, looks = {}, textEdits = {} } = {}) {
+async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: previous, onOcrPage, screen, firstPageCover = false, contentsPages, cache, looks = {}, textEdits = {}, ownBoxes = {}, ownPictures = {} } = {}) {
   const doc = await openPdf(buffer);
 
   let meta = {};
@@ -303,7 +303,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   const picturePages = new Set();
   let ocr = null;
   // how many parts a page kept as a picture is cut into (1: the whole page upright)
-  const pictureParts = n => (picturePages.has(n) && ocr?.pages.get(n)?.pictureParts) || 1;
+  const pictureParts = n => (picturePages.has(n) && (ocr?.pages.get(n)?.pictureParts || ownPictures[n])) || 1;
   if (scanned.length) {
     const readings = new Map(scanned.filter(n => previous?.pages.has(n)).map(n => [n, previous.pages.get(n)]));
     const fresh = await recognizePages(
@@ -352,6 +352,14 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
     pdfTexts[i + 1] = ownLines.has(i + 1) ? typedParagraphs(textEdits[i + 1]).join('\n\n')
       : linesToBlocks(lines, bodySize).filter(b => !b.image).map(b => b.text).join('\n\n');
   });
+  // pages with their own text kept whole as a picture by the user (ownPictures: page →
+  // parts), like scanned ones
+  for (const [key, parts] of Object.entries(ownPictures)) {
+    const n = Number(key);
+    if (pdfTexts[n] === undefined || ![1, 2, 3].includes(parts)) continue;
+    picturePages.add(n);
+    layoutLines[n - 1] = pageLines[n - 1] = [];
+  }
   // Work on a page done before with the same inputs (see newBookCache), else done now
   // and kept: `slot` names the work, one kept result each.
   const measures = JSON.stringify([layoutMeasures(layout), screen]);
@@ -377,8 +385,8 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
     scanned.filter(n => !picturePages.has(n) && !ocr.pages.get(n)?.manual && layoutLines[n - 1].some(l => l.words))
   );
   // pages whose pictures the user drew boxes around (see figures.js cleanBoxes):
-  // those are its pictures, instead of the ones found
-  const drawn = n => ocr?.pages.get(n)?.boxes;
+  // those are its pictures, instead of the ones found (ownBoxes: pages with their own text)
+  const drawn = n => ocr?.pages.get(n)?.boxes || (pdfTexts[n] !== undefined ? ownBoxes[n] : undefined);
   const mayHavePictures = n =>
     drawn(n) ? drawn(n).length > 0 : readWords.has(n) || findGaps(linesOf(n), layout, bodySize).length > 0;
   const hasCoverCandidate = pageLines.length > 0 && pageLines[0].filter(layout.isLong).length < 5;
@@ -774,9 +782,11 @@ function chaptersFromContents(pages, placed) {
 // they're left out. Null when none of the pages are in the book.
 // A chapter removed by the user (`drop`) isn't one: the heading it started with is
 // text of the chapter before it, not a heading of its own (nor in the contents).
+// A heading removed from the contents (a section) is a `drop` too, named as it is.
 function chaptersAtStarts(pages, starts) {
-  const dropped = new Map(starts.filter(c => c.drop).map(c => [c.page - 1, c.title]));
-  if (dropped.size) pages = pages.map((page, i) => (dropped.has(i) ? plainHeading(page, dropped.get(i)) : page));
+  const dropped = new Map();
+  for (const c of starts.filter(c => c.drop)) dropped.set(c.page - 1, [...(dropped.get(c.page - 1) || []), c.title]);
+  if (dropped.size) pages = pages.map((page, i) => (dropped.get(i) || []).reduce(plainHeading, page));
   const list = starts.filter(c => !c.drop).map(c => ({ ...c, page: c.page - 1 })).filter(c => c.page < pages.length).sort((a, b) => a.page - b.page);
   if (!list.length) return null;
   const chapters = [];
@@ -790,8 +800,9 @@ function chaptersAtStarts(pages, starts) {
     const inTitle = new Set(titleWords(title));
     // the page's own heading is the chapter's title: left out, as the chapter has it.
     // Named by the user, the name takes its place (a renamed chapter doesn't keep its
-    // old heading under the new one); the heading lines at the top go, up to 3.
-    if (start.title) for (let k = 0; k < 3 && first.length && first[0].heading; k++) first.shift();
+    // old heading under the new one); the heading lines at the top go, up to 3. A title
+    // as the converter found it (`found`) isn't a name: the page keeps its other headings.
+    if (start.title && !start.found) for (let k = 0; k < 3 && first.length && first[0].heading; k++) first.shift();
     else while (first.length && first[0].heading && titleWords(first[0].text).every(w => inTitle.has(w))) first.shift();
     chapters.push({ title, blocks: [...first, ...pages.slice(start.page + 1, end).flat()], page: start.page });
   });
@@ -799,15 +810,17 @@ function chaptersAtStarts(pages, starts) {
 }
 
 // A page whose chapter was removed: the headings that were its title (all their words
-// in it), or else the headings at its top (up to 3), become plain text.
+// in it, or starting with it: a long title is cut, ending in …), or else the headings
+// near its top (in its first 3 blocks), become plain text.
 function plainHeading(page, title = '') {
   const inTitle = new Set(titleWords(title));
-  const named = page.filter(b => b.heading && !b.image && titleWords(b.text).length && titleWords(b.text).every(w => inTitle.has(w)));
-  const top = [];
-  for (const b of page) {
-    if (!b.heading || top.length === 3) break;
-    top.push(b);
-  }
+  const start = titleWords(title.replace(/\S*…$/, ''));
+  const named = page.filter(b => {
+    if (!b.heading || b.image) return false;
+    const words = titleWords(b.text);
+    return words.length && (words.every(w => inTitle.has(w)) || (start.length >= 3 && start.every((w, i) => words[i] === w)));
+  });
+  const top = page.slice(0, 3).filter(b => b.heading && !b.image);
   const plain = new Set(named.length ? named : top);
   return page.map(b => (plain.has(b) ? { ...b, heading: false } : b));
 }
@@ -830,11 +843,13 @@ const MAX_CHAPTER_STARTS = 1000;
 // page, the first one kept, titles trimmed (empty: found on the page).
 function chapterStartsFrom(value) {
   const ok = Array.isArray(value) && value.length <= MAX_CHAPTER_STARTS &&
-    value.every(c => c && Number.isInteger(c.page) && c.page >= 1 && c.page <= 100000 && (c.title === undefined || typeof c.title === 'string') && (c.drop === undefined || typeof c.drop === 'boolean'));
+    value.every(c => c && Number.isInteger(c.page) && c.page >= 1 && c.page <= 100000 && (c.title === undefined || typeof c.title === 'string') && (c.drop === undefined || typeof c.drop === 'boolean') && (c.found === undefined || typeof c.found === 'boolean'));
   if (!ok) throw new Error(`The chapters could not be read (up to ${MAX_CHAPTER_STARTS}, each with a page number).`);
+  // one chapter per page; the headings removed are kept by their names
   const seen = new Set();
-  return value.filter(c => !seen.has(c.page) && seen.add(c.page))
-    .map(c => ({ page: c.page, title: (c.title || '').replace(/\s+/g, ' ').trim().slice(0, 200), ...(c.drop && { drop: true }) }));
+  const key = c => (c.drop ? `${c.page}:${c.title || ''}` : c.page);
+  return value.filter(c => !seen.has(key(c)) && seen.add(key(c)))
+    .map(c => ({ page: c.page, title: (c.title || '').replace(/\s+/g, ' ').trim().slice(0, 200), ...(c.drop && { drop: true }), ...(c.found && { found: true }) }));
 }
 
 const MAX_CONTENTS_PAGES = 5;
@@ -927,8 +942,8 @@ function chapterFiles(ch, number, sideways = new Set(), inline = false, info = n
   ch.blocks.forEach((b, i) => {
     const last = parts[parts.length - 1];
     if (b.image && !(inline && !sideways.has(b.image))) parts.push({ image: b.image, pdfPage: b.pdfPage });
-    else if (last && !last.image) last.blocks.push({ ...b, id: `s${i}` });
-    else parts.push({ blocks: [{ ...b, id: `s${i}` }] });
+    else if (last && !last.image) last.blocks.push({ ...b, id: `s${i}${b.pdfPage ? `-p${b.pdfPage}` : ''}` });
+    else parts.push({ blocks: [{ ...b, id: `s${i}${b.pdfPage ? `-p${b.pdfPage}` : ''}` }] });
   });
   let titled = parts.find(p => !p.image);
   if (!titled) parts.unshift((titled = { blocks: [] }));
@@ -1137,11 +1152,22 @@ async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', device 
     ocr: extracted.ocr,
     pictureBoxes: extracted.pictureBoxes,
     pdfTexts: extracted.pdfTexts,
-    ...(ocrOptions.textEdits && { textEdits: ocrOptions.textEdits }), // the pages with their own text, typed over
+    // the pages with their own text changed by the user: typed over, their pictures drawn, kept as a picture
+    ...(ocrOptions.textEdits && { textEdits: ocrOptions.textEdits }),
+    ...(ocrOptions.ownBoxes && { ownBoxes: ocrOptions.ownBoxes }),
+    ...(ocrOptions.ownPictures && { ownPictures: ocrOptions.ownPictures }),
     device, // the e-reader its pictures are drawn for
     stats: { pages: pages.length, paragraphs, images: extracted.images.length, fullPagePictures: extracted.images.filter(i => i.split).length },
   };
 }
+
+// The changes made by the user to a book's pages with their own text (see extractPdf),
+// for building it again.
+const ownEdits = book => ({
+  ...(book.textEdits && { textEdits: book.textEdits }),
+  ...(book.ownBoxes && { ownBoxes: book.ownBoxes }),
+  ...(book.ownPictures && { ownPictures: book.ownPictures }),
+});
 
 // Convert PDF bytes to EPUB bytes in one go. `cover` is a picture file's bytes.
 async function convertPdfToEpub(pdfBuffer, { cover, pictureParts, pictures, ...options } = {}) {
@@ -1255,7 +1281,7 @@ async function writeWebPages(opts) {
   if (!made) process.exitCode = 1;
 }
 
-module.exports = { convertPdfToEpub, typedParagraphs, analyzePdf, newBookCache, looksFrom, buildEpub, extractPdf, openPdf, cleanPages, buildChapters, readerScreen, contentsPagesFrom, chapterStartsFrom };
+module.exports = { convertPdfToEpub, typedParagraphs, ownEdits, analyzePdf, newBookCache, looksFrom, buildEpub, extractPdf, openPdf, cleanPages, buildChapters, readerScreen, contentsPagesFrom, chapterStartsFrom };
 
 if (require.main === module) {
   main().catch(err => {

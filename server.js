@@ -5,7 +5,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { analyzePdf, typedParagraphs, newBookCache, buildEpub, openPdf, readerScreen, contentsPagesFrom, chapterStartsFrom, looksFrom } = require('./index');
+const { analyzePdf, typedParagraphs, ownEdits, newBookCache, buildEpub, openPdf, readerScreen, contentsPagesFrom, chapterStartsFrom, looksFrom } = require('./index');
 const { imageCover, titleCover, cleanBoxes } = require('./figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('./xtc');
 const { retryPage, pageThumbnail, manualReading, readAroundBoxes, readingWithBoxes, packReadings, unpackReadings } = require('./ocr');
@@ -206,6 +206,7 @@ function bookSummary(session) {
     pictures: scannedPictures(book),
     // the pages with their own text (not read with OCR): page → its text, for listing every page
     pdfPages: book.pdfTexts || {},
+    ownPictures: book.ownPictures || {}, // the ones kept as a picture: page → parts
     ...(book.skipped && { skipped: book.skipped }), // web pages that couldn't be read
     ...(book.contents && { contents: book.contents }), // the book's own table of contents, when it's used
     // each chapter with the page (1-based) it starts on, and whether they're the user's own
@@ -221,7 +222,7 @@ function bookSummary(session) {
 function scannedPictures(book) {
   const pages = [...(book.ocr ? book.ocr.pages : [])].map(([n, r]) => [n, { drawn: !!r.boxes, boxes: book.pictureBoxes?.[n] || [] }]);
   // the pages with their own text too
-  for (const n of Object.keys(book.pdfTexts || {})) pages.push([Number(n), { drawn: false, boxes: book.pictureBoxes?.[n] || [] }]);
+  for (const n of Object.keys(book.pdfTexts || {})) pages.push([Number(n), { drawn: !!book.ownBoxes?.[n], boxes: book.pictureBoxes?.[n] || [] }]);
   return Object.fromEntries(pages);
 }
 
@@ -424,8 +425,16 @@ async function handleText(req, res, session, n) {
 // DELETE: use its text again. Used the next time the book is rebuilt.
 function handlePicture(res, session, n, keep, parts = 1) {
   const current = session.book?.ocr?.pages.get(n);
-  if (!current) return sendError(res, 404, 'That page was not read with OCR.');
+  const own = !current && session.book?.pdfTexts?.[n] !== undefined; // a page with its own text
+  if (!current && !own) return sendError(res, 404, 'That page is not in the book.');
   if (session.busy) return sendError(res, 409, 'Busy updating the book. Try again in a moment.');
+  if (own) {
+    const { [n]: was, ...others } = session.book.ownPictures || {};
+    session.book.ownPictures = keep ? { ...others, [n]: parts } : others;
+    session.improved.add(n);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ picture: keep, parts: keep ? parts : 1, pendingPages: session.improved.size }));
+  }
   const { picture, pictureParts, ...reading } = current;
   const kept = keep ? { ...reading, picture: true, ...(parts > 1 && { pictureParts: parts }) } : reading;
   session.book.ocr.pages.set(n, kept);
@@ -441,13 +450,22 @@ function handlePicture(res, session, n, keep, parts = 1) {
 // the book is rebuilt.
 async function handleBoxes(req, res, session, n, use) {
   const current = session.book?.ocr?.pages.get(n);
-  if (!current) return sendError(res, 404, 'That page was not read with OCR.');
+  const own = !current && session.book?.pdfTexts?.[n] !== undefined; // a page with its own text
+  if (!current && !own) return sendError(res, 404, 'That page is not in the book.');
   if (session.busy) return sendError(res, 409, 'Busy updating the book. Try again in a moment.');
   let boxes;
   try {
     if (use) boxes = cleanBoxes(JSON.parse((await readBody(req, MAX_BOXES_BYTES)).toString('utf8')));
   } catch (err) {
     return sendError(res, 400, err instanceof SyntaxError ? 'The picture boxes could not be read.' : err.message);
+  }
+  // a page with its own text: its text is as it is, the boxes are its pictures
+  if (own) {
+    const { [n]: was, ...others } = session.book.ownBoxes || {};
+    session.book.ownBoxes = use ? { ...others, [n]: boxes } : others;
+    session.improved.add(n);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ drawn: use, boxes: boxes || null, pendingPages: session.improved.size }));
   }
   // the text beside the pictures is read again without them (a few seconds)
   session.busy = true;
@@ -505,7 +523,7 @@ async function handleRebuild(req, res, session) {
   session.busy = true;
   try {
     await streamJob(res, async (send, onProgress) => {
-      const book = await analyzePdf(session.pdf, { ...options, onProgress, ocr: session.book.ocr, ...(session.book.textEdits && { textEdits: session.book.textEdits }), cache: session.cache });
+      const book = await analyzePdf(session.pdf, { ...options, onProgress, ocr: session.book.ocr, ...ownEdits(session.book), cache: session.cache });
       // the same PDF, so the title and author stay as they are (maybe changed by the user)
       Object.assign(book, { fileName: session.book.fileName, title: session.book.title, author: session.book.author });
       session.book = book;

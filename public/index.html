@@ -366,6 +366,7 @@
     position: absolute; top: -14px; right: -14px; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%;
     font: 600 16px/28px var(--sans); color: var(--accent-text); background: var(--accent); cursor: pointer;
   }
+  .draw-help { margin: 6px 0 0; font-size: 12px; }
   .box-page .grip { position: absolute; right: -8px; bottom: -8px; width: 16px; height: 16px; border-radius: 3px; background: var(--accent); cursor: nwse-resize; }
 
   /* Chapters */
@@ -741,7 +742,8 @@
         <div class="col-head book-tools" id="bookTools">
           <div class="page-editor-head"><h3>In the book</h3><span class="note" id="bookToolsWhere"></span></div>
           <div class="row-btns page-tools" id="chapterTools">
-            <button type="button" class="btn small" id="startChapter" title="Start a chapter on this page, with the name you type">Add to chapter</button>
+            <button type="button" class="btn small" id="startChapter" title="Start a chapter on this page, with the name you type">Start a chapter here</button>
+            <button type="button" class="btn small" id="endChapter" hidden>Remove chapter</button>
           </div>
           <form class="row-btns page-tools chapter-naming" id="chapterNaming" hidden>
             <input id="chapterName" autocomplete="off" placeholder="Chapter name" aria-label="Chapter name">
@@ -832,11 +834,11 @@
               <h3 id="pageTitle">Page</h3><span class="chip" id="pageChip"></span>
             </div>
             <div class="row-btns page-tools" id="boxButtons">
-              <button type="button" class="btn small" id="drawBoxes" title="Box the pictures on this page: what's in the boxes goes in the book as pictures">Draw pictures</button>
-              <button type="button" class="btn small" id="foundBoxes">Use found pictures</button>
+              <button type="button" class="btn small" id="foundBoxes" title="The pictures as the converter found them on this page">Use found pictures</button>
+              <button type="button" class="btn small" id="clearBoxes" title="No pictures on this page: all of it is text">Remove all pictures</button>
               <button type="button" class="btn small" id="readAgain" title="Read the page again with other settings, keeping the better reading">Read again</button>
               <button type="button" class="btn small" id="keepToggle" aria-expanded="false" aria-controls="keepPart" title="The whole page goes in the book as a picture, instead of its text">Keep as picture</button>
-              <button type="button" class="btn small" id="useAsContents" title="Make the book's chapters from this page's table of contents">Use as the Daftar Isi</button>
+              <button type="button" class="btn small" id="useAsContents" hidden title="Make the book's chapters from this page's table of contents">Use as the Daftar Isi</button>
             </div>
             <div class="row-btns page-tools" id="keepPart" hidden>
               <div class="choice" role="group" aria-label="Keep the whole page as a picture">
@@ -845,12 +847,6 @@
                 <button type="button" data-parts="3" title="Turned on its side, in 3 parts that each fill the screen">3 parts</button>
               </div>
               <button type="button" class="btn small" id="keepCancel">Cancel</button>
-            </div>
-            <div class="row-btns page-tools" id="drawButtons" hidden>
-              <button type="button" class="btn small primary" id="saveBoxes">Save pictures</button>
-              <button type="button" class="btn small" id="clearBoxes">Remove all</button>
-              <button type="button" class="btn small" id="cancelBoxes">Cancel</button>
-              <span class="note" id="drawHelp" hidden>Drag across the page to box a picture; drag a box to move it, its corner to resize it.</span>
             </div>
             <div class="row-btns page-tools" id="picturePart" hidden>
               <span class="note">This page goes in the book as a picture.</span>
@@ -866,6 +862,7 @@
               <span id="scanWhere"></span>
               <button type="button" class="btn icon-btn" id="nextLow" aria-label="Page after"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
             </div>
+            <p class="note draw-help" id="drawHelp" hidden>Pictures: drag across the page to box one, drag a box to move it or its corner to resize it, × to remove it. What's in the boxes goes in the book as pictures.</p>
             <p class="page-note" id="pageNote" hidden></p>
             <details class="field page-text-box" id="textPart">
               <summary>Text on this page</summary>
@@ -2778,7 +2775,7 @@
   // How to choose the chapters when the Daftar Isi wasn't found: its page picked in
   // the page editor (scanned books), or the chapters made one by one.
   const pickHint = b => (b.scan && b.scan.pages.size
-    ? 'If it has one, open its page in Pages and click Use as the Daftar Isi, or choose the chapters yourself below.'
+    ? 'You can choose the chapters yourself below, or in Pages with Start a chapter here.'
     : 'You can choose the chapters yourself below.');
 
   // Make the chapters from the Daftar Isi on `pages` (page numbers of the PDF), from
@@ -2824,7 +2821,7 @@
   function chapterStarts(b) {
     const list = wanted(b, 'chapterStarts');
     if (list) return list.map(c => ({ ...c }));
-    return b.meta.chapterList.filter(c => !c.opening && c.page).map(c => ({ page: c.page, title: c.title }));
+    return b.meta.chapterList.filter(c => !c.opening && c.page).map(c => ({ page: c.page, title: c.title, found: true }));
   }
   function setChapters(b, list, said) {
     setChange(b, 'chapterStarts', list);
@@ -2838,6 +2835,7 @@
     const c = list.find(x => x.page === page && !x.drop);
     if (!c || !title.trim() || c.title === title.trim()) return renderContents();
     c.title = title.trim();
+    delete c.found; // named by the user
     setChapters(b, list, `The chapter on page ${page} will be “${c.title}”.`);
   }
   // A chapter removed: its pages join the chapter before, and its heading is text there
@@ -2846,15 +2844,23 @@
     const list = chapterStarts(b);
     const c = list.find(x => x.page === page && !x.drop);
     if (!c) return;
-    if (list.filter(x => !x.drop).length < 2) return showStatus('A book needs a chapter. Add another one first, or use the chapters found.', { error: true });
+    if (list.filter(x => !x.drop).length < 2) return showStatus('A book needs a chapter. Add another one first.', { error: true });
     c.drop = true;
     setChapters(b, list, `“${c.title || `Page ${page}`}” will no longer be a chapter: its pages join the one before it, its heading as text.`);
+  }
+  // A heading inside a chapter (a section in the contents) removed: it's text of its
+  // chapter, as the chapters removed are (`drop`, named as it is, marked `section`).
+  function removeSection(b, page, title) {
+    const list = chapterStarts(b);
+    if (list.some(c => c.drop && c.page === page && c.title === title)) return;
+    list.push({ page, title, drop: true, section: true });
+    setChapters(b, list, `“${title}” will no longer be in the contents: it stays in the book as text.`);
   }
   // A chapter starting on `page`, named `title` (empty: from the top of the page).
   function addChapter(b, page, title = '') {
     const last = b.meta.pages;
     if (!Number.isInteger(page) || page < 1 || page > last) return showStatus(`Give the number of the PDF page to add, from 1 to ${last}.`, { error: true });
-    const list = chapterStarts(b).filter(c => !(c.page === page && c.drop)); // one removed comes back
+    const list = chapterStarts(b).filter(c => !(c.page === page && c.drop && !c.section)); // one removed comes back
     if (list.some(c => c.page === page)) return showStatus(`Page ${page} is in the contents already.`, { error: true });
     list.push({ page, title });
     list.sort((x, y) => x.page - y.page);
@@ -2869,7 +2875,7 @@
     if (!on) return;
     const waiting = hasChange(b, 'chapterStarts');
     const own = wanted(b, 'chapterStarts');
-    $('chaptersFound').hidden = !own;
+    $('chaptersFound').hidden = true; // not offered: the chapters are changed one by one
     $('chaptersNote').textContent = waiting
       ? (own ? 'These chapters go in the book in a moment.' : 'The chapters found go back in the book in a moment.')
       : 'Rename (✎) or remove (×) a chapter, or add a page to the contents.';
@@ -3033,7 +3039,10 @@
     const grid = $('scanGrid'), summary = $('scanSummary');
     let shown = null; // the book whose pages are listed
     let open = null; // the page open in the editor
-    let drawing = null; // boxes being drawn on the open page, or null
+    // The open page's pictures, changed on it and not yet saved: { b, n, boxes, dirty }
+    // (saved a moment after the last change, or when another page is opened)
+    let edit = null;
+    let saveTimer = null;
     let keepOpen = false; // Keep as picture's choices shown, in place of the page's tools
     let naming = false; // the name of the chapter starting on the open page being typed
     const cards = new Map(); // page → card
@@ -3047,8 +3056,8 @@
     const lowCount = b => (b.scan ? lowPages(b.scan).length : 0);
 
     function badge(r, p) {
-      if (p.own) return p.manual ? ['PDF text · edited', 'typed'] : ['PDF text', ''];
       if (p.picture) return [`kept as picture${p.pictureParts > 1 ? ` · ${p.pictureParts} parts` : ''}`, 'kept'];
+      if (p.own) return p.manual ? ['PDF text · edited', 'typed'] : ['PDF text', ''];
       if (p.manual) return ['typed by hand', 'typed'];
       if (p.confidence === null) return ['no text', ''];
       if (isPicture(r, p.confidence)) return [`mostly picture · ${p.confidence}%`, ''];
@@ -3090,7 +3099,7 @@
       // every page read at offerPicture or lower as a picture at once, or their text again
       const toKeep = keepable(r).length;
       const kept = keptAll(r).length;
-      $('keepAll').hidden = !toKeep || !r.done;
+      $('keepAll').hidden = true; // not offered: each page is kept as a picture on its own
       $('keepAll').textContent = `Keep ${toKeep === 1 ? 'the page' : `${toKeep} pages`} at ${r.offerPicture}% or lower as ${toKeep === 1 ? 'a picture' : 'pictures'}`;
       $('keepAll').disabled = r.busy;
       $('textAll').hidden = !kept || !r.done;
@@ -3223,8 +3232,8 @@
         open = n;
         renderCard(shown, before);
       }
+      saveEdit();
       open = n;
-      drawing = null;
       keepOpen = false;
       naming = false;
       renderCard(shown, n);
@@ -3249,7 +3258,10 @@
       if (!can) return;
       const here = chapterAt(b, open);
       const ready = b.scan.done && !b.scan.busy && !b.rebuilding;
-      $('startChapter').textContent = here ? 'Rename chapter' : 'Add to chapter';
+      $('startChapter').textContent = here ? 'Rename chapter' : 'Start a chapter here';
+      $('endChapter').hidden = !here || here.opening;
+      $('endChapter').disabled = !ready;
+      if (here) $('endChapter').title = `“${here.title}” will no longer be a chapter: its pages join the one before it. The pages stay in the book.`;
       $('startChapter').title = here ? `A chapter starts on this page: “${here.title}”. Change its name.` : 'Start a chapter on this page, with the name you type';
       $('startChapter').disabled = !ready;
       $('chapterNameSave').textContent = here ? 'Save' : 'Add';
@@ -3267,6 +3279,10 @@
       $('chapterName').value = here ? here.title.replace(/ \(title from the page\)$/, '') : (firstLine || '').trim().slice(0, 80);
       $('chapterName').focus();
       $('chapterName').select();
+    });
+    $('endChapter').addEventListener('click', () => {
+      if (shown === current && open !== null) removeChapter(shown, open);
+      renderBookTools(shown.scan.pages.get(open));
     });
     $('chapterNaming').addEventListener('submit', e => {
       e.preventDefault();
@@ -3308,7 +3324,7 @@
       $('pageTitle').textContent = p ? `Page ${open}` : 'Page';
       renderBookTools(p);
       if (!p) {
-        for (const id of ['boxButtons', 'keepPart', 'drawButtons', 'picturePart']) $(id).hidden = true;
+        for (const id of ['boxButtons', 'keepPart', 'picturePart']) $(id).hidden = true;
         return;
       }
       const [text, kind] = badge(r, p);
@@ -3324,35 +3340,29 @@
       const img = $('pageImg');
       showScan(img, b, open);
       img.alt = `Page ${open}`;
-      sheet.classList.toggle('box-page', !!drawing);
-      sheet.querySelectorAll('.pic-box').forEach(el => el.remove());
-      if (drawing) {
-        drawing.forEach((box, i) => {
-          const el = boxElement(box, true);
-          el.dataset.i = i;
-          el.innerHTML = `<button type="button" class="remove" aria-label="Remove picture ${i + 1}">×</button><span class="grip"></span>`;
-          sheet.append(el);
-        });
-      } else if (!p.picture) {
-        for (const box of p.boxes || []) sheet.append(boxElement(box, p.drawn));
-      }
+      // its pictures, boxed on it: drawn, moved, resized and removed right there
       const ready = r.done && !r.busy;
       const waitTitle = r.done ? '' : 'Available when the conversion has finished';
-      $('drawHelp').hidden = !drawing;
-      $('boxButtons').hidden = !!drawing || p.picture || keepOpen;
-      $('drawButtons').hidden = !drawing;
-      $('clearBoxes').disabled = !drawing || !drawing.length;
-      $('textPart').hidden = p.picture || !!drawing;
+      const boxes = boxesShown(p);
+      sheet.classList.toggle('box-page', !p.picture && ready);
+      sheet.querySelectorAll('.pic-box').forEach(el => el.remove());
+      if (!p.picture) {
+        boxes.forEach((box, i) => {
+          const el = boxElement(box, p.drawn || !!edit);
+          el.dataset.i = i;
+          if (ready) el.innerHTML = `<button type="button" class="remove" aria-label="Remove picture ${i + 1}">×</button><span class="grip"></span>`;
+          sheet.append(el);
+        });
+      }
+      $('drawHelp').hidden = p.picture || !r.done;
+      $('boxButtons').hidden = p.picture || keepOpen;
+      $('textPart').hidden = p.picture;
       $('picturePart').hidden = !p.picture;
-      $('keepPart').hidden = p.picture || !!drawing || !keepOpen;
+      $('keepPart').hidden = p.picture || !keepOpen;
       $('keepToggle').setAttribute('aria-expanded', String(keepOpen));
       if (fresh || document.activeElement !== $('pageText')) $('pageText').value = p.text || '';
       $('readAgain').hidden = p.manual || p.own;
-      for (const id of ['drawBoxes', 'foundBoxes', 'keepToggle']) if (p.own) $(id).hidden = true;
-      if (!p.own) {
-        $('drawBoxes').hidden = $('keepToggle').hidden = false;
-        $('foundBoxes').hidden = !p.drawn;
-      }
+      $('foundBoxes').hidden = !p.drawn;
       // its text, to fix: a page with its own text in the PDF too
       $('textHelp').textContent = p.own
         ? 'An empty line between paragraphs. The pictures stay between the paragraphs they were between.'
@@ -3361,7 +3371,7 @@
         btn.disabled = !ready;
         btn.title = waitTitle;
       }
-      if (drawing) $('clearBoxes').disabled = !ready || !drawing.length;
+      $('clearBoxes').hidden = !boxes.length;
       const asked = wanted(b, 'contentsPages');
       const isContents = (asked === null ? tocInUse(b) : asked).includes(open);
       $('useAsContents').textContent = isContents ? 'Used as the Daftar Isi' : 'Use as the Daftar Isi';
@@ -3392,16 +3402,15 @@
     window.addEventListener('resize', () => requestAnimationFrame(fitScan));
 
     // A change to the open page: the server's answer kept with the page, its card and the editor redrawn.
-    async function change(button, busyText, call, after) {
-      const b = shown;
+    async function change(button, busyText, call, after, { b = shown, n = open } = {}) {
       const r = b.scan;
-      const n = open;
       const p = r.pages.get(n);
-      const label = button.textContent;
+      const label = button ? button.textContent : '';
       r.busy = true;
-      renderEditor();
+      if (b === shown) renderEditor();
       updateCounts(b);
-      button.innerHTML = `<span class="spinner" aria-hidden="true"></span>${busyText}`;
+      if (button) button.innerHTML = `<span class="spinner" aria-hidden="true"></span>${busyText}`;
+      else showStatus(busyText, { busy: true });
       try {
         const res = await call(b.id, n);
         r.pending = res.pendingPages;
@@ -3411,10 +3420,12 @@
         p.note = { bad: true, text: err.message || 'Could not change the page.' };
       }
       r.busy = false;
-      button.textContent = label;
+      if (button) button.textContent = label;
+      else showStatus(p.note ? p.note.text : '', p.note && p.note.bad ? { error: true } : {});
       renderCard(b, n);
       if (b === shown && n === open) renderEditor(true);
       updateCounts(b);
+      if (edit && edit.b === b && edit.dirty) scheduleSave(); // changed again meanwhile
     }
 
     $('saveText').addEventListener('click', e => {
@@ -3447,22 +3458,39 @@
       });
     });
 
-    // Draw boxes around the pictures on the open page, starting from the ones found
-    // (or drawn before): drag across the page for a new box, drag a box to move it or
-    // its corner to resize it, × to remove it. What's in the boxes goes in the book
-    // as pictures, the text outside them stays text.
-    $('drawBoxes').addEventListener('click', () => {
-      const p = shown.scan.pages.get(open);
-      drawing = (p.boxes || []).map(box => ({ ...box }));
-      renderEditor();
-    });
-    $('cancelBoxes').addEventListener('click', () => {
-      drawing = null;
-      renderEditor();
-    });
+    // The pictures on the open page are boxed on it, found or drawn before, and changed
+    // right there: drag across the page for a new box, drag a box to move it or its
+    // corner to resize it, × to remove it. What's in the boxes goes in the book as
+    // pictures, the text outside them stays text. Saved a moment after the last change.
+    const boxesShown = p => (edit && edit.b === shown && edit.n === open ? edit.boxes : p.boxes || []);
+    function editBoxes(p) {
+      if (!edit || edit.b !== shown || edit.n !== open) {
+        saveEdit();
+        edit = { b: shown, n: open, boxes: (p.boxes || []).map(box => ({ ...box })), dirty: false };
+      }
+      return edit.boxes;
+    }
+    function scheduleSave() {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(saveEdit, 900);
+    }
+    function saveEdit() {
+      clearTimeout(saveTimer);
+      if (!edit) return;
+      if (!edit.dirty) {
+        edit = null;
+        return;
+      }
+      if (edit.b.scan.busy || drag) return scheduleSave();
+      const { b, n, boxes } = edit;
+      edit = null;
+      change(null, boxes.length ? 'Saving the pictures…' : 'Saving…', (id, k) => api.setBoxes(id, k, boxes), savedBoxes, { b, n });
+    }
     $('clearBoxes').addEventListener('click', () => {
-      drawing.length = 0;
-      renderEditor();
+      const p = shown.scan.pages.get(open);
+      editBoxes(p).length = 0;
+      edit.dirty = true;
+      saveEdit();
     });
     const savedBoxes = (p, res) => {
       const count = res.boxes?.length;
@@ -3474,16 +3502,14 @@
         text: !res.drawn
           ? 'The pictures found on the page will be used again. They go in the book in a moment.'
           : count
-            ? `${count === 1 ? 'The picture in the box' : `The ${count} pictures in the boxes`} will go in the book, and the text around ${count === 1 ? 'it' : 'them'} was read again without ${count === 1 ? 'it' : 'them'}. ${count === 1 ? 'It goes' : 'They go'} in the book in a moment.`
+            ? `${count === 1 ? 'The picture in the box' : `The ${count} pictures in the boxes`} will go in the book${res.text === undefined ? '' : `, and the text around ${count === 1 ? 'it' : 'them'} was read again without ${count === 1 ? 'it' : 'them'}`}. ${count === 1 ? 'It goes' : 'They go'} in the book in a moment.`
             : 'The whole page will be text, with no pictures. It goes in the book in a moment.',
       };
     };
-    $('saveBoxes').addEventListener('click', e => {
-      const boxes = drawing;
-      drawing = null;
-      change(e.currentTarget, boxes.length ? 'Reading the text around them…' : 'Saving…', (id, n) => api.setBoxes(id, n, boxes), savedBoxes);
+    $('foundBoxes').addEventListener('click', e => {
+      if (edit && edit.b === shown && edit.n === open) edit = null; // the found ones instead
+      change(e.currentTarget, 'Saving…', (id, n) => api.setBoxes(id, n, null), savedBoxes);
     });
-    $('foundBoxes').addEventListener('click', e => change(e.currentTarget, 'Saving…', (id, n) => api.setBoxes(id, n, null), savedBoxes));
 
     const sheet = $('pageScan');
     const clamp = (v, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
@@ -3493,20 +3519,23 @@
       const rect = sheet.getBoundingClientRect();
       return { x: clamp((e.clientX - rect.left) / rect.width), y: clamp((e.clientY - rect.top) / rect.height) };
     };
+    const openPageNow = () => (shown && shown.scan && open !== null ? shown.scan.pages.get(open) : null);
     sheet.addEventListener('pointerdown', e => {
-      if (!drawing || e.button !== 0 || e.target.closest('.remove')) return;
+      const p = openPageNow();
+      if (!p || p.picture || !sheet.classList.contains('box-page') || e.button !== 0 || e.target.closest('.remove')) return;
       e.preventDefault();
+      const boxes = editBoxes(p);
       const start = at(e);
       const el = e.target.closest('.pic-box');
-      const i = el ? Number(el.dataset.i) : drawing.push({ x: start.x, y: start.y, w: 0, h: 0 }) - 1;
+      const i = el ? Number(el.dataset.i) : boxes.push({ x: start.x, y: start.y, w: 0, h: 0 }) - 1;
       const mode = !el ? 'new' : e.target.classList.contains('grip') ? 'size' : 'move';
       if (!el) renderEditor();
-      drag = { i, start, from: { ...drawing[i] }, mode, el: sheet.querySelector(`.pic-box[data-i="${i}"]`) };
+      drag = { i, start, from: { ...boxes[i] }, mode, el: sheet.querySelector(`.pic-box[data-i="${i}"]`) };
       sheet.setPointerCapture(e.pointerId);
     });
     sheet.addEventListener('pointermove', e => {
       if (!drag) return;
-      const pt = at(e), box = drawing[drag.i], f = drag.from, st = drag.start;
+      const pt = at(e), box = edit.boxes[drag.i], f = drag.from, st = drag.start;
       if (drag.mode === 'new') {
         Object.assign(box, { x: Math.min(pt.x, st.x), y: Math.min(pt.y, st.y), w: Math.abs(pt.x - st.x), h: Math.abs(pt.y - st.y) });
       } else if (drag.mode === 'size') {
@@ -3518,18 +3547,25 @@
     });
     const endDrag = () => {
       if (!drag) return;
-      const box = drawing[drag.i];
-      if (box.w < MIN || box.h < MIN) drawing.splice(drag.i, 1);
+      const box = edit.boxes[drag.i], f = drag.from;
+      const tiny = box.w < MIN || box.h < MIN;
+      if (tiny) edit.boxes.splice(drag.i, 1);
+      // a box made, moved or resized (not a click that left it as it was)
+      if (drag.mode === 'new' ? !tiny : ['x', 'y', 'w', 'h'].some(k => box[k] !== f[k])) edit.dirty = true;
       drag = null;
       renderEditor();
+      if (edit.dirty) scheduleSave();
     };
     sheet.addEventListener('pointerup', endDrag);
     sheet.addEventListener('pointercancel', endDrag);
     sheet.addEventListener('click', e => {
       const remove = e.target.closest('.remove');
-      if (!remove || !drawing) return;
-      drawing.splice(Number(remove.parentElement.dataset.i), 1);
+      const p = openPageNow();
+      if (!remove || !p) return;
+      editBoxes(p).splice(Number(remove.parentElement.dataset.i), 1);
+      edit.dirty = true;
       renderEditor();
+      scheduleSave();
     });
 
     // the book was built again with its changed pages: none are waiting any more
@@ -3691,7 +3727,8 @@
         b.scan.total = meta.scannedPages || b.scan.total;
         for (const [n, text] of Object.entries(meta.pdfPages || {})) {
           if (b.scan.pages.has(Number(n))) continue;
-          b.scan.pages.set(Number(n), { own: true, confidence: null, text, boxes: [], drawn: false, manual: false, picture: false, pictureParts: 1 });
+          const parts = (meta.ownPictures || {})[n];
+          b.scan.pages.set(Number(n), { own: true, confidence: null, text, boxes: [], drawn: false, manual: false, picture: !!parts, pictureParts: parts || 1 });
         }
         if (b === shown) for (const n of b.scan.pages.keys()) renderCard(b, n);
         if (b === current) showDrawer();
@@ -3715,8 +3752,8 @@
       // list the book's pages
       show(b) {
         shown = b;
+        saveEdit();
         open = null;
-        drawing = null;
         cards.clear();
         grid.innerHTML = '';
         const has = !!(b && b.scan && b.scan.pages.size);
@@ -4364,6 +4401,24 @@
       if (entry.item) {
         go.addEventListener('click', () => goTo(entry.item.target));
         entry.item.button = go;
+      }
+      // a heading inside a chapter: × makes it text (its id names its page, see index.js chapterFiles)
+      const sectionPage = editable && !waiting && entry.depth && entry.item ? Number((/-p(\d+)$/.exec(entry.item.target || '') || [])[1]) : 0;
+      if (sectionPage) {
+        const line = document.createElement('div');
+        line.className = 'ch-row';
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'ch-edit';
+        remove.textContent = '×';
+        remove.title = `Remove “${entry.label}” from the contents (it stays in the book as text)`;
+        remove.setAttribute('aria-label', remove.title);
+        remove.addEventListener('click', () => removeSection(book, sectionPage, entry.label));
+        const gap = document.createElement('span');
+        gap.className = 'ch-edit';
+        line.append(go, gap, remove);
+        nav.append(line);
+        continue;
       }
       if (!row || row.opening || !editable) {
         nav.append(go);
