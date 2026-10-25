@@ -3047,7 +3047,7 @@
     const lowCount = b => (b.scan ? lowPages(b.scan).length : 0);
 
     function badge(r, p) {
-      if (p.own) return ['PDF text', ''];
+      if (p.own) return p.manual ? ['PDF text · edited', 'typed'] : ['PDF text', ''];
       if (p.picture) return [`kept as picture${p.pictureParts > 1 ? ` · ${p.pictureParts} parts` : ''}`, 'kept'];
       if (p.manual) return ['typed by hand', 'typed'];
       if (p.confidence === null) return ['no text', ''];
@@ -3170,7 +3170,7 @@
         grid.insertBefore(card, after || null);
       }
       card.classList.toggle('low', !p.picture && !p.manual && isLow(r, p.confidence));
-      card.classList.toggle('checkable', p.manual || p.picture || canBePicture(r, p.confidence));
+      card.classList.toggle('checkable', !p.own && (p.manual || p.picture || canBePicture(r, p.confidence)));
       card.classList.toggle('has-pictures', hasPictures(p));
       card.classList.toggle('current', n === open);
       card.setAttribute('aria-current', String(n === open));
@@ -3353,11 +3353,9 @@
         $('drawBoxes').hidden = $('keepToggle').hidden = false;
         $('foundBoxes').hidden = !p.drawn;
       }
-      // its text as the PDF has it, to read
-      $('pageText').readOnly = !!p.own;
-      $('saveText').hidden = !!p.own;
+      // its text, to fix: a page with its own text in the PDF too
       $('textHelp').textContent = p.own
-        ? 'This page has its own text in the PDF: it goes in the book as it is.'
+        ? 'An empty line between paragraphs. The pictures stay between the paragraphs they were between.'
         : 'An empty line between paragraphs. The pictures in the boxes go above or between them, where they are on the page.';
       for (const btn of $('pageEditor').querySelectorAll('.col-head .page-tools button, #pageBody button')) {
         btn.disabled = !ready;
@@ -3620,8 +3618,8 @@
 
     return {
       lowCount,
-      // a page of the book shown that was read with OCR (its text can be fixed)
-      has: n => !!(shown && shown.scan && shown.scan.pages.has(n) && !shown.scan.pages.get(n).own),
+      // a page of the book shown (its text can be fixed)
+      has: n => !!(shown && shown.scan && shown.scan.pages.has(n)),
       // The paragraph `was` of page n, typed into on the book as `now`: its page's text
       // (and the next's) saved with it. Resolves false when it couldn't be matched.
       async fixText(n, was, now) {

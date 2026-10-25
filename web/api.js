@@ -2,7 +2,7 @@
 // server.js does for the app, done here without a server. public/index.html uses
 // it when this file is loaded (window.convertPdfApi); web/build.js bundles it.
 
-const { analyzePdf, newBookCache, buildEpub, readerScreen, contentsPagesFrom, chapterStartsFrom, looksFrom } = require('../index');
+const { analyzePdf, typedParagraphs, newBookCache, buildEpub, readerScreen, contentsPagesFrom, chapterStartsFrom, looksFrom } = require('../index');
 const { openPdf } = require('../pdf');
 const { imageCover, titleCover, cleanBoxes } = require('../figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('../xtc');
@@ -222,8 +222,15 @@ async function retry(id, n) {
 async function setText(id, n, text) {
   const s = session(id);
   const current = s.book?.ocr?.pages.get(n);
-  if (!current) throw new Error('That page was not read with OCR.');
+  const own = !current && s.book?.pdfTexts?.[n] !== undefined; // a page with its own text
+  if (!current && !own) throw new Error('That page is not in the book.');
   if (s.busy) throw new Error('Busy updating the book. Try again in a moment.');
+  if (own) {
+    const typed = typedParagraphs(text).join('\n\n');
+    s.book.textEdits = { ...s.book.textEdits, [n]: typed };
+    s.improved.add(n);
+    return { text: typed, pendingPages: s.improved.size };
+  }
   const typed = manualReading(text, current);
   s.book.ocr.pages.set(n, { ...typed, ...(current.boxes && { boxes: current.boxes }) });
   s.improved.add(n);
@@ -288,7 +295,7 @@ async function rebuild(id, { onProgress = () => {} } = {}, changes = {}) {
   }
   s.busy = true;
   try {
-    const book = await analyzePdf(s.pdf, { ...options, onProgress, ocr: s.book.ocr, cache: s.cache });
+    const book = await analyzePdf(s.pdf, { ...options, onProgress, ocr: s.book.ocr, ...(s.book.textEdits && { textEdits: s.book.textEdits }), cache: s.cache });
     Object.assign(book, { fileName: s.book.fileName, title: s.book.title, author: s.book.author });
     s.book = book;
     s.options = options;

@@ -5,7 +5,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { analyzePdf, newBookCache, buildEpub, openPdf, readerScreen, contentsPagesFrom, chapterStartsFrom, looksFrom } = require('./index');
+const { analyzePdf, typedParagraphs, newBookCache, buildEpub, openPdf, readerScreen, contentsPagesFrom, chapterStartsFrom, looksFrom } = require('./index');
 const { imageCover, titleCover, cleanBoxes } = require('./figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('./xtc');
 const { retryPage, pageThumbnail, manualReading, readAroundBoxes, readingWithBoxes, packReadings, unpackReadings } = require('./ocr');
@@ -396,13 +396,21 @@ async function handleRetry(res, session, n) {
 // the book is rebuilt. A blank line separates paragraphs.
 async function handleText(req, res, session, n) {
   const current = session.book?.ocr?.pages.get(n);
-  if (!current) return sendError(res, 404, 'That page was not read with OCR.');
+  const own = !current && session.book?.pdfTexts?.[n] !== undefined; // a page with its own text
+  if (!current && !own) return sendError(res, 404, 'That page is not in the book.');
   if (session.busy) return sendError(res, 409, 'Busy updating the book. Try again in a moment.');
   let text;
   try {
     text = (await readBody(req, MAX_TEXT_BYTES)).toString('utf8');
   } catch (err) {
     return sendError(res, 400, err.message);
+  }
+  if (own) {
+    const typed = typedParagraphs(text).join('\n\n');
+    session.book.textEdits = { ...session.book.textEdits, [n]: typed };
+    session.improved.add(n);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ text: typed, pendingPages: session.improved.size }));
   }
   const typed = manualReading(text, current);
   session.book.ocr.pages.set(n, { ...typed, ...(current.boxes && { boxes: current.boxes }) });
@@ -497,7 +505,7 @@ async function handleRebuild(req, res, session) {
   session.busy = true;
   try {
     await streamJob(res, async (send, onProgress) => {
-      const book = await analyzePdf(session.pdf, { ...options, onProgress, ocr: session.book.ocr, cache: session.cache });
+      const book = await analyzePdf(session.pdf, { ...options, onProgress, ocr: session.book.ocr, ...(session.book.textEdits && { textEdits: session.book.textEdits }), cache: session.cache });
       // the same PDF, so the title and author stay as they are (maybe changed by the user)
       Object.assign(book, { fileName: session.book.fileName, title: session.book.title, author: session.book.author });
       session.book = book;

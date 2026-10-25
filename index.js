@@ -130,9 +130,57 @@ function besidePicture(lines, fig) {
   );
 }
 
+// A page with its own text, typed over by the user (paragraphs with an empty line
+// between them): one line per paragraph, each starting a block (`paraStart`). Each is
+// matched, in order, to the page's paragraph it shares most of its words with: it goes
+// where that one started, at its size (a heading stays one); the others go between
+// their neighbours, at the body size. So the pictures stay between the same paragraphs.
+function typedLines(text, orig, bodySize) {
+  const paras = typedParagraphs(text);
+  const body = orig.filter(l => !l.image);
+  const blocks = linesToBlocks(orig, bodySize, true).filter(b => !b.image);
+  const left = body.length ? Math.min(...body.map(l => l.x)) : 72;
+  const right = body.length ? Math.max(...body.map(l => l.xEnd)) : 520;
+  const top = body.length ? Math.max(...body.map(l => l.y)) + bodySize : 760;
+  const bottom = body.length ? Math.min(...body.map(l => l.y)) - bodySize : 40;
+  const words = t => t.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const alike = (a, b) => {
+    const x = words(a), y = new Set(words(b));
+    if (!x.length || !y.size) return 0;
+    return x.filter(w => y.has(w)).length / Math.max(x.length, y.size);
+  };
+  let next = 0;
+  const lines = paras.map(p => {
+    // the closest of the next few paragraphs of the page, if it's alike enough
+    let k = -1, best = 0.5;
+    for (let i = next; i < Math.min(blocks.length, next + 4); i++) {
+      const score = blocks[i].text === p ? 1.01 : alike(p, blocks[i].text);
+      if (score > best) [k, best] = [i, score];
+    }
+    const from = k >= 0 ? blocks[k] : null;
+    if (from) next = k + 1;
+    return { text: p, x: left, xEnd: right, y: from ? from.y : null, size: from ? from.size : bodySize, paraStart: true };
+  });
+  // the others just after the one before them (what follows it on the page, a picture
+  // say, comes after them), or at the top of the text
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].y !== null) continue;
+    let j = i;
+    while (j < lines.length && lines[j].y === null) j++;
+    const above = i > 0 ? lines[i - 1].y : top;
+    const below = j < lines.length ? lines[j].y : bottom;
+    const step = Math.min(0.01, (above - below) / (j - i + 1));
+    for (let k = i; k < j; k++) lines[k].y = above - step * (k - i + 1);
+    i = j - 1;
+  }
+  return lines;
+}
+const typedParagraphs = text => String(text).replace(/\r/g, '')
+  .split(/\n\s*\n/).map(p => p.split('\n').map(line => line.trim()).filter(Boolean).join(' ')).filter(Boolean);
+
 // Group a page's lines into blocks: headings (text noticeably larger than the
 // body font) and paragraphs.
-function linesToBlocks(lines, bodySize) {
+function linesToBlocks(lines, bodySize, withY = false) {
   const headingMin = bodySize * 1.4;
   const isHeading = l => !l.image && l.size >= headingMin && l.text.length <= 120;
   const body = lines.filter(l => !l.image && !isHeading(l));
@@ -181,20 +229,20 @@ function linesToBlocks(lines, bodySize) {
       // large text that is neither words nor a chapter number is image noise
       if (letterCount(l.text) < 3 && !isNumberLike(l.text)) continue;
       const continues =
-        block && block.heading && !isNumberLike(block.text) && !isNumberLike(l.text) &&
+        block && block.heading && !l.paraStart && !isNumberLike(block.text) && !isNumberLike(l.text) &&
         Math.abs(block.size - l.size) <= 2 && prev && Math.abs(prev.y - l.y) < l.size * 2;
       if (continues) block.text += ' ' + l.text; // heading wrapped onto a second line
       else {
         flush();
-        block = { heading: true, text: l.text, size: l.size };
+        block = { heading: true, text: l.text, size: l.size, ...(withY && { y: l.y }) };
       }
     } else {
       const bigGap = !afterImage && prev && normalGap && Math.abs(prev.y - l.y) > normalGap * 1.5;
       const indented = l.x > (l.colLeft ?? leftEdge) + 6;
       const prevShort = prev && prev.xEnd < (prev.colRight ?? rightEdge) - 25 && /[.!?:"”’)]$/.test(prev.text);
-      if (block && (block.heading || bigGap || indented || prevShort)) flush();
+      if (block && (block.heading || bigGap || indented || prevShort || l.paraStart)) flush();
       afterImage = false;
-      if (!block) block = { heading: false, text: l.text, size: l.size };
+      if (!block) block = { heading: false, text: l.text, size: l.size, ...(withY && { y: l.y }) };
       else if (block.text.endsWith('-')) block.text = block.text.slice(0, -1) + l.text; // join hyphenated words
       else block.text += ' ' + l.text;
     }
@@ -223,7 +271,7 @@ function linesToBlocks(lines, bodySize) {
 // same PDF: its pages' text and the pictures found on them are kept in it, so a rebuild
 // only draws again the pages whose pictures could come out otherwise.
 // looks: how the user turned and sized pictures (see looksFrom), by "page:number".
-async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: previous, onOcrPage, screen, firstPageCover = false, contentsPages, cache, looks = {} } = {}) {
+async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: previous, onOcrPage, screen, firstPageCover = false, contentsPages, cache, looks = {}, textEdits = {} } = {}) {
   const doc = await openPdf(buffer);
 
   let meta = {};
@@ -247,11 +295,6 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   const scanned = [];
   pageLines.forEach((lines, i) => {
     if (letterCount(lines.map(l => l.text).join('')) < 20) scanned.push(i + 1);
-  });
-  // the text of the other pages, as the PDF has it (page → its lines), for showing them
-  const pdfTexts = {};
-  pageLines.forEach((lines, i) => {
-    if (!scanned.includes(i + 1)) pdfTexts[i + 1] = lines.map(l => l.text).join('\n');
   });
   // every line found on the page, even ones left out of the text, for the page layout
   const layoutLines = [...pageLines];
@@ -291,6 +334,24 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   const bodySize = cache?.layout?.bodySize ?? ([...sizeChars.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 10);
   const layout = cache?.layout ? layoutFrom(cache.layout) : measureLayout(pageLines, bodySize);
   if (cache && !cache.layout) cache.layout = layoutMeasures(layout);
+  // pages with their own text, typed over by the user: their text as typed, in place of
+  // the PDF's; their pictures are still found from the page's own lines (`ownLines`)
+  const ownLines = new Map();
+  for (const [key, text] of Object.entries(textEdits)) {
+    const n = Number(key);
+    if (!Number.isInteger(n) || n < 1 || n > pageLines.length || scanned.includes(n)) continue;
+    ownLines.set(n, pageLines[n - 1]);
+    layoutLines[n - 1] = pageLines[n - 1] = typedLines(text, pageLines[n - 1], bodySize);
+  }
+  const linesOf = n => ownLines.get(n) || pageLines[n - 1];
+  // the text of the pages with their own text, as paragraphs (as typed, if it was), for
+  // showing and typing over them
+  const pdfTexts = {};
+  pageLines.forEach((lines, i) => {
+    if (scanned.includes(i + 1)) return;
+    pdfTexts[i + 1] = ownLines.has(i + 1) ? typedParagraphs(textEdits[i + 1]).join('\n\n')
+      : linesToBlocks(lines, bodySize).filter(b => !b.image).map(b => b.text).join('\n\n');
+  });
   // Work on a page done before with the same inputs (see newBookCache), else done now
   // and kept: `slot` names the work, one kept result each.
   const measures = JSON.stringify([layoutMeasures(layout), screen]);
@@ -319,7 +380,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   // those are its pictures, instead of the ones found
   const drawn = n => ocr?.pages.get(n)?.boxes;
   const mayHavePictures = n =>
-    drawn(n) ? drawn(n).length > 0 : readWords.has(n) || findGaps(pageLines[n - 1], layout, bodySize).length > 0;
+    drawn(n) ? drawn(n).length > 0 : readWords.has(n) || findGaps(linesOf(n), layout, bodySize).length > 0;
   const hasCoverCandidate = pageLines.length > 0 && pageLines[0].filter(layout.isLong).length < 5;
   const coverChecked = pageLines.length > 0 && (firstPageCover || hasCoverCandidate);
   const firstChecked = coverChecked ? 2 : 1;
@@ -378,7 +439,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
         ? { n, find: 'drawn', boxes: drawn(n) }
         : readWords.has(n)
           ? { n, find: 'words', lines: layoutLines[n - 1] }
-          : { n, find: 'gaps', lines: pageLines[n - 1], gaps: findGaps(pageLines[n - 1], layout, bodySize) }),
+          : { n, find: 'gaps', lines: linesOf(n), gaps: findGaps(linesOf(n), layout, bodySize) }),
       ...(Object.keys(turns).length && { turns }),
     };
   });
@@ -423,7 +484,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
       images.push({ name, data: fig.data, page: n, pic: j, ...(size && { size }), ...(fig.split && { split: fig.split }) });
       // text shown inside the cropped picture is dropped; anything outside it stays.
       // Text typed in by hand all stays: it isn't where it was on the page
-      const lines = ocr?.pages.get(n)?.manual
+      const lines = ocr?.pages.get(n)?.manual || ownLines.has(n)
         ? [...pageLines[n - 1]]
         : readWords.has(n)
         ? besidePicture(pageLines[n - 1].map(l => wordsOutside(l, fig)).filter(Boolean), fig)
@@ -1076,6 +1137,7 @@ async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', device 
     ocr: extracted.ocr,
     pictureBoxes: extracted.pictureBoxes,
     pdfTexts: extracted.pdfTexts,
+    ...(ocrOptions.textEdits && { textEdits: ocrOptions.textEdits }), // the pages with their own text, typed over
     device, // the e-reader its pictures are drawn for
     stats: { pages: pages.length, paragraphs, images: extracted.images.length, fullPagePictures: extracted.images.filter(i => i.split).length },
   };
@@ -1193,7 +1255,7 @@ async function writeWebPages(opts) {
   if (!made) process.exitCode = 1;
 }
 
-module.exports = { convertPdfToEpub, analyzePdf, newBookCache, looksFrom, buildEpub, extractPdf, openPdf, cleanPages, buildChapters, readerScreen, contentsPagesFrom, chapterStartsFrom };
+module.exports = { convertPdfToEpub, typedParagraphs, analyzePdf, newBookCache, looksFrom, buildEpub, extractPdf, openPdf, cleanPages, buildChapters, readerScreen, contentsPagesFrom, chapterStartsFrom };
 
 if (require.main === module) {
   main().catch(err => {
