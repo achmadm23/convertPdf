@@ -711,8 +711,12 @@ function chaptersFromContents(pages, placed) {
 // title takes the headings at the top of its page (or the start of its text). The
 // headings at the top of its page that are in its title are its printed title, so
 // they're left out. Null when none of the pages are in the book.
+// A chapter removed by the user (`drop`) isn't one: the heading it started with is
+// text of the chapter before it, not a heading of its own (nor in the contents).
 function chaptersAtStarts(pages, starts) {
-  const list = starts.map(c => ({ ...c, page: c.page - 1 })).filter(c => c.page < pages.length).sort((a, b) => a.page - b.page);
+  const dropped = new Map(starts.filter(c => c.drop).map(c => [c.page - 1, c.title]));
+  if (dropped.size) pages = pages.map((page, i) => (dropped.has(i) ? plainHeading(page, dropped.get(i)) : page));
+  const list = starts.filter(c => !c.drop).map(c => ({ ...c, page: c.page - 1 })).filter(c => c.page < pages.length).sort((a, b) => a.page - b.page);
   if (!list.length) return null;
   const chapters = [];
   const opening = pages.slice(0, list[0].page).flat();
@@ -733,6 +737,20 @@ function chaptersAtStarts(pages, starts) {
   return chapters;
 }
 
+// A page whose chapter was removed: the headings that were its title (all their words
+// in it), or else the headings at its top (up to 3), become plain text.
+function plainHeading(page, title = '') {
+  const inTitle = new Set(titleWords(title));
+  const named = page.filter(b => b.heading && !b.image && titleWords(b.text).length && titleWords(b.text).every(w => inTitle.has(w)));
+  const top = [];
+  for (const b of page) {
+    if (!b.heading || top.length === 3) break;
+    top.push(b);
+  }
+  const plain = new Set(named.length ? named : top);
+  return page.map(b => (plain.has(b) ? { ...b, heading: false } : b));
+}
+
 // A page's title: the headings at its top, or the start of its first paragraph.
 function pageTitle(page) {
   const heads = [];
@@ -751,10 +769,11 @@ const MAX_CHAPTER_STARTS = 1000;
 // page, the first one kept, titles trimmed (empty: found on the page).
 function chapterStartsFrom(value) {
   const ok = Array.isArray(value) && value.length <= MAX_CHAPTER_STARTS &&
-    value.every(c => c && Number.isInteger(c.page) && c.page >= 1 && c.page <= 100000 && (c.title === undefined || typeof c.title === 'string'));
+    value.every(c => c && Number.isInteger(c.page) && c.page >= 1 && c.page <= 100000 && (c.title === undefined || typeof c.title === 'string') && (c.drop === undefined || typeof c.drop === 'boolean'));
   if (!ok) throw new Error(`The chapters could not be read (up to ${MAX_CHAPTER_STARTS}, each with a page number).`);
   const seen = new Set();
-  return value.filter(c => !seen.has(c.page) && seen.add(c.page)).map(c => ({ page: c.page, title: (c.title || '').replace(/\s+/g, ' ').trim().slice(0, 200) }));
+  return value.filter(c => !seen.has(c.page) && seen.add(c.page))
+    .map(c => ({ page: c.page, title: (c.title || '').replace(/\s+/g, ' ').trim().slice(0, 200), ...(c.drop && { drop: true }) }));
 }
 
 const MAX_CONTENTS_PAGES = 5;
@@ -1036,7 +1055,7 @@ async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', device 
     throw new Error('No text found, even with OCR. The PDF may contain only pictures.');
   }
   // the chapters chosen by the user come first; the Daftar Isi still leaves the book
-  const own = ocrOptions.chapterStarts?.length ? chaptersAtStarts(pages, ocrOptions.chapterStarts) : null;
+  const own = ocrOptions.chapterStarts?.some(c => !c.drop) ? chaptersAtStarts(pages, ocrOptions.chapterStarts) : null;
   return {
     title: title || extracted.title || name,
     author: author || extracted.author || 'Unknown',

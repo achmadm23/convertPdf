@@ -2295,7 +2295,8 @@
     }
     if (hasChange(b, 'chapterStarts')) {
       const c = b.next.chapterStarts;
-      list.push(c === null ? 'the chapters found again' : `your ${c.length} ${c.length === 1 ? 'chapter' : 'chapters'}`);
+      const kept = c && c.filter(x => !x.drop).length;
+      list.push(c === null ? 'the chapters found again' : `your ${kept} ${kept === 1 ? 'chapter' : 'chapters'}`);
     }
     if (changeKind(b) === 'reader') list.push(`the book drawn for the ${deviceName(b.settings.device)}`);
     if (hasChange(b, 'looks')) list.push('pictures turned or resized');
@@ -2814,10 +2815,11 @@
   // the chapters as they'll be: { title, page, opening } each, the Opening first if there is one
   function chapterRows(b) {
     const list = wanted(b, 'chapterStarts');
-    if (hasChange(b, 'chapterStarts') && list) return [...list].sort((x, y) => x.page - y.page).map(c => ({ title: c.title || `Page ${c.page} (title from the page)`, page: c.page, own: c }));
+    if (hasChange(b, 'chapterStarts') && list) return list.filter(c => !c.drop).sort((x, y) => x.page - y.page).map(c => ({ title: c.title || `Page ${c.page} (title from the page)`, page: c.page, own: c }));
     return b.meta.chapterList;
   }
   // the chapters to change: the list waiting, the user's own, or the ones the book has
+  // (with the ones removed, `drop`: their headings go in the book as text)
   function chapterStarts(b) {
     const list = wanted(b, 'chapterStarts');
     if (list) return list.map(c => ({ ...c }));
@@ -2832,21 +2834,26 @@
   }
   function renameChapter(b, page, title) {
     const list = chapterStarts(b);
-    const c = list.find(x => x.page === page);
+    const c = list.find(x => x.page === page && !x.drop);
     if (!c || !title.trim() || c.title === title.trim()) return renderContents();
     c.title = title.trim();
     setChapters(b, list, `The chapter on page ${page} will be “${c.title}”.`);
   }
+  // A chapter removed: its pages join the chapter before, and its heading is text there
+  // (not a section of that chapter): it's kept in the list as dropped (see index.js chaptersAtStarts).
   function removeChapter(b, page) {
-    const list = chapterStarts(b).filter(c => c.page !== page);
-    if (!list.length) return showStatus('A book needs a chapter. Add another one first, or use the chapters found.', { error: true });
-    setChapters(b, list, `The chapter on page ${page} will join the one before it.`);
+    const list = chapterStarts(b);
+    const c = list.find(x => x.page === page && !x.drop);
+    if (!c) return;
+    if (list.filter(x => !x.drop).length < 2) return showStatus('A book needs a chapter. Add another one first, or use the chapters found.', { error: true });
+    c.drop = true;
+    setChapters(b, list, `“${c.title || `Page ${page}`}” will no longer be a chapter: its pages join the one before it, its heading as text.`);
   }
   // A chapter starting on `page`, named `title` (empty: from the top of the page).
   function addChapter(b, page, title = '') {
     const last = b.meta.pages;
     if (!Number.isInteger(page) || page < 1 || page > last) return showStatus(`Give the number of the PDF page to add, from 1 to ${last}.`, { error: true });
-    const list = chapterStarts(b);
+    const list = chapterStarts(b).filter(c => !(c.page === page && c.drop)); // one removed comes back
     if (list.some(c => c.page === page)) return showStatus(`Page ${page} is in the contents already.`, { error: true });
     list.push({ page, title });
     list.sort((x, y) => x.page - y.page);
