@@ -343,6 +343,10 @@
   .page-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
   @media (max-width: 760px) { .page-cols { grid-template-columns: 1fr; } }
   .page-scan { position: relative; width: fit-content; max-width: 100%; margin: 0 auto; }
+  /* the page opened, until its picture is in: not the one before it, with this one's boxes */
+  .page-scan.loading { min-width: 200px; min-height: 280px; }
+  .page-scan.loading img, .page-scan.loading .pic-box { visibility: hidden; }
+  .page-scan.loading::after { content: 'Loading the page…'; position: absolute; inset: 0; display: grid; place-items: center; font-size: 14px; color: var(--muted); }
   /* --fit: the room below the scan's top on the screen (see fitScan) */
   .page-scan img { display: block; max-width: 100%; max-height: var(--fit, calc(100vh - 260px)); width: auto; height: auto; background: #fff; border: 1px solid var(--rule); border-radius: 4px; }
   .page-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
@@ -3200,7 +3204,9 @@
     }
 
     // A page's picture in an img: its scan, or (a page with its own text, on the website)
-    // drawn once its card comes into view (`card`) or it's opened.
+    // drawn once its card comes into view (`card`) or it's opened. A card's is fetched
+    // only once it's near the screen (the page opened isn't kept waiting behind them all);
+    // `shown` is called once the img has this page's picture in it (img.dataset.shown).
     const drawWhenSeen = 'IntersectionObserver' in window && new IntersectionObserver(entries => {
       for (const e of entries) {
         if (!e.isIntersecting) continue;
@@ -3208,16 +3214,33 @@
         e.target.draw();
       }
     }, { rootMargin: '200px' });
-    function showScan(img, b, n, card = null) {
+    function showScan(img, b, n, card = null, shown = null) {
+      const key = `${b.id}:${n}`;
+      img.dataset.key = key;
+      const ready = () => {
+        if (img.dataset.key !== key || img.dataset.shown === key) return;
+        img.dataset.shown = key;
+        if (shown) shown();
+      };
+      const put = src => {
+        if (img.getAttribute('src') === src) {
+          if (img.complete) ready();
+          return;
+        }
+        img.onload = img.onerror = ready; // a page with no picture isn't waited for forever either
+        img.src = src;
+      };
       const url = api.scanUrl(b.id, n);
       if (url || !api.pageThumb) {
-        if (img.getAttribute('src') !== url) img.src = url;
+        if (card) img.loading = 'lazy';
+        put(url);
         return;
       }
-      img.dataset.n = n;
       const draw = () => api.pageThumb(b.id, n).then(drawn => {
-        if (drawn && img.dataset.n === String(n)) img.src = drawn;
-      }).catch(() => {});
+        if (img.dataset.key !== key) return;
+        if (drawn) put(drawn);
+        else ready();
+      }).catch(ready);
       if (card && drawWhenSeen) {
         card.draw = draw;
         drawWhenSeen.observe(card);
@@ -3338,13 +3361,19 @@
       }
       const sheet = $('pageScan');
       const img = $('pageImg');
-      showScan(img, b, open);
+      // until this page's picture is in, the one before isn't shown with its boxes
+      const here = `${b.id}:${open}`;
+      showScan(img, b, open, null, () => {
+        if (img.dataset.key === here && sheet.classList.contains('loading')) renderEditor();
+      });
+      const loading = img.dataset.shown !== here;
+      sheet.classList.toggle('loading', loading);
       img.alt = `Page ${open}`;
       // its pictures, boxed on it: drawn, moved, resized and removed right there
       const ready = r.done && !r.busy;
       const waitTitle = r.done ? '' : 'Available when the conversion has finished';
       const boxes = boxesShown(p);
-      sheet.classList.toggle('box-page', !p.picture && ready);
+      sheet.classList.toggle('box-page', !p.picture && ready && !loading);
       sheet.querySelectorAll('.pic-box').forEach(el => el.remove());
       if (!p.picture) {
         boxes.forEach((box, i) => {
