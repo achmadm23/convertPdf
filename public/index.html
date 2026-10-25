@@ -2560,6 +2560,7 @@
       b.meta.author = r.author;
       b.savedMeta = null;
       updateRow(b);
+      if (b.kind === 'web') refreshThumb(b); // its cover has the title on it
       if (b === current) {
         $('paneTitle').textContent = bookTitle(b);
         showBookInfo();

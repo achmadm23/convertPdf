@@ -199,7 +199,7 @@ In the app (`npm start` or `ConvertPdf.exe`), choose **Web pages** at the top an
 - the book has the article's title, then the site, author and date, its text with its subheadings in the contents, and its link at the end
 - its pictures are drawn for your reader's screen in 4 shades of gray, in the text with their captions below them (or each on a page of its own)
 - menus, ads, share buttons, "Most read" boxes and "Read also" links are left out
-- the article's main picture is the cover, and is not repeated inside. You can choose another, as for a PDF
+- the cover is the article's main picture (if it has one) with the book's title and author under it, drawn for the reader's screen; the picture is not repeated inside. Changing the title or author in **Cover** draws it again; you can choose a picture of your own instead, as for a PDF
 - the book is marked with the article's language, for example Indonesian or English
 
 Each link becomes a book of its own, named after its article, and goes in the list of web page books, made one after another. Each book takes its own article's title, author and cover, which can be changed like a PDF's. A link that can't be read (a site that refuses, a page with no article) is marked in the list with the reason, with **Try again**, and the other links are still made into books.

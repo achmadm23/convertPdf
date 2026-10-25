@@ -472,7 +472,79 @@ async function imageCover(data, screen) {
   return screenImage(image, screen);
 }
 
+// A cover drawn for a book of web pages: its picture (the file's bytes, or null) at the
+// top, then its title and below it `by` (the author or site), on the reader's screen
+// (as big as its pictures can be, for a reader whose screen isn't known). The title is
+// as big as fits; with no picture it's set lower, under a rule.
+async function titleCover({ picture = null, title = '', by = '' }, screen) {
+  const width = screen.pictures ? screen.pictures.width : screen.width;
+  const height = screen.pictures ? screen.pictures.height : screen.height;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+  const margin = Math.round(width * 0.08);
+  const inner = width - 2 * margin;
+  let image = null;
+  if (picture) {
+    try {
+      image = await loadImage(picture);
+    } catch {} // not a picture that can be read: the title alone
+  }
+  let top = Math.round(height * 0.3);
+  if (image) {
+    // the picture across the top, up to 55% of the screen's height
+    const scale = Math.min(width / image.width, (height * 0.55) / image.height);
+    const w = Math.round(image.width * scale), h = Math.round(image.height * scale);
+    ctx.drawImage(image, Math.round((width - w) / 2), 0, w, h);
+    top = h + Math.round(height * 0.05);
+  } else {
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(margin, top - Math.round(height * 0.04), Math.round(inner * 0.25), Math.max(2, Math.round(height * 0.005)));
+  }
+  // the title: the biggest size at which it fits in up to 5 lines above the byline
+  const room = height - top - margin - (by ? Math.round(width * 0.09) : 0);
+  const lines = (text, size) => {
+    ctx.font = `bold ${size}px Georgia, "Times New Roman", serif`;
+    const out = [];
+    let line = '';
+    for (const word of text.split(/\s+/).filter(Boolean)) {
+      const next = line ? `${line} ${word}` : word;
+      if (line && ctx.measureText(next).width > inner) {
+        out.push(line);
+        line = word;
+      } else line = next;
+    }
+    if (line) out.push(line);
+    return out;
+  };
+  let size = Math.round(width * 0.11);
+  let set = lines(title, size);
+  while (size > Math.round(width * 0.045) && (set.length > 5 || set.length * size * 1.2 > room || set.some(l => ctx.measureText(l).width > inner))) {
+    size -= 2;
+    set = lines(title, size);
+  }
+  if (set.length > 5) set = [...set.slice(0, 4), set.slice(4).join(' ')];
+  ctx.font = `bold ${size}px Georgia, "Times New Roman", serif`;
+  ctx.fillStyle = '#000000';
+  ctx.textBaseline = 'top';
+  set.forEach((l, i) => {
+    let text = l;
+    while (ctx.measureText(text).width > inner && text.length > 1) text = text.slice(0, -2) + '…';
+    ctx.fillText(text, margin, top + i * size * 1.2);
+  });
+  if (by) {
+    let small = Math.round(width * 0.045);
+    ctx.font = `${small}px Georgia, "Times New Roman", serif`;
+    let text = by;
+    while (ctx.measureText(text).width > inner && text.length > 1) text = text.slice(0, -2) + '…';
+    ctx.fillStyle = '#444444';
+    ctx.fillText(text, margin, top + set.length * size * 1.2 + Math.round(small * 0.8));
+  }
+  return screenImage(canvas, screen);
+}
+
 module.exports = {
   measureLayout, layoutFrom, layoutMeasures, findGaps, detectFigures, findPictures, pagePictures, cleanBoxes, cropBoxes,
-  sidewaysParts, renderCover, imageCover, renderPage, turned,
+  sidewaysParts, renderCover, imageCover, titleCover, renderPage, turned,
 };

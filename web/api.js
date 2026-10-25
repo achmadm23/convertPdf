@@ -4,7 +4,7 @@
 
 const { analyzePdf, newBookCache, buildEpub, readerScreen, contentsPagesFrom, chapterStartsFrom, looksFrom } = require('../index');
 const { openPdf } = require('../pdf');
-const { imageCover, cleanBoxes } = require('../figures');
+const { imageCover, titleCover, cleanBoxes } = require('../figures');
 const { DEVICES, convertPdfPages, coverPage, bookPages, buildXtc, pagePng, extensionFor } = require('../xtc');
 const { retryPage, pageThumbnail, manualReading, readAroundBoxes, readingWithBoxes, packReadings, unpackReadings } = require('../ocr');
 
@@ -327,6 +327,8 @@ async function setDetails(id, details) {
   const text = v => (typeof v === 'string' ? v.trim().slice(0, 500) : '');
   book.title = text(details.title) || s.own.title;
   book.author = text(details.author) || s.own.author;
+  // a book of web pages: its cover has the title on it, drawn again
+  if (book.coverSource) book.cover = await titleCover({ ...book.coverSource, title: book.title, by: book.author }, readerScreen(book.device)).catch(() => book.cover);
   return { title: book.title, author: book.author };
 }
 

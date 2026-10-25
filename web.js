@@ -7,7 +7,7 @@ const { parseHTML } = require('linkedom');
 const { Readability } = require('@mozilla/readability');
 const { loadImage, createCanvas } = require('@napi-rs/canvas');
 const { screenImage } = require('./eink');
-const { imageCover } = require('./figures');
+const { titleCover } = require('./figures');
 const { readerScreen } = require('./index');
 
 const MAX_LINKS = 50;
@@ -315,13 +315,15 @@ async function readWebPages(links, { title, author, device = 'x4', onProgress = 
   onProgress({ stage: 'images', done: 0, total: urls.length });
   const files = await downloadPictures(urls, done => onProgress({ stage: 'images', done, total: urls.length }));
 
-  let cover = null;
+  // the cover's picture, if it can be read (the cover is drawn below, with the title)
+  let coverPicture = null;
   if (coverUrl && files.get(coverUrl)) {
     try {
-      cover = await imageCover(files.get(coverUrl), screen);
+      await loadImage(files.get(coverUrl));
+      coverPicture = files.get(coverUrl);
     } catch {}
   }
-  const arranged = articles.map((a, i) => moveLeadPicture(a.blocks, i === 0 && !!cover && coverUrl === firstLead));
+  const arranged = articles.map((a, i) => moveLeadPicture(a.blocks, i === 0 && !!coverPicture && coverUrl === firstLead));
 
   onProgress({ stage: 'finishing' });
   const images = [];
@@ -350,9 +352,18 @@ async function readWebPages(links, { title, author, device = 'x4', onProgress = 
   const one = articles.length === 1 ? articles[0] : null;
   const bookTitle = title || (one ? one.title : `${sites.length === 1 ? sites[0] : 'Articles'} · ${today}`);
   const paragraphs = chapters.reduce((n, ch) => n + ch.blocks.filter(b => !b.heading && !b.image).length, 0);
+  const bookAuthor = author || (one ? one.byline || one.site : sites.join(', '));
+  // the cover: the first article's main picture (if any) with the title under it, drawn
+  // again when the title or author is changed (coverSource)
+  const coverSource = { picture: coverPicture };
+  let cover = null;
+  try {
+    cover = await titleCover({ ...coverSource, title: bookTitle, by: bookAuthor }, screen);
+  } catch {}
   return {
     title: bookTitle,
-    author: author || (one ? one.byline || one.site : sites.join(', ')),
+    author: bookAuthor,
+    coverSource,
     language: articles[0].lang || 'en',
     chapters,
     images,
