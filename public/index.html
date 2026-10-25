@@ -527,6 +527,7 @@
   }
   .book-act:hover:not(:disabled) { color: var(--text); border-color: var(--input); }
   .book-act[data-act="delete"]:hover:not(:disabled) { color: var(--error); }
+  .book-act[data-act="download"]:hover:not(:disabled) { color: var(--accent); }
   .book-act:disabled { opacity: .35; cursor: not-allowed; }
   .chip.paused { color: var(--muted); background: var(--seg); }
   .shelf .book .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1605,12 +1606,22 @@
       } else letter();
       row.addEventListener('click', () => selectBook(b));
       b.row = row;
-      // Pause (or Resume) and Delete, beside the line
+      // Pause (or Resume), Download (once it's made) and Delete, beside the line
       const actions = document.createElement('span');
       actions.className = 'book-actions';
-      actions.innerHTML = '<button type="button" class="book-act" data-act="hold"></button><button type="button" class="book-act" data-act="delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>';
+      actions.innerHTML = '<button type="button" class="book-act" data-act="hold"></button><button type="button" class="book-act" data-act="download"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button><button type="button" class="book-act" data-act="delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>';
       actions.querySelector('[data-act="hold"]').addEventListener('click', () => (b.state === 'paused' ? resumeBook(b) : pauseBook(b)));
       actions.querySelector('[data-act="delete"]').addEventListener('click', () => deleteBook(b));
+      actions.querySelector('[data-act="download"]').addEventListener('click', async e => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        try {
+          await saveBook(b);
+        } catch (err) {
+          showStatus(err.message || 'Could not save the book.', { error: true });
+        }
+        btn.disabled = false;
+      });
       b.actions = actions;
       li.append(row, actions);
       list.append(li);
@@ -1637,10 +1648,14 @@
     if (!actions) return;
     const hold = actions.querySelector('[data-act="hold"]');
     const del = actions.querySelector('[data-act="delete"]');
+    const save = actions.querySelector('[data-act="download"]');
     const name = bookTitle(b);
-    // a book not made yet can be paused; one paused, resumed
+    // a book not made yet can be paused; one paused, resumed; one made, downloaded
     hold.hidden = !['waiting', 'converting', 'paused'].includes(b.state);
-    actions.parentNode.dataset.acts = hold.hidden ? '1' : '2'; // the line leaves room for its buttons
+    save.hidden = !(b.state === 'ready' && b.id && b.meta);
+    save.title = `Download ${b.meta && b.meta.fileName ? b.meta.fileName : name}`;
+    save.setAttribute('aria-label', save.title);
+    actions.parentNode.dataset.acts = String(1 + !hold.hidden + !save.hidden); // the line leaves room for its buttons
     hold.innerHTML = b.state === 'paused' ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5v14l12-7z"/></svg>' : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
     hold.title = b.state === 'paused' ? `Resume ${name}` : `Pause ${name}`;
     hold.setAttribute('aria-label', hold.title);
