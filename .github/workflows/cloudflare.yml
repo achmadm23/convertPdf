@@ -1,0 +1,45 @@
+# Publish the website (the converter running in the browser) to Cloudflare Pages
+# on every push to main: https://convertpdf.pages.dev
+#
+# Needs two repository secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN   a token with the "Cloudflare Pages: Edit" permission
+#   CLOUDFLARE_ACCOUNT_ID  shown on the Workers & Pages page of the dashboard
+# and the Pages project made once (Direct Upload), named as PROJECT below:
+#   npx wrangler pages project create convertpdf --production-branch main
+
+name: Cloudflare
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+# one deployment at a time; a newer push replaces one that is waiting
+concurrency:
+  group: cloudflare
+  cancel-in-progress: true
+
+env:
+  PROJECT: convertpdf
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:web
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy site --project-name=${{ env.PROJECT }} --branch=main --commit-dirty=true
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
