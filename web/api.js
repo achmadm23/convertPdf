@@ -22,7 +22,8 @@ useFetch(async (url, { headers = {}, signal } = {}) => {
 });
 
 const MAX_BYTES = 300 * 1024 * 1024;
-const MAX_BOOKS = 8; // converted books kept, in this page's memory: the page converts several
+const MAX_BOOKS = 8; // books of PDFs kept, in this page's memory: the page converts several
+const MAX_WEB_BOOKS = 50; // books of web pages kept: the page makes one for each link (up to 50), to download each
 const LOW_CONFIDENCE = 75; // scanned pages read this well (%) or worse can be read again or typed in
 const PICTURE_BELOW = 30; // ...unless they're read this badly: then they're pictures, not text
 const OFFER_PICTURE = 90; // scanned pages read this well (%) or worse can be kept as a picture of the page
@@ -42,12 +43,9 @@ function newSession(pdf, options) {
     cache: newBookCache(), // what rebuilds of its book keep of the work on the PDF
   };
   sessions.set(id, session);
-  while (sessions.size > MAX_BOOKS) {
-    const [oldId, old] = sessions.entries().next().value;
-    for (const url of old.thumbnails.values()) URL.revokeObjectURL(url);
-    if (old.screen) URL.revokeObjectURL(old.screen);
-    sessions.delete(oldId);
-  }
+  // the oldest of the same kind go first: books of PDFs, or books of web pages (as server.js)
+  const same = [...sessions.values()].filter(s => !s.pdf === !pdf);
+  for (const old of same.slice(0, Math.max(0, same.length - (pdf ? MAX_BOOKS : MAX_WEB_BOOKS)))) forget(old.id);
   return session;
 }
 
