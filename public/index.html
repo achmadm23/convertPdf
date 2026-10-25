@@ -312,9 +312,7 @@
     height: calc(100vh - 24px); overflow: auto; padding: 8px; background: var(--soft); border: 1px solid var(--border); border-radius: 14px;
   }
   @media (max-width: 900px) { .scan-grid { max-width: none; max-height: 340px; } }
-  .scans-list .scan-card:not(.checkable):not(.has-pictures):not(.current),
   .scans-list.only-low .scan-card:not(.checkable), .scans-list.only-pictures .scan-card:not(.has-pictures) { display: none; }
-  .scans-none { margin: 0; font-size: 13px; color: var(--muted); }
   .scan-card {
     flex: none; display: flex; gap: 10px; padding: 10px; text-align: left; background: var(--field);
     border: 1px solid var(--border); border-radius: 12px; cursor: pointer;
@@ -911,7 +909,6 @@
         <div class="scans-wait" id="scansWait" role="status">
           <span class="spinner" aria-hidden="true"></span><span id="scansWaitText">Reading the pages…</span>
         </div>
-        <p class="scans-none" id="scansNone" hidden>No page was read at <span class="offer-limit">90</span>% or lower, and none has pictures. ‹ › under the page go through all of them.</p>
         <div class="scan-grid" id="scanGrid" hidden></div>
     </div>
     <div class="panel chapters-panel" id="chaptersPanel" hidden>
@@ -3073,7 +3070,6 @@
       // the pages are listed once they're all read (and the book is made from them)
       $('scanGrid').hidden = !r.done;
       $('scansWait').hidden = r.done;
-      noneToLook(b);
       $('scansWaitText').textContent = `Reading the pages: ${r.pages.size}${r.total ? ` of ${r.total}` : ''}. They're listed here once they're all read.`;
       for (const filter of $('scansList').querySelectorAll('.filter')) filter.hidden = !r.done;
       // pages with pictures are known once the book is made (and after each update)
@@ -3142,13 +3138,6 @@
     // a page with pictures: found or drawn on it, or the whole page kept as one
     function hasPictures(p) {
       return !!p.picture || (p.boxes || []).length > 0;
-    }
-    // The list shows the pages that need a look: read at offerPicture or lower (or kept
-    // as a picture, or typed), or with pictures; if there are none, it says so.
-    function noneToLook(b) {
-      const r = b.scan;
-      const some = [...r.pages.values()].some(p => p.manual || p.picture || canBePicture(r, p.confidence) || hasPictures(p));
-      $('scansNone').hidden = !r.done || some;
     }
 
     function renderCard(b, n) {
@@ -3517,7 +3506,6 @@
         Object.assign(p, { boxes: found?.boxes || [], drawn: !!found?.drawn });
         renderCard(b, n);
       }
-      if (b === shown) noneToLook(b);
     }
 
     $('onlyLow').addEventListener('change', e => $('scansList').classList.toggle('only-low', e.target.checked));
