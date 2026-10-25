@@ -640,7 +640,7 @@
     </p>
         <div class="get-row" id="getRow">
           <a class="btn big primary disabled" id="download" aria-disabled="true" tabindex="-1">Download</a>
-          <button type="button" class="btn big soft" id="send" disabled hidden title="Send to your reader over Wi-Fi">Send</button>
+          <button type="button" class="btn big soft" id="send" disabled title="Send to your reader over Wi-Fi">Send</button>
         </div>
   </div>
 </header>
@@ -677,7 +677,7 @@
     <button type="button" class="btn" id="downloadAll" disabled>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
       <span id="downloadAllText">Download all</span></button>
-    <button type="button" class="btn" id="sendAll" disabled hidden>
+    <button type="button" class="btn" id="sendAll" disabled>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><path d="M2 9a15 15 0 0 1 20 0"/><circle cx="12" cy="19.5" r="1"/></svg>
       <span id="sendAllText">Send all</span></button>
     </div>
@@ -1129,9 +1129,9 @@
 <dialog id="sendDialog" aria-labelledby="sendDialogTitle">
   <form method="dialog">
     <h2 class="panel-title" id="sendDialogTitle">Send to your reader</h2>
-    <p>On the reader, turn on Wi-Fi file transfer, on the same Wi-Fi as this computer. Type the address it shows.</p>
+    <p>On the reader, turn on Wi-Fi file transfer, on the same Wi-Fi as this computer. A CrossPoint reader is at crosspoint.local; otherwise type the address it shows. If the browser asks to let this site reach devices on your local network, allow it.</p>
     <label class="field">Reader’s address
-      <input id="readerAddress" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="192.168.1.23">
+      <input id="readerAddress" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="crosspoint.local">
     </label>
     <label class="field">Folder on the reader
       <input id="readerFolder" type="text" autocomplete="off" spellcheck="false" placeholder="/">
@@ -4104,7 +4104,7 @@
   function askWhereToSend(what) {
     sendWhat = what;
     const place = readerPlace();
-    $('readerAddress').value = place.address || '';
+    $('readerAddress').value = place.address || 'crosspoint.local';
     $('readerFolder').value = place.folder || '';
     const count = books.filter(b => b.state === 'ready').length;
     $('sendNow').textContent = what === 'all' ? `Send ${count} ${count === 1 ? 'book' : 'books'}` : 'Send';

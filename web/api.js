@@ -443,22 +443,24 @@ async function download(id, pictureParts, pictures) {
 
 // Upload the finished book to an e-reader on the same Wi-Fi, the way its own file
 // transfer page does (CrossPoint firmware: POST /upload?path=<folder>, field "file").
-// The reader doesn't answer pages from other sites, so the upload is sent blind;
-// a website on https can't reach it at all, which the app (server.js) can.
-async function send(id, { address, folder = '/', name, parts = 1, pictures } = {}) {
+// The reader doesn't answer pages from other sites, so the upload is sent blind.
+// From the website (https) browsers let it through to a reader on the local network
+// (crosspoint.local, 192.168.x.x) once the visitor allows it: Chrome and Edge 142+ ask.
+async function send(id, { address = 'crosspoint.local', folder = '/', name, parts = 1, pictures } = {}) {
   const s = session(id);
   const host = String(address || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
-  if (!/^[\w.-]+(:\d{1,5})?$/.test(host)) throw new Error('Type the reader’s address as it shows it, like 192.168.1.23.');
+  if (!/^[\w.-]+(:\d{1,5})?$/.test(host)) throw new Error('Type the reader’s address as it shows it, like crosspoint.local or 192.168.1.23.');
   const data = s.xtc ? buildXtc(s.xtc, s.xtcCover) : await epubFile(s, parts, pictures);
   const fileName = name || (s.xtc ? xtcSummary(s).fileName : s.book.fileName);
   const form = new FormData();
   form.append('file', new Blob([data]), fileName);
   try {
-    await fetch(`http://${host}/upload?path=${encodeURIComponent(folder || '/')}`, { method: 'POST', body: form, mode: 'no-cors' });
+    // targetAddressSpace: the reader is on the local network, so an https page may reach it over http
+    await fetch(`http://${host}/upload?path=${encodeURIComponent(folder || '/')}`, { method: 'POST', body: form, mode: 'no-cors', targetAddressSpace: 'local' });
   } catch {
     throw new Error(
       location.protocol === 'https:'
-        ? `This website can’t reach the reader at ${host}: browsers block it. Use the convertPdf app to send, or download the book and upload it on the reader’s page.`
+        ? `Could not reach the reader at ${host}. Check it is in Wi-Fi file transfer, on the same Wi-Fi as this computer, and that this site is allowed to reach devices on your local network (Chrome or Edge ask the first time; other browsers may not allow it: then download the book and upload it on http://${host}/).`
         : `Could not reach the reader at ${host}. Check it is in Wi-Fi file transfer, on the same Wi-Fi as this computer.`
     );
   }
