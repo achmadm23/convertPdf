@@ -11,6 +11,9 @@ Convert PDFs into EPUB e-books. It works on normal PDFs and on scanned books, wi
 - lets you use a picture of your own as the cover instead
 - puts the pictures in the text, with the text above and below each one, or each on a page of its own that it fills; the cover and pages kept as a picture fill a page, all in the 4 shades of gray of an e-ink screen, sized for your reader: 480 x 800 for the Xteink X4 and X4 Pro, 528 x 792 for the X3; for a Kindle, a Kobo or a phone they're kept full size, in color when they have it
 - leaves the font to the e-reader, so the book reads in the font and size you choose there
+- puts right text a PDF gives wrong letters for: capitals that come out as small letters ("catataN" for "CATATAN") and "fi"/"fl" ligatures that lose their "f" ("ilsuf" for "filsuf"), from the shapes and widths of the PDF's own glyphs
+- leaves out watermarks and stamps printed on every page (a website's address along the margin), puts drop caps (a big first letter beside the paragraph) back in their word, and keeps the hyphen of words broken over two lines that are written with one ("dentang-denting"), as the rest of the book writes them
+- leaves decorations repeated on many pages, like a frame around a quotation, out of the pictures, so the text in them stays text
 - reads scanned pages with built-in OCR (English and Indonesian), with nothing extra to install
 - also makes books of web pages such as news articles from BBC or Kompas: paste their links, and each becomes a book (see [Web pages](#web-pages-news-articles))
 
@@ -182,6 +185,7 @@ The PDF's bookmarks become the book's chapters, and its title and author are kep
 | `xtc.js` | Draws PDF pages for an Xteink screen (fit or split, contrast, dithering) and makes the XTC book. |
 | `xtcfile.js` | The XTC/XTCH file format: page encoding (XTG, XTH) and the book file. |
 | `pdf.js` | Opens a PDF with pdf.js. |
+| `textlayer.js` | Reads every page's text with pdf.js and puts right the letters a PDF maps wrong (capitals given as small letters, ligatures given as one letter), from each glyph's code and width; finds decorations, pictures repeated on many pages with text over them. |
 | `web.js` | Web pages into a book: downloads each page, finds its article (Mozilla Readability), and gets its pictures. |
 | `server.js` | Local web server for the web app. |
 | `public/index.html` | The web app page: the list of books converted one after another, the e-reader preview with its slider, each book's settings, and the scanned pages. |

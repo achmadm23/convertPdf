@@ -545,6 +545,6 @@ async function titleCover({ picture = null, title = '', by = '' }, screen) {
 }
 
 module.exports = {
-  measureLayout, layoutFrom, layoutMeasures, findGaps, detectFigures, findPictures, pagePictures, cleanBoxes, cropBoxes,
+  measureLayout, layoutFrom, layoutMeasures, findGaps, MIN_GAP, detectFigures, findPictures, pagePictures, cleanBoxes, cropBoxes,
   sidewaysParts, renderCover, imageCover, titleCover, renderPage, turned,
 };

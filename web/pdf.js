@@ -16,3 +16,8 @@ export async function openPdf(buffer) {
     cMapUrl: asset('cmaps/'),
   }).promise;
 }
+
+// pdf.js's operator codes (OPS), for reading a page's operator list
+export async function pdfOps() {
+  return pdfjs.OPS;
+}

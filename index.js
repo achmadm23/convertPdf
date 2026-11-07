@@ -6,11 +6,12 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const JSZip = require('jszip');
-const { measureLayout, layoutFrom, layoutMeasures, findGaps, detectFigures, sidewaysParts, renderCover, imageCover, turned } = require('./figures');
+const { measureLayout, layoutFrom, layoutMeasures, findGaps, MIN_GAP, detectFigures, sidewaysParts, renderCover, imageCover, turned } = require('./figures');
 const { screenImage } = require('./eink');
 const { findPagePictures } = require('./picture-pages');
 const { recognizePages, finishPages, LANGUAGES } = require('./ocr');
 const { openPdf } = require('./pdf');
+const { readTextLayer, decorationBoxes, cutGaps } = require('./textlayer');
 const { DEVICES, DITHERING, convertPdfPages, coverPage, bookPages, buildXtc, extensionFor } = require('./xtc');
 
 function parseArgs(argv) {
@@ -53,9 +54,17 @@ const letterCount = s => (s.match(/\p{L}/gu) || []).length;
 const isNumberLike = s => /^[^\p{L}\d]{0,2}(\d{1,4}|[ivxlc]{1,6})[^\p{L}\d]{0,2}$/iu.test(s);
 
 // Rebuild lines from positioned text items, keeping position and font size.
-function pageToLines(items) {
+// Text set sideways or upside down makes lines of its own, marked `sideways` (see
+// withoutStamps). A piece of text much bigger or smaller than the line it's on (a drop cap beside the
+// line it hangs down to) is a line of its own.
+// Positions are from the corner of the page's view box (`view`, pdf.js's page.view), as
+// the page is drawn: a PDF whose pages are cut out of a bigger sheet has its text away
+// from the sheet's corner, and pictures are found on the drawn page (figures.js).
+function pageToLines(items, view = [0, 0]) {
   const lines = [];
   let line = null;
+
+  const upright = item => item.transform[0] > 0 && Math.abs(item.transform[1]) <= item.transform[0] * 0.1;
 
   const flush = () => {
     if (line) lines.push(line);
@@ -63,9 +72,14 @@ function pageToLines(items) {
   };
   for (const item of items) {
     if (typeof item.str !== 'string') continue;
-    const [, , c, d, x, y] = item.transform;
-    if (line && Math.abs(y - line.y) > 1) flush();
-    if (!line) line = { text: '', y, x: Infinity, xEnd: -Infinity, size: 0, sizeChars: 0 };
+    const [, , c, d] = item.transform;
+    const x = item.transform[4] - view[0];
+    const y = item.transform[5] - view[1];
+    const sideways = item.str.trim() ? !upright(item) : !!line?.sideways;
+    if (line && (Math.abs(y - line.y) > 1 || !!line.sideways !== sideways)) flush();
+    const size = Math.hypot(c, d);
+    if (line && line.sizeChars && item.str.trim() && (size > line.size * 1.8 || size * 1.8 < line.size)) flush();
+    if (!line) line = { text: '', y, x: Infinity, xEnd: -Infinity, size: 0, sizeChars: 0, ...(sideways && { sideways }) };
     line.text += item.str;
     const chars = item.str.trim().length;
     if (chars) {
@@ -84,7 +98,126 @@ function pageToLines(items) {
   const cleaned = lines
     .map(l => ({ ...l, text: l.text.replace(/\s+/g, ' ').trim() }))
     .filter(l => l.text);
-  return readingOrder(cleaned);
+  return readingOrder(withDropCaps(cleaned));
+}
+
+// A drop cap is the first letter of a paragraph set two or three lines tall, beside the
+// paragraph's first lines. It comes out of the PDF as a line of its own, too big for the
+// text, and would be left out as a stray heading. The letter goes back at the start of its
+// word, and the lines beside it, which start further right than the text, are one
+// paragraph with it (`colLeft`, as for lines beside a picture). The rest of the first
+// word, often in capitals ("K" "ESATRIA cahaya"), is written as usual ("Kesatria cahaya").
+// The letter's own line stays, marked `dropCap`, for where its ink is on the page (so it
+// isn't taken for a picture, figures.js); it isn't text of the book (linesToBlocks).
+function withDropCaps(lines) {
+  let out = lines;
+  for (const cap of lines) {
+    if (!/^[“"‘'«(]?\p{Lu}$/u.test(cap.text)) continue;
+    // the lines to its right, from the top of the letter down to its foot
+    const beside = out.filter(l =>
+      l !== cap && !l.dropCap && l.size * 1.8 <= cap.size && l.x >= cap.xEnd - 2 && l.x - cap.xEnd < cap.size &&
+      l.y >= cap.y - 2 && l.y <= cap.y + cap.size * 1.1
+    );
+    if (!beside.length) continue;
+    const first = beside.reduce((a, b) => (b.y > a.y ? b : a));
+    const colLeft = Math.min(...beside.map(l => l.x));
+    let rest = first.text;
+    const word = rest.match(/^\p{Lu}[\p{Lu}'’-]*(?=[^\p{L}]|$)/u);
+    if (word && /\p{Ll}/u.test(rest.slice(word[0].length))) rest = word[0].toLowerCase() + rest.slice(word[0].length);
+    // a gap after the letter means it's a word of its own ("A" "day…")
+    const space = first.x - cap.xEnd > first.size * 0.3 ? ' ' : '';
+    out = out.map(l =>
+      l === cap ? { ...l, dropCap: true }
+      : l === first ? { ...l, text: cap.text + space + rest, x: cap.x, paraStart: true }
+      : beside.includes(l) ? { ...l, colLeft }
+      : l
+    );
+  }
+  return out;
+}
+
+// Stamps put on the pages of a PDF (a website's address, a printer's code), which can sit
+// anywhere on the page, even in the text, are left out:
+//   - text set sideways along the margin of a page of upright text, or the same sideways
+//     text on 3 pages or more
+//   - short lines that are the same on most pages, at the same place, or that are a web or
+//     e-mail address on many pages
+// Running headers and page numbers are left for cleanPages (and printedPageNumbers) as before.
+function withoutStamps(pageLines) {
+  const sidewaysPages = new Map();
+  for (const lines of pageLines) {
+    for (const t of new Set(lines.filter(l => l.sideways).map(l => l.text))) sidewaysPages.set(t, (sidewaysPages.get(t) || 0) + 1);
+  }
+  pageLines = pageLines.map(lines => {
+    const letters = which => lines.filter(l => !l.image && !!l.sideways === which).reduce((n, l) => n + letterCount(l.text), 0);
+    const marginal = letters(false) >= letters(true) * 4;
+    return lines.filter(l => !l.sideways || !(marginal || sidewaysPages.get(l.text) >= 3));
+  });
+  const withText = pageLines.filter(lines => lines.length).length;
+  const where = new Map(); // text → pages it's on, and places
+  for (const lines of pageLines) {
+    for (const l of lines) {
+      if (l.image || l.text.length > 80 || letterCount(l.text) < 3) continue;
+      const w = where.get(l.text) || { pages: new Set(), places: new Map() };
+      w.pages.add(lines);
+      const place = `${Math.round(l.x / 3)}:${Math.round(l.y / 3)}`;
+      w.places.set(place, (w.places.get(place) || 0) + 1);
+      where.set(l.text, w);
+    }
+  }
+  const isAddress = t => /(www\.|https?:\/\/|\.(com|org|net|id|co)\b|@[\w-]+\.)/i.test(t);
+  const stamps = new Set();
+  for (const [text, w] of where) {
+    const pages = w.pages.size;
+    if (pages < 5) continue;
+    const samePlace = Math.max(...w.places.values());
+    if ((isAddress(text) && pages >= withText * 0.3) || samePlace >= withText * 0.6) stamps.add(text);
+  }
+  return stamps.size ? pageLines.map(lines => lines.filter(l => l.image || !stamps.has(l.text))) : pageLines;
+}
+
+// A word broken at the end of a line with a hyphen, joined back without it.
+const joinHyphenated = (text, next) => text.slice(0, -1) + next;
+// A line and the next, as one text: a word broken with a hyphen is joined (`join`), and a
+// dash set close to its words ("orang—" "seberapa") stays close; other lines get a space.
+const joinLines = (text, next, join = joinHyphenated) =>
+  text.endsWith('-') ? join(text, next)
+  : /\p{L}[—–]$/u.test(text) || (/^[—–]\p{L}/u.test(next) && /\p{L}$/u.test(text)) ? text + next
+  : text + ' ' + next;
+
+// Words broken at the end of a line with a hyphen are written whole again ("pertolong-"
+// "an"), except words that are written with a hyphen anyway ("dentang-" "denting", "self-"
+// "aware"). The book's own words tell which, as it writes them in the middle of its lines.
+// A word it doesn't use there keeps its hyphen when its second part repeats the first
+// ("rumah-" "rumah", "mengayun-" "ayunkan", "sayur-" "mayur") or starts with a capital
+// ("anti-" "Amerika"). Returns join(text ending in "-", text of the next line).
+function hyphenJoiner(pageLines) {
+  const hyphened = new Set();
+  const whole = new Set();
+  const WORD = /[\p{L}\p{M}]+(?:-[\p{L}\p{M}]+)*/gu;
+  for (const lines of pageLines) {
+    for (const l of lines) {
+      if (l.image || !l.text) continue;
+      // the line's first word may be the end of a broken word, and its last one the start
+      const words = l.text.match(WORD) || [];
+      const last = /[\p{L}\p{M}]-$/u.test(l.text) ? words.length - 1 : words.length;
+      for (const w of words.slice(1, last)) (w.includes('-') ? hyphened : whole).add(w.toLowerCase());
+    }
+  }
+  const keepsHyphen = (a, b) => {
+    const al = a.toLowerCase(), bl = b.toLowerCase();
+    if (hyphened.has(`${al}-${bl}`)) return true;
+    if (whole.has(al + bl) || hyphened.has(al + bl)) return false;
+    if (/^\p{Lu}/u.test(b) && /\p{Ll}/u.test(a)) return true;
+    if (al.includes('-') || al.length < 3 || bl.length < 3) return false;
+    for (let i = 0; i + 4 <= al.length; i++) if (bl.includes(al.slice(i, i + 4))) return true;
+    return al.includes(bl.slice(0, 3));
+  };
+  return (text, next) => {
+    const a = text.slice(0, -1).match(/[\p{L}\p{M}]+(?:-[\p{L}\p{M}]+)*$/u)?.[0];
+    const b = next.match(/^[\p{L}\p{M}]+/u)?.[0];
+    return a && b && keepsHyphen(a, b) ? text + next : joinHyphenated(text, next);
+  };
 }
 
 // Lines in reading order, top to bottom. Most PDFs list their text that way
@@ -179,19 +312,29 @@ const typedParagraphs = text => String(text).replace(/\r/g, '')
   .split(/\n\s*\n/).map(p => p.split('\n').map(line => line.trim()).filter(Boolean).join(' ')).filter(Boolean);
 
 // Group a page's lines into blocks: headings (text noticeably larger than the
-// body font) and paragraphs.
-function linesToBlocks(lines, bodySize, withY = false) {
+// body font) and paragraphs. `join` joins a line ending in a hyphen to the next (hyphenJoiner).
+function linesToBlocks(lines, bodySize, withY = false, join = joinHyphenated) {
   const headingMin = bodySize * 1.4;
-  const isHeading = l => !l.image && l.size >= headingMin && l.text.length <= 120;
-  const body = lines.filter(l => !l.image && !isHeading(l));
+  lines = lines.filter(l => !l.dropCap); // a drop cap's letter is in its paragraph (withDropCaps)
+  const isBig = l => !l.image && l.size >= headingMin && l.text.length <= 120;
+  const text = lines.filter(l => !l.image && !isBig(l));
 
   // typical left and right edges of the text block
   const round = v => Math.round(v / 2) * 2;
   const counts = new Map();
-  for (const l of body) counts.set(round(l.x), (counts.get(round(l.x)) || 0) + 1);
+  for (const l of text) counts.set(round(l.x), (counts.get(round(l.x)) || 0) + 1);
   const leftEdge = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
-  const ends = body.map(l => l.xEnd).sort((a, b) => a - b);
+  const ends = text.map(l => l.xEnd).sort((a, b) => a - b);
   const rightEdge = ends.length ? ends[Math.floor(ends.length * 0.9)] : 0;
+  // centred lines of display text (not the body's size), like a quotation set larger
+  // in a frame: each starts further right than the text, but they're one paragraph
+  const centred = l => Math.abs(l.size - bodySize) > 1 && l.x > leftEdge + 6 &&
+    Math.abs((l.x + l.xEnd) / 2 - (leftEdge + rightEdge) / 2) <= 8;
+  // centred display text a quarter larger than the body or more heads what follows it,
+  // like a quotation over each section (not on pages read with OCR, whose sizes are rougher)
+  const isHeading = l => isBig(l) ||
+    (!l.image && !l.words && l.text.length <= 120 && l.size >= bodySize * 1.25 && centred(l));
+  const body = lines.filter(l => !l.image && !isHeading(l));
 
   const gaps = [];
   for (let i = 1; i < body.length; i++) {
@@ -231,20 +374,21 @@ function linesToBlocks(lines, bodySize, withY = false) {
       const continues =
         block && block.heading && !l.paraStart && !isNumberLike(block.text) && !isNumberLike(l.text) &&
         Math.abs(block.size - l.size) <= 2 && prev && Math.abs(prev.y - l.y) < l.size * 2;
-      if (continues) block.text += ' ' + l.text; // heading wrapped onto a second line
+      if (continues) block.text = joinLines(block.text, l.text, join); // heading wrapped onto a second line
       else {
         flush();
         block = { heading: true, text: l.text, size: l.size, ...(withY && { y: l.y }) };
       }
     } else {
       const bigGap = !afterImage && prev && normalGap && Math.abs(prev.y - l.y) > normalGap * 1.5;
-      const indented = l.x > (l.colLeft ?? leftEdge) + 6;
+      const sameCentred = prev && !prev.image && centred(prev) && centred(l) && Math.abs(prev.size - l.size) <= 0.5 &&
+        Math.abs(prev.y - l.y) <= l.size * 1.8;
+      const indented = l.x > (l.colLeft ?? leftEdge) + 6 && !sameCentred;
       const prevShort = prev && prev.xEnd < (prev.colRight ?? rightEdge) - 25 && /[.!?:"”’)]$/.test(prev.text);
       if (block && (block.heading || bigGap || indented || prevShort || l.paraStart)) flush();
       afterImage = false;
       if (!block) block = { heading: false, text: l.text, size: l.size, ...(withY && { y: l.y }) };
-      else if (block.text.endsWith('-')) block.text = block.text.slice(0, -1) + l.text; // join hyphenated words
-      else block.text += ' ' + l.text;
+      else block.text = joinLines(block.text, l.text, join);
     }
     prev = l;
   }
@@ -279,22 +423,32 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
     meta = (await doc.getMetadata()).info || {};
   } catch {}
 
+  const pageLetters = lines => letterCount(lines.map(l => l.text).join(''));
   let pageLines = [];
-  if (cache?.text) pageLines = structuredClone(cache.text);
-  else {
-    for (let n = 1; n <= doc.numPages; n++) {
-      const page = await doc.getPage(n);
-      const content = await page.getTextContent();
-      pageLines.push(pageToLines(content.items));
-      onProgress({ stage: 'text', done: n, total: doc.numPages });
+  // pages whose only text was stamps (withoutStamps): blank pages of a book with a text
+  // layer, as they were before the stamps were left out, not scans to read with OCR
+  let stampedPages = new Set();
+  if (cache?.text) {
+    pageLines = structuredClone(cache.text);
+    stampedPages = new Set(cache.stamped);
+  } else {
+    // the text of every page, with letters the PDF maps wrong put right (textlayer.js)
+    const { pages, views } = await readTextLayer(doc, (done, total) => onProgress({ stage: 'text', done, total }));
+    const withStamps = pages.map((items, i) => pageToLines(items, views[i]));
+    pageLines = withoutStamps(withStamps);
+    withStamps.forEach((lines, i) => {
+      if (pageLetters(lines) >= 20 && pageLetters(pageLines[i]) < 20) stampedPages.add(i + 1);
+    });
+    if (cache) {
+      cache.text = structuredClone(pageLines);
+      cache.stamped = [...stampedPages];
     }
-    if (cache) cache.text = structuredClone(pageLines);
   }
 
   // pages with no text layer are scans: read them with OCR
   const scanned = [];
   pageLines.forEach((lines, i) => {
-    if (letterCount(lines.map(l => l.text).join('')) < 20) scanned.push(i + 1);
+    if (pageLetters(lines) < 20 && !stampedPages.has(i + 1)) scanned.push(i + 1);
   });
   // every line found on the page, even ones left out of the text, for the page layout
   const layoutLines = [...pageLines];
@@ -344,13 +498,15 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
     layoutLines[n - 1] = pageLines[n - 1] = typedLines(text, pageLines[n - 1], bodySize);
   }
   const linesOf = n => ownLines.get(n) || pageLines[n - 1];
+  // how words broken over two lines are joined, from the book's own words
+  const join = hyphenJoiner(pageLines);
   // the text of the pages with their own text, as paragraphs (as typed, if it was), for
   // showing and typing over them
   const pdfTexts = {};
   pageLines.forEach((lines, i) => {
     if (scanned.includes(i + 1)) return;
     pdfTexts[i + 1] = ownLines.has(i + 1) ? typedParagraphs(textEdits[i + 1]).join('\n\n')
-      : linesToBlocks(lines, bodySize).filter(b => !b.image).map(b => b.text).join('\n\n');
+      : linesToBlocks(lines, bodySize, false, join).filter(b => !b.image).map(b => b.text).join('\n\n');
   });
   // pages with their own text kept whole as a picture by the user (ownPictures: page →
   // parts), like scanned ones
@@ -387,8 +543,19 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   // pages whose pictures the user drew boxes around (see figures.js cleanBoxes):
   // those are its pictures, instead of the ones found (ownBoxes: pages with their own text)
   const drawn = n => ocr?.pages.get(n)?.boxes || (pdfTexts[n] !== undefined ? ownBoxes[n] : undefined);
+  // Pictures drawn at the same place on many pages with text over them, like a frame
+  // around a quotation, are decorations: not pictures of the book, and the text in them
+  // stays text. Their part of the page isn't searched for pictures (textlayer.js).
+  const searchedByGaps = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    if (!picturePages.has(n) && !drawn(n) && !readWords.has(n) && findGaps(linesOf(n), layout, bodySize).length) searchedByGaps.push(n);
+  }
+  const decorations = searchedByGaps.length >= 5
+    ? await kept('decorations', searchedByGaps, () => decorationBoxes(doc, searchedByGaps, linesOf))
+    : new Map();
+  const gapsOf = n => cutGaps(findGaps(linesOf(n), layout, bodySize), decorations.get(n), MIN_GAP);
   const mayHavePictures = n =>
-    drawn(n) ? drawn(n).length > 0 : readWords.has(n) || findGaps(linesOf(n), layout, bodySize).length > 0;
+    drawn(n) ? drawn(n).length > 0 : readWords.has(n) || gapsOf(n).length > 0;
   const hasCoverCandidate = pageLines.length > 0 && pageLines[0].filter(layout.isLong).length < 5;
   const coverChecked = pageLines.length > 0 && (firstPageCover || hasCoverCandidate);
   const firstChecked = coverChecked ? 2 : 1;
@@ -447,7 +614,7 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
         ? { n, find: 'drawn', boxes: drawn(n) }
         : readWords.has(n)
           ? { n, find: 'words', lines: layoutLines[n - 1] }
-          : { n, find: 'gaps', lines: linesOf(n), gaps: findGaps(linesOf(n), layout, bodySize) }),
+          : { n, find: 'gaps', lines: linesOf(n), gaps: gapsOf(n) }),
       ...(Object.keys(turns).length && { turns }),
     };
   });
@@ -528,8 +695,8 @@ async function extractPdf(buffer, onProgress = () => {}, { ocrLanguage, ocr: pre
   }
 
   const startsLow = lowStartPages(pageLines, layoutLines, layout);
-  const pages = pageLines.map(lines => linesToBlocks(lines, bodySize));
-  return { pages, images, cover, startsLow, ocr, pictureBoxes, pdfTexts, printed, contentsLines, title: meta.Title, author: meta.Author };
+  const pages = pageLines.map(lines => linesToBlocks(lines, bodySize, false, join));
+  return { pages, join, images, cover, startsLow, ocr, pictureBoxes, pdfTexts, printed, contentsLines, title: meta.Title, author: meta.Author };
 }
 
 // How the user turned and sized pictures, as sent by the web app, made safe: by
@@ -547,9 +714,9 @@ function looksFrom(value) {
 }
 
 // What a book's rebuilds keep of the work done on its PDF (see extractPdf's `cache`):
-// its pages' text, its layout as first measured, and each page's pictures with what they
-// were found from.
-const newBookCache = () => ({ text: null, layout: null, work: new Map() });
+// its pages' text (and which pages had only stamps), its layout as first measured, and
+// each page's pictures with what they were found from.
+const newBookCache = () => ({ text: null, stamped: [], layout: null, work: new Map() });
 
 // Pages whose text starts far below the usual top of the text block, under a
 // title or picture, as on the first page of a chapter. They find the chapters of
@@ -568,8 +735,8 @@ function lowStartPages(pageLines, layoutLines, layout) {
 }
 
 // Remove page numbers and running headers/footers, then rejoin paragraphs
-// that were cut in half by a page break.
-function cleanPages(pages) {
+// that were cut in half by a page break (`join`: see hyphenJoiner).
+function cleanPages(pages, join = joinHyphenated) {
   const edgeCounts = new Map();
   for (const page of pages) {
     const edges = new Set([...page.slice(0, 2), ...page.slice(-2)].map(b => b.text).filter(Boolean));
@@ -597,7 +764,7 @@ function cleanPages(pages) {
         isText(last) && isText(next) &&
         !/[.!?:;"”’)\]]$/.test(last.text) && /^[a-zÀ-ɏ(“"‘']/.test(next.text)
       ) {
-        last.text = last.text.endsWith('-') ? last.text.slice(0, -1) + next.text : last.text + ' ' + next.text;
+        last.text = joinLines(last.text, next.text, join);
         cur.shift();
       }
     }
@@ -1110,7 +1277,7 @@ function readerScreen(device = 'x4') {
 // as `ocr` to rebuild it without reading its scanned pages again.
 async function analyzePdf(pdfBuffer, { title, author, name = 'Untitled', device = 'x4', onProgress, ...ocrOptions } = {}) {
   const extracted = await extractPdf(pdfBuffer, onProgress, { ...ocrOptions, screen: readerScreen(device) });
-  const pages = cleanPages(extracted.pages);
+  const pages = cleanPages(extracted.pages, extracted.join);
   // each block knows the PDF page it comes from, so the EPUB can mark where every page
   // starts (see chapterFiles) and the web app can turn its preview to a page
   pages.forEach((blocks, i) => { for (const b of blocks) b.pdfPage = i + 1; });

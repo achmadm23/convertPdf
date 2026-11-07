@@ -16,4 +16,9 @@ async function openPdf(buffer) {
   }).promise;
 }
 
-module.exports = { openPdf };
+// pdf.js's operator codes (OPS), for reading a page's operator list
+async function pdfOps() {
+  return (await import('pdfjs-dist/legacy/build/pdf.mjs')).OPS;
+}
+
+module.exports = { openPdf, pdfOps };
